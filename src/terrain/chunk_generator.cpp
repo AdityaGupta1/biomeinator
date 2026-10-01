@@ -249,7 +249,7 @@ void init()
         // range keeps the octave sum near [-1, 1] (see fnSnowLine), remapped to [0, 1] after sampling.
         auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetSeedOffset(615203987);
-        fnSimplex->SetScale(14.0f);
+        fnSimplex->SetScale(28.0f);
         fnSimplex->SetOutputMin(-0.55f);
         fnSimplex->SetOutputMax(0.55f);
         auto fnFractal = FN::New<FN::FractalFBm>();
