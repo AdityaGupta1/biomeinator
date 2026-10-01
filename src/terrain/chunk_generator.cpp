@@ -113,10 +113,10 @@ static FN::SmartNode<FN::Generator> fnSwampShore;
 //
 // The temperature term is what makes this track climate rather than pure altitude. Temperature
 // spans about ±0.7 (5th-95th percentile, ±1.1 at the extremes), so before aridity the line ranges
-// from roughly y=180 in the coldest columns to y=300 in the hottest. The base is calibrated against
+// from roughly y=200 in the coldest columns to y=320 in the hottest. The base is calibrated against
 // measured terrain (knowledge/terrain/chunk_generator.md): roughly 40-60% of the mountains biome is
 // capped and about 1% of forest. It depends on relief heights, so re-measure after changing them.
-inline constexpr float snowLineBaseY = 238.f;
+inline constexpr float snowLineBaseY = 260.f;
 inline constexpr float snowLineTemperatureRange = 55.f;
 inline constexpr float snowLineNoiseAmplitude = 13.f;
 // Band directly below the line where a grass top becomes snowy grass instead of bare grass,
