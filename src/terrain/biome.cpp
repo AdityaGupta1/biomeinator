@@ -66,7 +66,7 @@ void init()
     {
         BIOME_INIT(BEACH, "beach");
         data.tier = BiomeTier::BEACH;
-        data.climate = { .temperature = 0.3f, .humidity = 0.2f };
+        data.climate = { .temperature = 0.3f, .humidity = 0.f };
         data.grassTint = glmUtil::colorFromHex("#a1ba68");
         data.topBlocks = {
             .top = Block::SAND,
@@ -81,7 +81,7 @@ void init()
     {
         BIOME_INIT(GRAVEL_BEACH, "gravel beach");
         data.tier = BiomeTier::BEACH;
-        data.climate = { .temperature = -0.2f, .humidity = -0.2f };
+        data.climate = { .temperature = -0.2f, .humidity = 0.f };
         data.grassTint = glmUtil::colorFromHex("#8fa470");
         data.topBlocks = {
             .top = Block::GRAVEL,
@@ -93,7 +93,7 @@ void init()
     {
         BIOME_INIT(BLACK_SAND_BEACH, "black sand beach");
         data.tier = BiomeTier::BEACH;
-        data.climate = { .temperature = -0.6f, .humidity = -0.3f };
+        data.climate = { .temperature = -0.6f, .humidity = 0.f };
         data.grassTint = glmUtil::colorFromHex("#7e9152");
         data.topBlocks = {
             .top = Block::BLACK_SAND,
@@ -168,10 +168,6 @@ void init()
         data.tier = BiomeTier::LOWLAND;
         data.climate = { .temperature = -0.5f, .humidity = -0.35f };
         data.grassTint = glmUtil::colorFromHex("#80b497");
-        data.topBlocks = {
-            .top = Block::SNOWY_GRASS_BLOCK,
-            .mid = Block::DIRT,
-        };
     }
 
     // SWAMP

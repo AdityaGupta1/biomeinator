@@ -1,4 +1,4 @@
-_Last edited: 2026-09-22_
+_Last edited: 2026-09-30_
 
 # Biome System
 
@@ -124,3 +124,11 @@ Each biome's `BiomeData` bundles its tier, climate target, surface blocks, struc
 Landform-specific rock is applied separately from topsoil. Mesa deliberately leaves its top
 and mid blocks unset, preserving elevation-based terracotta bands instead of repainting every
 column with the same cap. Append biome/structure enum values: world exports serialize them.
+
+`TopBlocks` is not the last word on a column's surface block: the snow line in
+[chunk_generator.md](chunk_generator.md#snow-line) overrides `top` above a climate-driven altitude
+for every biome that sets one, and snow layers cover grass (as snowy grass) under a lower line.
+Both follow climate rather than labels, with no landform exceptions; a landform whose surface must
+never snow needs a climate reason in the line, not a `BiomeData` flag. A cold
+biome should therefore use a plain grass top and let layers whiten it, rather than hardcoding
+snowy grass, which would leave no transition.
