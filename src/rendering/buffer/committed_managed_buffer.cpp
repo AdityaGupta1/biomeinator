@@ -10,7 +10,8 @@ CommittedManagedBuffer::CommittedManagedBuffer(const D3D12_HEAP_PROPERTIES* heap
                                                D3D12_RESOURCE_STATES initialResourceState,
                                                ManagedBufferOptions options)
     : ManagedBuffer(heapProperties, initialResourceState, options)
-{}
+{
+}
 
 void CommittedManagedBuffer::initializeStorage(ToFreeList* toFreeList, size_t sizeBytes)
 {
@@ -26,9 +27,8 @@ void CommittedManagedBuffer::initializeStorage(ToFreeList* toFreeList, size_t si
 }
 
 void CommittedManagedBuffer::ensureCapacity(ID3D12GraphicsCommandList* cmdList,
-                                             ToFreeList& toFreeList,
-                                             size_t minCapacityBytes,
-                                             bool useBackFreeSection)
+                                            ToFreeList& toFreeList,
+                                            size_t minCapacityBytes)
 {
     size_t newSizeBytes = 1;
     while (newSizeBytes < minCapacityBytes)
@@ -60,8 +60,6 @@ void CommittedManagedBuffer::ensureCapacity(ID3D12GraphicsCommandList* cmdList,
                                        0,
                                        oldSizeBytes);
     }
-
-    this->extendFreelistCapacity(oldSizeBytes, newSizeBytes, useBackFreeSection);
 }
 
 void CommittedManagedBuffer::onReset()

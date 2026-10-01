@@ -3,10 +3,11 @@
 
 #pragma once
 
-#include "rendering/dxr_includes.h"
-#include "rendering/host_structs.h"
+#include "rendering/camera_math.h"
 #include "rendering/common/common_params.h"
 #include "rendering/common/common_structs.h"
+#include "rendering/dxr_includes.h"
+#include "rendering/host_structs.h"
 #include "util/halton.h"
 
 #include <array>
@@ -20,8 +21,7 @@ class Camera
 private:
     CameraParams params{};
 
-    glm::ivec3 posInt_WS{};
-    glm::vec3 posFloat_WS{};
+    CameraMath::SplitPosition position_WS;
 
     bool areMatricesDirty{ true };
     struct

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-30_
 
 # Material Model and BSDFs
 
@@ -39,7 +39,7 @@ transmission-only material (used for alpha passthrough) must be perfectly specul
   return zero (value and pdf) for those, not just for `wo·h <= 0`; otherwise NEE credits unreachable
   directions and light-sampled renders come out brighter than BSDF-sampled ones. Cycles' eval has
   the same gap (a TODO in `bsdf_microfacet_eval`), which is why its light-sampled rough glass is too
-  bright — see [tests → golden_tests.md](../tests/golden_tests.md) for how the reference avoids it.
+  bright — see [tests → rendering_tests.md](../tests/rendering_tests.md) for how the reference avoids it.
 - A relative IOR within `DIELECTRIC_PASSTHROUGH_IOR_EPSILON` of 1 is sampled as a delta passthrough
   (as Cycles does): refraction then gives `wi = -wo`, for which the half vector degenerates.
 - The refraction Jacobian `ior² |wi·h| / (ior wi·h + wo·h)²` is what Cycles' `sqr(ior * inv_len_H)`

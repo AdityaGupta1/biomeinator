@@ -8,16 +8,16 @@
 #include <stb_image.h>
 #include <stb_image_write.h>
 
-#include <filesystem>
+#include <chrono>
 #include <cmath>
-#include <cstdlib>
 #include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <iomanip>
 #include <iostream>
 #include <regex>
-#include <vector>
-#include <chrono>
-#include <iomanip>
 #include <sstream>
+#include <vector>
 
 #define TEST_ASSERT(cond)                                                                                              \
     do                                                                                                                 \
@@ -38,8 +38,7 @@ std::string formatElapsedTime(std::chrono::seconds totalSeconds)
     const int seconds = static_cast<int>(totalSeconds.count() % 60);
 
     std::ostringstream oss;
-    oss << std::setfill('0') << std::setw(2) << hours << ":"
-        << std::setfill('0') << std::setw(2) << minutes << ":"
+    oss << std::setfill('0') << std::setw(2) << hours << ":" << std::setfill('0') << std::setw(2) << minutes << ":"
         << std::setfill('0') << std::setw(2) << seconds;
     return oss.str();
 }
@@ -50,13 +49,14 @@ int main(int argc, char** argv)
 
     const auto startTime = std::chrono::steady_clock::now();
 
-    Options options("BiomeinatorTests", "Tests for Biomeinator");
+    Options options("BiomeinatorRenderingTests", "Rendering tests for Biomeinator");
     OptionAdder optionAdder = options.add_options();
 
 #define ADD_OPTION(name, desc, type, default) optionAdder(name, desc, cxxopts::value<type>()->default_value(default))
 
     optionAdder("h,help", "Print this message");
-    ADD_OPTION("f,filter", "Test filter (regex)", std::string, ".*");
+    ADD_OPTION("f,filter", "Rendering test filter (regex)", std::string, ".*");
+    optionAdder("t,test", "Run exactly one rendering test by name", cxxopts::value<std::string>());
 
 #undef ADD_OPTION
 
@@ -68,18 +68,38 @@ int main(int argc, char** argv)
         exit(0);
     }
 
+    const bool hasExactTest = parseResult.count("test") > 0;
+    if (hasExactTest && parseResult.count("filter") > 0)
+    {
+        std::cerr << "--test and --filter are mutually exclusive" << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    const std::string exactTestName = hasExactTest ? parseResult["test"].as<std::string>() : "";
     const std::string& testFilterStr = parseResult["filter"].as<std::string>();
-    printf("Filtering tests with regex: %s\n", testFilterStr.c_str());
-    const std::regex testFilter(parseResult["filter"].as<std::string>());
+    std::regex testFilter;
+    if (hasExactTest)
+    {
+        printf("Running rendering test with exact name: %s\n", exactTestName.c_str());
+    }
+    else
+    {
+        printf("Filtering rendering tests with regex: %s\n", testFilterStr.c_str());
+        try
+        {
+            testFilter = std::regex(testFilterStr);
+        }
+        catch (const std::regex_error& exception)
+        {
+            std::cerr << "Invalid test filter regex: " << exception.what() << std::endl;
+            return EXIT_FAILURE;
+        }
+    }
 
     const auto testsOutputPath = std::filesystem::path(CMAKE_BINARY_DIR) / "test_output";
     printf("Tests output path: %s\n", testsOutputPath.generic_string().c_str());
     try
     {
-        if (std::filesystem::exists(testsOutputPath))
-        {
-            std::filesystem::remove_all(testsOutputPath);
-        }
         std::filesystem::create_directories(testsOutputPath);
     }
     catch (const std::exception& e)
@@ -103,7 +123,8 @@ int main(int argc, char** argv)
     std::vector<std::string> failedTestNames;
     for (const TestCase& test : tests)
     {
-        if (!std::regex_search(test.name, testFilter))
+        const bool isSelected = hasExactTest ? test.name == exactTestName : std::regex_search(test.name, testFilter);
+        if (!isSelected)
         {
             continue;
         }
@@ -117,26 +138,30 @@ int main(int argc, char** argv)
         printf("STARTING TEST: %s\n", test.name.c_str());
         printf("=============================================\n\n");
 
+        const auto generatedImagePath = testsOutputPath / (test.name + "_GENERATED.png");
+        const auto goldenCopy = testsOutputPath / (test.name + "_GOLDEN.png");
+        const auto diffPath = testsOutputPath / (test.name + "_DIFF.png");
         try
         {
+            std::filesystem::remove(generatedImagePath);
+            std::filesystem::remove(goldenCopy);
+            std::filesystem::remove(diffPath);
             TEST_ASSERT(std::filesystem::is_regular_file(test.goldenPath));
-            const std::filesystem::path goldenCopy = testsOutputPath / (test.name + "_GOLDEN.png");
             std::filesystem::copy_file(test.goldenPath, goldenCopy, std::filesystem::copy_options::overwrite_existing);
         }
         catch (const std::exception& e)
         {
             std::cerr << "Filesystem error staging golden for '" << test.name
-                      << "' (golden=" << test.goldenPath.generic_string()
-                      << "): " << e.what() << std::endl;
+                      << "' (golden=" << test.goldenPath.generic_string() << "): " << e.what() << std::endl;
             failedTestNames.push_back(test.name);
             continue;
         }
 
         std::filesystem::path exePath = BIOMEINATOR_EXE_PATH;
-        const auto generatedImagePath = testsOutputPath / (test.name + "_GENERATED.png");
-        // --testOutput makes the run headless, which also locks the camera, hides the GUI, and
+        // --renderingTestOutput makes the run headless, which also locks the camera, hides the GUI, and
         // pauses animation so screenshots are deterministic
-        std::string command = exePath.generic_string() + " --testOutput=" + generatedImagePath.generic_string();
+        std::string command =
+            exePath.generic_string() + " --renderingTestOutput=" + generatedImagePath.generic_string();
         for (const std::string& arg : test.args)
         {
             command += " " + arg;
@@ -146,8 +171,8 @@ int main(int argc, char** argv)
         TEST_ASSERT(ret == 0);
         if (ret != 0)
         {
-            std::cerr << "Renderer exited with code " << ret << "; skipping image comparison for '"
-                      << test.name << "'. See the renderer diagnostic above.\n";
+            std::cerr << "Renderer exited with code " << ret << "; skipping image comparison for '" << test.name
+                      << "'. See the renderer diagnostic above.\n";
             failedTestNames.push_back(test.name);
             continue;
         }
@@ -185,7 +210,6 @@ int main(int argc, char** argv)
             stbi_image_free(generated);
             stbi_image_free(golden);
 
-            const auto diffPath = testsOutputPath / (test.name + "_DIFF.png");
             stbi_write_png(diffPath.generic_string().c_str(), genW, genH, 3, diffImg.data(), genW * 3);
 
             rmse = std::sqrt(sumSq / count) / 255.f;
@@ -209,6 +233,12 @@ int main(int argc, char** argv)
         printf("Error:     %.5f\n", rmse);
         printf("Threshold: %.5f\n", test.threshold);
         printf("=============================================\n\n");
+    }
+
+    if (numTests == 0)
+    {
+        std::cerr << "No rendering tests matched the requested selection" << std::endl;
+        return EXIT_FAILURE;
     }
 
     const auto endTime = std::chrono::steady_clock::now();

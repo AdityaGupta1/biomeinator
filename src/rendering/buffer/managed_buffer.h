@@ -3,12 +3,11 @@
 
 #pragma once
 
-#include "rendering/dxr_includes.h"
 #include "rendering/buffer/buffer_helper.h"
+#include "rendering/buffer/free_range_allocator.h"
 #include "rendering/buffer/gpu_memory_reporter.h"
+#include "rendering/dxr_includes.h"
 #include "util/util.h"
-
-#include <map>
 
 class ToFreeList;
 
@@ -60,27 +59,12 @@ protected:
 
     void* host_buffer{ nullptr };
     ComPtr<ID3D12Resource> dev_buffer{ nullptr };
-    size_t bufferSizeBytes{ 0 }; // actual physical allocated memory (i.e. not virtual memory in case of ReservedManagedBuffer)
-
-    struct FreeNode;
-    using OffsetMap = std::map<size_t, FreeNode>;
-    using OffsetIter = OffsetMap::iterator;
-    using SizeMap = std::multimap<size_t, OffsetIter>;
-    using SizeIter = SizeMap::iterator;
-    struct FreeNode
-    {
-        size_t sizeBytes;
-        SizeIter sizeIter;
-    };
-    OffsetMap freeByOffset;
-    SizeMap freeBySize;
+    size_t bufferSizeBytes{
+        0
+    }; // actual physical allocated memory (i.e. not virtual memory in case of ReservedManagedBuffer)
+    FreeRangeAllocator freeRanges;
 
     bool batchCopyActive{ false };
-
-    void insertFreeNode(size_t offsetBytes, size_t sizeBytes);
-    void eraseFreeNode(OffsetIter offsetIter);
-
-    void extendFreelistCapacity(size_t oldSizeBytes, size_t newSizeBytes, bool useBackFreeSection);
 
     void freeSection(ManagedBufferSection section);
 
@@ -90,8 +74,7 @@ protected:
 
     virtual void ensureCapacity(ID3D12GraphicsCommandList* cmdList,
                                 ToFreeList& toFreeList,
-                                size_t minCapacityBytes,
-                                bool useBackFreeSection) = 0;
+                                size_t minCapacityBytes) = 0;
 
     virtual void onReset() = 0;
 
@@ -109,9 +92,7 @@ public:
 
     void reset();
 
-    ManagedBufferSection findFreeSection(ID3D12GraphicsCommandList* cmdList,
-                                         ToFreeList* toFreeList,
-                                         size_t sizeBytes);
+    ManagedBufferSection findFreeSection(ID3D12GraphicsCommandList* cmdList, ToFreeList* toFreeList, size_t sizeBytes);
 
     ManagedBufferSection copyFromHostBuffer(ID3D12GraphicsCommandList* cmdList,
                                             ToFreeList& toFreeList,

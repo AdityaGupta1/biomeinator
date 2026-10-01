@@ -10,6 +10,7 @@ if(MSVC)
 endif()
 
 include(FetchContent)
+include(CTest)
 
 # ==================================================
 # Biomeinator
@@ -384,15 +385,72 @@ target_compile_definitions(Biomeinator PRIVATE
 )
 
 # ==================================================
-# BiomeinatorTests
+# BiomeinatorUnitTests
 # ==================================================
 
-file(GLOB TESTS_SRC CONFIGURE_DEPENDS
+if(BUILD_TESTING)
+    set(CATCH_INSTALL_DOCS OFF CACHE BOOL "Build Catch2 documentation" FORCE)
+    set(CATCH_INSTALL_EXTRAS OFF CACHE BOOL "Install Catch2 extras" FORCE)
+    add_subdirectory("${EXT}/Catch2" "${CMAKE_BINARY_DIR}/Catch2" EXCLUDE_FROM_ALL)
+
+    file(GLOB UNIT_TESTS_SRC CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/*.cpp"
+    )
+
+    add_executable(BiomeinatorUnitTests
+        ${UNIT_TESTS_SRC}
+        "${SRC_DIR}/logger.cpp"
+        "${SRC_DIR}/multithreading/thread_memory_allocator.cpp"
+        "${SRC_DIR}/rendering/camera_math.cpp"
+        "${SRC_DIR}/rendering/buffer/descriptor_index_allocator.cpp"
+        "${SRC_DIR}/rendering/buffer/dirty_range_set.cpp"
+        "${SRC_DIR}/rendering/buffer/free_range_allocator.cpp"
+        "${SRC_DIR}/settings_manager.cpp"
+        "${SRC_DIR}/util/halton.cpp"
+    )
+    assign_source_group("tests\\unit" "${CMAKE_CURRENT_SOURCE_DIR}/tests/unit" "${UNIT_TESTS_SRC}")
+    source_group("src" FILES
+        "${SRC_DIR}/logger.cpp"
+        "${SRC_DIR}/settings_manager.cpp"
+    )
+    source_group("src\\multithreading" FILES "${SRC_DIR}/multithreading/thread_memory_allocator.cpp")
+    source_group("src\\rendering" FILES "${SRC_DIR}/rendering/camera_math.cpp")
+    source_group("src\\rendering\\buffer" FILES
+        "${SRC_DIR}/rendering/buffer/descriptor_index_allocator.cpp"
+        "${SRC_DIR}/rendering/buffer/dirty_range_set.cpp"
+        "${SRC_DIR}/rendering/buffer/free_range_allocator.cpp"
+    )
+    source_group("src\\util" FILES "${SRC_DIR}/util/halton.cpp")
+
+    target_include_directories(BiomeinatorUnitTests PRIVATE
+        ${SRC_DIR}
+        ${GENERATED_HEADERS_DIR}
+        "${EXT}/cxxopts/include"
+        "${EXT}/DirectX-Headers/include/directx"
+    )
+    target_link_libraries(BiomeinatorUnitTests PRIVATE Catch2::Catch2WithMain glm::glm-header-only)
+    target_compile_definitions(BiomeinatorUnitTests PRIVATE
+        ENABLE_ASSERTS=$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>
+    )
+
+    list(APPEND CMAKE_MODULE_PATH "${EXT}/Catch2/extras")
+    include(Catch)
+    catch_discover_tests(BiomeinatorUnitTests
+        TEST_PREFIX "unit::"
+        PROPERTIES LABELS "unit"
+    )
+endif()
+
+# ==================================================
+# BiomeinatorRenderingTests
+# ==================================================
+
+file(GLOB RENDERING_TESTS_SRC CONFIGURE_DEPENDS
     "${SRC_DIR}/tests/*.cpp"
     "${SRC_DIR}/tests/*.h"
 )
 
-foreach(FILE IN LISTS TESTS_SRC)
+foreach(FILE IN LISTS RENDERING_TESTS_SRC)
     file(RELATIVE_PATH REL_PATH "${SRC_DIR}" "${FILE}")
     get_filename_component(DIR_PATH "${REL_PATH}" DIRECTORY)
     string(REPLACE "\\" "/" DIR_PATH "${DIR_PATH}")
@@ -400,19 +458,50 @@ foreach(FILE IN LISTS TESTS_SRC)
     source_group("src\\${FILTER_PATH}" FILES "${FILE}")
 endforeach()
 
-add_executable(BiomeinatorTests ${TESTS_SRC})
-target_include_directories(BiomeinatorTests PRIVATE
+add_executable(BiomeinatorRenderingTests ${RENDERING_TESTS_SRC})
+target_include_directories(BiomeinatorRenderingTests PRIVATE
     ${SRC_DIR}
     "${EXT}/cxxopts/include"
     "${EXT}/json/include"
     "${EXT}/stb/include"
 )
-add_dependencies(BiomeinatorTests Biomeinator)
-target_compile_definitions(BiomeinatorTests PRIVATE
+add_dependencies(BiomeinatorRenderingTests Biomeinator)
+target_compile_definitions(BiomeinatorRenderingTests PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
     BIOMEINATOR_EXE_PATH="$<TARGET_FILE:Biomeinator>"
 )
+
+if(BUILD_TESTING)
+    set(RENDERING_TEST_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/tests/tests.json")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${RENDERING_TEST_MANIFEST}")
+
+    file(READ "${RENDERING_TEST_MANIFEST}" RENDERING_TEST_MANIFEST_JSON)
+    string(JSON RENDERING_TEST_COUNT LENGTH "${RENDERING_TEST_MANIFEST_JSON}" tests)
+
+    if(RENDERING_TEST_COUNT GREATER 0)
+        math(EXPR RENDERING_TEST_LAST "${RENDERING_TEST_COUNT} - 1")
+        set(RENDERING_TEST_NAMES)
+
+        foreach(INDEX RANGE 0 ${RENDERING_TEST_LAST})
+            string(JSON RENDERING_TEST_NAME GET "${RENDERING_TEST_MANIFEST_JSON}" tests ${INDEX} name)
+            if(RENDERING_TEST_NAME IN_LIST RENDERING_TEST_NAMES)
+                message(FATAL_ERROR "Duplicate rendering test name in ${RENDERING_TEST_MANIFEST}: ${RENDERING_TEST_NAME}")
+            endif()
+            list(APPEND RENDERING_TEST_NAMES "${RENDERING_TEST_NAME}")
+
+            add_test(
+                NAME "rendering::${RENDERING_TEST_NAME}"
+                COMMAND BiomeinatorRenderingTests --test "${RENDERING_TEST_NAME}"
+            )
+            set_tests_properties("rendering::${RENDERING_TEST_NAME}" PROPERTIES
+                LABELS "rendering"
+                RESOURCE_LOCK "biomeinator_gpu"
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+            )
+        endforeach()
+    endif()
+endif()
 
 # ==================================================
 # BiomeScanner

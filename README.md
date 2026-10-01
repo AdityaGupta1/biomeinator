@@ -40,6 +40,27 @@ Use `tests/run_perf.py` with `--sharc=false` and `--sharc=true` to compare total
 The settings panel includes a cache reset button and hit/bounce/grid/cached-radiance views (`--sharcDebug=1`, `2`, `3`, or `4`).
 See [SHaRC integration notes](knowledge/rendering/sharc.md) for cache behavior and limitations.
 
+## Tests
+
+Unit tests use Catch2 and run on the CPU. Rendering tests launch the engine and compare
+screenshots against reference images. Both are executable build targets; building a target
+does not run its tests. Running either executable without filters runs its full suite.
+CTest reports every test individually and can run both suites or select one by label:
+
+```powershell
+cmake --build build --config RelWithDebInfo --target BiomeinatorUnitTests BiomeinatorRenderingTests
+ctest --test-dir build -C RelWithDebInfo --output-on-failure
+# Or select a suite:
+ctest --test-dir build -C RelWithDebInfo -L unit --output-on-failure
+ctest --test-dir build -C RelWithDebInfo -L rendering --output-on-failure
+```
+
+Configure with `BUILD_TESTING=ON` (the default) to enable the unit target and CTest registration.
+Rendering tests need the renderer's supported GPU. Agents must launch them outside their sandbox
+to allow normal NVIDIA telemetry cleanup at shutdown.
+See [unit test notes](knowledge/tests/unit_tests.md) and
+[rendering test notes](knowledge/tests/rendering_tests.md) for details.
+
 ## Third-Party Licenses
 
 This project uses various third-party libraries:

@@ -4,22 +4,20 @@
 #include "managed_buffer.h"
 
 #include "buffer_helper.h"
-#include "to_free_list.h"
 #include "rendering/dxr_common.h"
 #include "rendering/renderer.h"
-#include "util/math.h"
+#include "to_free_list.h"
 
 #include "debug.h"
 
-#include <iterator>
-
 ManagedBufferSection::ManagedBufferSection(ManagedBuffer* buffer, size_t offsetBytes, size_t sizeBytes)
     : buffer(buffer), offsetBytes(offsetBytes), sizeBytes(sizeBytes)
-{}
+{
+}
 
-ManagedBufferSection::ManagedBufferSection()
-    : ManagedBufferSection(nullptr, 0, 0)
-{}
+ManagedBufferSection::ManagedBufferSection() : ManagedBufferSection(nullptr, 0, 0)
+{
+}
 
 ManagedBuffer* ManagedBufferSection::getBuffer() const
 {
@@ -43,8 +41,10 @@ void ManagedBufferSection::free()
 ManagedBuffer::ManagedBuffer(const D3D12_HEAP_PROPERTIES* heapProperties,
                              const D3D12_RESOURCE_STATES initialResourceState,
                              const ManagedBufferOptions options)
-    : heapProperties(heapProperties), initialResourceState(initialResourceState), options(options)
-{}
+    : heapProperties(heapProperties), initialResourceState(initialResourceState), options(options),
+      freeRanges(options.alignmentBytes)
+{
+}
 
 void ManagedBuffer::init(size_t sizeBytes)
 {
@@ -52,9 +52,7 @@ void ManagedBuffer::init(size_t sizeBytes)
 
     this->initializeStorage(nullptr /*toFreeList*/, sizeBytes);
 
-    this->freeByOffset.clear();
-    this->freeBySize.clear();
-    this->insertFreeNode(0, this->bufferSizeBytes);
+    this->freeRanges.reset(this->bufferSizeBytes);
 
     if (this->options.isMapped)
     {
@@ -79,93 +77,23 @@ void ManagedBuffer::reset()
         this->unmap();
     }
 
-    bool isBufferOccupied = true;
-    if (this->freeByOffset.size() == 1)
-    {
-        const auto offsetIter = this->freeByOffset.begin();
-        const auto& freeNode = offsetIter->second;
-        const size_t offsetBytes = offsetIter->first;
-        if (offsetBytes == 0 && freeNode.sizeBytes == this->bufferSizeBytes)
-        {
-            isBufferOccupied = false;
-        }
-    }
-    ASSERT(!isBufferOccupied);
+    ASSERT(this->freeRanges.isCompletelyFree(), "ManagedBuffer reset while sections are still allocated");
 
     this->onReset();
     this->bufferSizeBytes = 0;
-}
-
-void ManagedBuffer::insertFreeNode(size_t offsetBytes, size_t sizeBytes)
-{
-    const auto [offsetIter, inserted] = freeByOffset.insert({ offsetBytes, FreeNode{ sizeBytes, {} } });
-    ASSERT(inserted, "freeByOffset already contains this offset");
-    offsetIter->second.sizeIter = freeBySize.insert({ sizeBytes, offsetIter });
-}
-
-void ManagedBuffer::eraseFreeNode(OffsetIter offsetIter)
-{
-    this->freeBySize.erase(offsetIter->second.sizeIter);
-    this->freeByOffset.erase(offsetIter);
-}
-
-void ManagedBuffer::extendFreelistCapacity(size_t oldSizeBytes, size_t newSizeBytes, bool useBackFreeSection)
-{
-    const size_t diffSizeBytes = newSizeBytes - oldSizeBytes;
-
-    if (useBackFreeSection)
-    {
-        const auto backIter = std::prev(this->freeByOffset.end());
-        const size_t newBackSizeBytes = backIter->second.sizeBytes + diffSizeBytes;
-
-        this->freeBySize.erase(backIter->second.sizeIter);
-
-        FreeNode& backFreeNode = backIter->second;
-        backFreeNode.sizeBytes = newBackSizeBytes;
-        backFreeNode.sizeIter = this->freeBySize.insert({ newBackSizeBytes, backIter });
-    }
-    else
-    {
-        this->insertFreeNode(oldSizeBytes, diffSizeBytes);
-    }
+    this->freeRanges.reset(0);
 }
 
 void ManagedBuffer::freeSection(ManagedBufferSection section)
 {
-    ASSERT(section.getBuffer() == this, "Attempted to free ManagedBufferSection from wrong ManagedBuffer");
-
-    size_t mergedOffsetBytes = section.offsetBytes;
-    size_t mergedSizeBytes = section.sizeBytes;
-
-    const OffsetIter nextIter = this->freeByOffset.lower_bound(section.offsetBytes);
-
-    // check previous neighbor for merging
-    if (nextIter != this->freeByOffset.begin())
+    const bool ownsSection = section.getBuffer() == this;
+    ASSERT(ownsSection, "Attempted to free ManagedBufferSection from wrong ManagedBuffer");
+    if (!ownsSection)
     {
-        OffsetIter prevIter = std::prev(nextIter);
-        const size_t prevOffsetBytes = prevIter->first;
-        const size_t prevSizeBytes = prevIter->second.sizeBytes;
-        if (prevOffsetBytes + prevSizeBytes == section.offsetBytes)
-        {
-            mergedOffsetBytes = prevOffsetBytes;
-            mergedSizeBytes = prevSizeBytes + section.sizeBytes;
-            this->eraseFreeNode(prevIter);
-        }
+        return;
     }
-
-    // check next neighbor for merging
-    if (nextIter != this->freeByOffset.end())
-    {
-        const size_t nextOffsetBytes = nextIter->first;
-        const size_t nextSizeBytes = nextIter->second.sizeBytes;
-        if (mergedOffsetBytes + mergedSizeBytes == nextOffsetBytes)
-        {
-            mergedSizeBytes += nextSizeBytes;
-            this->eraseFreeNode(nextIter);
-        }
-    }
-
-    this->insertFreeNode(mergedOffsetBytes, mergedSizeBytes);
+    const bool didRelease = this->freeRanges.release({ section.offsetBytes, section.sizeBytes });
+    ASSERT(didRelease, "Attempted to free an invalid or already-free ManagedBufferSection");
 }
 
 void ManagedBuffer::setBufferName()
@@ -183,28 +111,9 @@ ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* c
                                                     ToFreeList* toFreeList,
                                                     size_t sizeBytes)
 {
-    if (this->options.alignmentBytes != 0)
+    if (const std::optional<FreeRange> range = this->freeRanges.allocate(sizeBytes))
     {
-        sizeBytes = MathUtil::roundUp(sizeBytes, this->options.alignmentBytes);
-    }
-
-    const auto sizeIter = this->freeBySize.lower_bound(sizeBytes);
-    if (sizeIter != this->freeBySize.end())
-    {
-        const OffsetIter offsetIter = sizeIter->second;
-        const size_t resultOffsetBytes = offsetIter->first;
-        const size_t blockSizeBytes = offsetIter->second.sizeBytes;
-
-        this->eraseFreeNode(offsetIter);
-
-        if (blockSizeBytes > sizeBytes)
-        {
-            const size_t remainderOffsetBytes = resultOffsetBytes + sizeBytes;
-            const size_t remainderSizeBytes = blockSizeBytes - sizeBytes;
-            this->insertFreeNode(remainderOffsetBytes, remainderSizeBytes);
-        }
-
-        return { this, resultOffsetBytes, sizeBytes };
+        return { this, range->offsetBytes, range->sizeBytes };
     }
 
     if (!this->options.isResizable)
@@ -212,26 +121,24 @@ ManagedBufferSection ManagedBuffer::findFreeSection(ID3D12GraphicsCommandList* c
         return ManagedBufferSection();
     }
 
+    const size_t allocationSizeBytes = this->freeRanges.getAllocationSize(sizeBytes);
+    if (allocationSizeBytes == 0)
+    {
+        return ManagedBufferSection();
+    }
+
     ASSERT(cmdList != nullptr);
     ASSERT(toFreeList != nullptr);
 
-    bool useBackFreeSection = false;
-    size_t backSizeBytes = 0;
-    if (!this->freeByOffset.empty())
+    const size_t minNewSizeBytes = this->bufferSizeBytes + allocationSizeBytes - this->freeRanges.getFreeTailBytes();
+    this->ensureCapacity(cmdList, *toFreeList, minNewSizeBytes);
+
+    const bool didGrow = this->freeRanges.grow(this->bufferSizeBytes);
+    ASSERT(didGrow, "ManagedBuffer storage did not grow to the requested capacity");
+    if (!didGrow)
     {
-        const auto backIter = std::prev(this->freeByOffset.end());
-        const size_t backOffsetBytes = backIter->first;
-        const size_t backBlockSizeBytes = backIter->second.sizeBytes;
-        if (backOffsetBytes + backBlockSizeBytes == this->bufferSizeBytes)
-        {
-            useBackFreeSection = true;
-            backSizeBytes = backBlockSizeBytes;
-        }
+        return ManagedBufferSection();
     }
-
-    const size_t minNewSizeBytes = this->bufferSizeBytes + sizeBytes - backSizeBytes;
-
-    this->ensureCapacity(cmdList, *toFreeList, minNewSizeBytes, useBackFreeSection);
 
     return findFreeSection(cmdList, toFreeList, sizeBytes);
 }
@@ -298,11 +205,8 @@ ManagedBufferSection ManagedBuffer::copyFromManagedBuffer(ID3D12GraphicsCommandL
                                                           const ManagedBuffer& srcBuffer,
                                                           ManagedBufferSection srcBufferSection)
 {
-    return this->copyFromDeviceBuffer(cmdList,
-                                      toFreeList,
-                                      srcBuffer.getBuffer(),
-                                      srcBufferSection.sizeBytes,
-                                      srcBufferSection.offsetBytes);
+    return this->copyFromDeviceBuffer(
+        cmdList, toFreeList, srcBuffer.getBuffer(), srcBufferSection.sizeBytes, srcBufferSection.offsetBytes);
 }
 
 ID3D12Resource* ManagedBuffer::getBuffer() const
@@ -322,12 +226,7 @@ size_t ManagedBuffer::getSizeBytes() const
 
 size_t ManagedBuffer::getFreeBytes() const
 {
-    size_t freeBytes = 0;
-    for (const auto& [_, node] : this->freeByOffset)
-    {
-        freeBytes += node.sizeBytes;
-    }
-    return freeBytes;
+    return this->freeRanges.getFreeBytes();
 }
 
 GpuMemoryEntry ManagedBuffer::reportGpuMemory() const
