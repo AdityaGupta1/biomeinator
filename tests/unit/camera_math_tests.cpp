@@ -13,9 +13,9 @@ namespace
 
 void checkVec3(const glm::vec3& actual, const glm::vec3& expected, float margin = 1e-5f)
 {
-    CHECK(actual.x == Catch::Approx(expected.x).margin(margin));
-    CHECK(actual.y == Catch::Approx(expected.y).margin(margin));
-    CHECK(actual.z == Catch::Approx(expected.z).margin(margin));
+    CHECK(actual.x == Catch::Approx(expected.x).epsilon(0).margin(margin));
+    CHECK(actual.y == Catch::Approx(expected.y).epsilon(0).margin(margin));
+    CHECK(actual.z == Catch::Approx(expected.z).epsilon(0).margin(margin));
 }
 
 } // namespace
@@ -76,9 +76,9 @@ TEST_CASE("split camera positions stay normalized under deterministic movement c
     }
 
     const glm::dvec3 reconstructed = glm::dvec3(position.integer) + glm::dvec3(position.fractional);
-    CHECK(reconstructed.x == Catch::Approx(expected.x).margin(0.01));
-    CHECK(reconstructed.y == Catch::Approx(expected.y).margin(0.01));
-    CHECK(reconstructed.z == Catch::Approx(expected.z).margin(0.01));
+    CHECK(reconstructed.x == Catch::Approx(expected.x).epsilon(0).margin(0.01));
+    CHECK(reconstructed.y == Catch::Approx(expected.y).epsilon(0).margin(0.01));
+    CHECK(reconstructed.z == Catch::Approx(expected.z).epsilon(0).margin(0.01));
 }
 
 TEST_CASE("camera basis vectors are orthonormal across randomized angles", "[unit][camera_math][stress]")
@@ -94,16 +94,33 @@ TEST_CASE("camera basis vectors are orthonormal across randomized angles", "[uni
     checkVec3(defaultBasis.right, { 1.f, 0.f, 0.f });
     checkVec3(defaultBasis.up, { 0.f, 1.f, 0.f });
 
+    // Known rotations anchor angle signs, axes, and units; orthonormality alone does not.
+    const auto checkBasis = [](float phi, float theta, const CameraMath::Basis& expected)
+    {
+        CAPTURE(phi, theta);
+        const auto actual = CameraMath::makeBasis(phi, theta);
+        checkVec3(actual.forward, expected.forward);
+        checkVec3(actual.right, expected.right);
+        checkVec3(actual.up, expected.up);
+    };
+    constexpr float pi = std::numbers::pi_v<float>;
+    const float cos30 = std::sqrt(3.f) / 2.f;
+    checkBasis(0.f, 0.f, { { 0, 0, 1 }, { -1, 0, 0 }, { 0, 1, 0 } });
+    checkBasis(0.f, pi / 2.f, { { 1, 0, 0 }, { 0, 0, 1 }, { 0, 1, 0 } });
+    checkBasis(0.f, -pi / 2.f, { { -1, 0, 0 }, { 0, 0, -1 }, { 0, 1, 0 } });
+    checkBasis(pi / 6.f, 0.f, { { 0, 0.5f, cos30 }, { -1, 0, 0 }, { 0, cos30, -0.5f } });
+    checkBasis(-pi / 6.f, pi / 2.f, { { cos30, -0.5f, 0 }, { 0, 0, 1 }, { 0.5f, cos30, 0 } });
+
     for (int sample = 0; sample < 5000; ++sample)
     {
         const CameraMath::Basis basis = CameraMath::makeBasis(phiDistribution(rng), thetaDistribution(rng));
         CAPTURE(sample);
-        CHECK(glm::length(basis.forward) == Catch::Approx(1.f).margin(1e-5f));
-        CHECK(glm::length(basis.right) == Catch::Approx(1.f).margin(1e-5f));
-        CHECK(glm::length(basis.up) == Catch::Approx(1.f).margin(1e-5f));
-        CHECK(glm::dot(basis.forward, basis.right) == Catch::Approx(0.f).margin(1e-5f));
-        CHECK(glm::dot(basis.forward, basis.up) == Catch::Approx(0.f).margin(1e-5f));
-        CHECK(glm::dot(basis.right, basis.up) == Catch::Approx(0.f).margin(1e-5f));
+        CHECK(glm::length(basis.forward) == Catch::Approx(1.f).epsilon(0).margin(1e-5f));
+        CHECK(glm::length(basis.right) == Catch::Approx(1.f).epsilon(0).margin(1e-5f));
+        CHECK(glm::length(basis.up) == Catch::Approx(1.f).epsilon(0).margin(1e-5f));
+        CHECK(glm::dot(basis.forward, basis.right) == Catch::Approx(0.f).epsilon(0).margin(1e-5f));
+        CHECK(glm::dot(basis.forward, basis.up) == Catch::Approx(0.f).epsilon(0).margin(1e-5f));
+        CHECK(glm::dot(basis.right, basis.up) == Catch::Approx(0.f).epsilon(0).margin(1e-5f));
         checkVec3(glm::cross(basis.right, basis.forward), basis.up, 1e-5f);
     }
 }
@@ -121,9 +138,36 @@ TEST_CASE("camera frustum side normals are normalized inward and symmetric", "[u
 
     for (const glm::vec3 normal : normals)
     {
-        CHECK(glm::length(normal) == Catch::Approx(1.f).margin(1e-5f));
+        CHECK(glm::length(normal) == Catch::Approx(1.f).epsilon(0).margin(1e-5f));
         CHECK(glm::dot(normal, basis.forward) > 0.f);
     }
     checkVec3(glm::normalize(normals[0] + normals[1]), basis.forward);
     checkVec3(glm::normalize(normals[2] + normals[3]), basis.forward);
+
+    const auto checkFrustum = [](const CameraMath::Basis& frame, float fov, float aspect,
+                                 const std::array<glm::vec3, 4>& expected)
+    {
+        CAPTURE(fov, aspect);
+        const auto actual = CameraMath::frustumSideNormals(frame, fov, aspect);
+        for (size_t side = 0; side < expected.size(); ++side)
+        {
+            CAPTURE(side);
+            checkVec3(actual[side], expected[side]);
+        }
+    };
+    const float invSqrt5 = 1.f / std::sqrt(5.f);
+    checkFrustum(basis, std::numbers::pi_v<float> / 2.f, 2.f,
+                 { glm::vec3{ invSqrt5, 0, -2 * invSqrt5 }, { -invSqrt5, 0, -2 * invSqrt5 },
+                   { 0, invSqrt2, -invSqrt2 }, { 0, -invSqrt2, -invSqrt2 } });
+    checkFrustum(basis, std::numbers::pi_v<float> / 2.f, 0.5f,
+                 { glm::vec3{ 2 * invSqrt5, 0, -invSqrt5 }, { -2 * invSqrt5, 0, -invSqrt5 },
+                   { 0, invSqrt2, -invSqrt2 }, { 0, -invSqrt2, -invSqrt2 } });
+    const float cos30 = std::sqrt(3.f) / 2.f;
+    checkFrustum(basis, std::numbers::pi_v<float> / 3.f, 1.f,
+                 { glm::vec3{ cos30, 0, -0.5f }, { -cos30, 0, -0.5f },
+                   { 0, cos30, -0.5f }, { 0, -cos30, -0.5f } });
+    // Supply a known frame directly so this check cannot inherit makeBasis mistakes.
+    checkFrustum({ { 1, 0, 0 }, { 0, 0, 1 }, { 0, 1, 0 } }, std::numbers::pi_v<float> / 3.f, 1.f,
+                 { glm::vec3{ 0.5f, 0, cos30 }, { 0.5f, 0, -cos30 },
+                   { 0.5f, cos30, 0 }, { 0.5f, -cos30, 0 } });
 }

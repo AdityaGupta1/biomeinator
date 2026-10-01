@@ -72,38 +72,66 @@ TEST_CASE("DirtyRangeSet matches a byte-mask model under deterministic churn", "
     std::mt19937 rng(seed);
     INFO("seed=" << seed);
 
-    for (int operation = 0; operation < 5000; ++operation)
+    const auto checkModel = [&]
     {
-        const uint32_t first = rng() % capacity;
-        const uint32_t second = rng() % capacity;
-        const uint32_t begin = std::min(first, second);
-        const uint32_t end = std::max(first, second) + 1;
+        std::vector<DirtyRange> expected;
+        uint32_t index = 0;
+        while (index < capacity)
+        {
+            while (index < capacity && dirty[index] == 0)
+            {
+                ++index;
+            }
+            const uint32_t begin = index;
+            while (index < capacity && dirty[index] != 0)
+            {
+                ++index;
+            }
+            if (begin < index)
+            {
+                expected.push_back({ begin, index });
+            }
+        }
+        REQUIRE(ranges.getRanges() == expected);
+        REQUIRE(ranges.empty() == expected.empty());
+        REQUIRE(ranges.validateInvariants());
+    };
+    const auto insertAndCheck = [&](uint32_t begin, uint32_t end)
+    {
+        CAPTURE(begin, end);
         REQUIRE(ranges.insert(begin, end));
         std::fill(dirty.begin() + begin, dirty.begin() + end, 1);
-        REQUIRE(ranges.validateInvariants());
-    }
+        checkModel();
+    };
 
-    std::vector<DirtyRange> expected;
-    uint32_t index = 0;
-    while (index < capacity)
+    // 100 cycles of 50 operations prevent saturation from making most of the run redundant.
+    for (int cycle = 0; cycle < 100; ++cycle)
     {
-        while (index < capacity && dirty[index] == 0)
+        CAPTURE(cycle);
+        std::array<uint32_t, 8> cells{ 0, 1, 2, 3, 4, 5, 6, 7 };
+        std::shuffle(cells.begin(), cells.end(), rng);
+        for (const uint32_t cell : cells)
         {
-            ++index;
+            const uint32_t begin = cell * 128 + 16 + rng() % 80;
+            insertAndCheck(begin, begin + 1 + rng() % 8);
         }
-        const uint32_t begin = index;
-        while (index < capacity && dirty[index] != 0)
-        {
-            ++index;
-        }
-        if (begin < index)
-        {
-            expected.push_back({ begin, index });
-        }
-    }
-    CHECK(ranges.getRanges() == expected);
+        REQUIRE(ranges.getRanges().size() == 8);
 
-    ranges.clear();
-    CHECK(ranges.empty());
-    CHECK(ranges.validateInvariants());
+        // Force a bridge across four components while leaving the other four disjoint.
+        insertAndCheck(0, 512);
+        REQUIRE(ranges.getRanges().size() == 5);
+        for (int operation = 0; operation < 39; ++operation)
+        {
+            CAPTURE(operation);
+            const uint32_t begin = rng() % capacity;
+            const uint32_t end = std::min(capacity, begin + 1 + rng() % 16);
+            insertAndCheck(begin, end);
+        }
+
+        insertAndCheck(0, capacity);
+        REQUIRE(ranges.getRanges() == (std::vector<DirtyRange>{ { 0, capacity } }));
+        ranges.clear();
+        std::fill(dirty.begin(), dirty.end(), 0);
+        checkModel();
+    }
 }

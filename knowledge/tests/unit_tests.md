@@ -25,11 +25,25 @@ a small array model; thread scratch allocations use randomized sizes and alignme
 canaries that remain valid until each clear. Numeric packing additionally samples the full valid
 terrain position and UV domains and checks the documented quantization bounds.
 
+Dirty-range stress compares its byte-mask oracle after every mutation and repeatedly builds
+fragmented sets, bridges multiple components, and clears them. A single long insertion-only run
+would rapidly saturate the domain and stop exercising fragmented bookkeeping. Packing tests
+also pin literal wire words and decode independently authored words: a CPU encode/decode round
+trip alone can agree while breaking shader compatibility. Explicit absolute tolerances disable
+Catch2's default relative epsilon so large coordinates cannot silently relax precision bounds;
+UV checks separately allow the float rounding in their non-power-of-two decode.
+
 Settings tests exercise the non-terminating parser, including dependent defaults, headless
 overrides, validation failures, and runtime mutation. Camera tests target the extracted pure math:
 split-position normalization and large-coordinate precision, direction-basis orthonormality, and
 frustum-plane symmetry. Keeping this math outside `Camera` avoids pulling D3D or renderer globals
 into the CPU-only target.
+
+Fixed angle, aspect-ratio, block-face, and RNG helper answers anchor input semantics as well as
+invariants. Orthonormal camera vectors can still point in the wrong direction, a production
+orientation table cannot serve as its own expected result, and RNG bounds alone accept a
+constant-valued generator. RNG helper vectors also pin stream advancement and negative-range
+selection independently of the production conversion.
 
 Building `BiomeinatorUnitTests` compiles the executable without executing its test cases.
 Launching `BiomeinatorUnitTests.exe` without arguments runs the complete suite; CTest discovers

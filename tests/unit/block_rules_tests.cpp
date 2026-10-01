@@ -40,15 +40,35 @@ bool sameVector(const glm::vec3& left, const glm::vec3& right)
 
 TEST_CASE("block face bases are orthogonal and orient local axes", "[unit][block_rules]")
 {
-    for (uint8_t faceIdx = 0; faceIdx < blockFaceCount; ++faceIdx)
+    struct ExpectedFace
     {
-        const BlockFace face = static_cast<BlockFace>(faceIdx);
+        BlockFace face;
+        glm::vec3 normal;
+        glm::vec3 tangentX;
+        glm::vec3 tangentZ;
+        glm::vec3 orientedPoint;
+    };
+    // Authored axis mappings and point (2,3,5), independent of the production basis table.
+    const std::array<ExpectedFace, 6> expectedFaces{{
+        { BlockFace::X_POS, { 1, 0, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 3, -2, 5 } },
+        { BlockFace::Z_POS, { 0, 0, 1 }, { 1, 0, 0 }, { 0, -1, 0 }, { 2, -5, 3 } },
+        { BlockFace::X_NEG, { -1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 }, { -3, 2, 5 } },
+        { BlockFace::Z_NEG, { 0, 0, -1 }, { 1, 0, 0 }, { 0, 1, 0 }, { 2, 5, -3 } },
+        { BlockFace::Y_POS, { 0, 1, 0 }, { 1, 0, 0 }, { 0, 0, 1 }, { 2, 3, 5 } },
+        { BlockFace::Y_NEG, { 0, -1, 0 }, { 1, 0, 0 }, { 0, 0, -1 }, { 2, -3, -5 } },
+    }};
+    for (const ExpectedFace& expected : expectedFaces)
+    {
+        const BlockFace face = expected.face;
         const BlockFaceBasis& basis = blockFaceBasis(face);
         const glm::vec3 normal = basis.normal;
         const glm::vec3 tangentX = basis.tangentX;
         const glm::vec3 tangentZ = basis.tangentZ;
 
-        CAPTURE(faceIdx);
+        CAPTURE(static_cast<int>(face));
+        CHECK(sameVector(normal, expected.normal));
+        CHECK(sameVector(tangentX, expected.tangentX));
+        CHECK(sameVector(tangentZ, expected.tangentZ));
         CHECK(glm::dot(normal, tangentX) == 0.f);
         CHECK(glm::dot(normal, tangentZ) == 0.f);
         CHECK(glm::dot(tangentX, tangentZ) == 0.f);
@@ -56,9 +76,10 @@ TEST_CASE("block face bases are orthogonal and orient local axes", "[unit][block
         CHECK(glm::dot(tangentX, tangentX) == 1.f);
         CHECK(glm::dot(tangentZ, tangentZ) == 1.f);
 
-        CHECK(sameVector(orientToBlockFace({ 1.f, 0.f, 0.f }, face), glm::vec3(basis.tangentX)));
-        CHECK(sameVector(orientToBlockFace({ 0.f, 1.f, 0.f }, face), glm::vec3(basis.normal)));
-        CHECK(sameVector(orientToBlockFace({ 0.f, 0.f, 1.f }, face), glm::vec3(basis.tangentZ)));
+        CHECK(sameVector(orientToBlockFace({ 1.f, 0.f, 0.f }, face), expected.tangentX));
+        CHECK(sameVector(orientToBlockFace({ 0.f, 1.f, 0.f }, face), expected.normal));
+        CHECK(sameVector(orientToBlockFace({ 0.f, 0.f, 1.f }, face), expected.tangentZ));
+        CHECK(sameVector(orientToBlockFace({ 2.f, 3.f, 5.f }, face), expected.orientedPoint));
     }
 }
 

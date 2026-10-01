@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-09-30_
 
 # RNG
 
@@ -19,3 +19,18 @@ Same seed → same sequence, always. The terrain system relies on this: a struct
 ## `nextFloat` Range
 
 Returns [0, 1) — masks the bottom 24 bits (`& 0x00FFFFFF`) and divides by 2^24. Not full float precision but sufficient for procedural generation.
+
+## Integer range conversion
+
+Integer ranges are half-open. Convert the nonnegative sampled offset to an integer before
+adding the minimum: casting the shifted sample instead truncates negative values toward zero,
+overweights zero in ranges crossing it, and can return the exclusive maximum for negative-only
+ranges. The range must be nonempty and its width must fit in `int`.
+
+Correcting this conversion on 2026-09-30 changes integer selections with negative minima,
+including procedural noise offsets and formation choices. The hash, raw integer stream, float
+stream, and number of draws are unchanged, but previously generated terrain for the same seed
+can differ. Do not silently regenerate rendering reference images to hide that change.
+
+The engine's HLSL RNG has no signed integer range helper. Its integer sampling consumers select
+nonnegative indices, so their conversions do not have this negative-value truncation issue.
