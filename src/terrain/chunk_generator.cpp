@@ -136,6 +136,14 @@ inline constexpr float snowLayerLineAridityLift = 100.f;
 // between forest's and tundra's climate targets, so the edge breaks into patches near their border.
 inline constexpr float snowLayerColdCoverWarmTemperature = -0.25f;
 inline constexpr float snowLayerColdCoverColdTemperature = -0.4f;
+// Sea ice freezes the water surface where cold-climate cover applies, so snow does not stop dead at
+// the shoreline. It thins out offshore between these inland values (beaches start at 0, ocean at
+// -0.15); inland water (lakes, ponds) is past the upper value and freezes wherever it is cold.
+inline constexpr float seaIceInlandOpen = -0.22f;
+inline constexpr float seaIceInlandFrozen = -0.06f;
+// Snow on the ice thins out over a band nearer the shore, so the outer ice stays bare
+inline constexpr float seaIceSnowInlandBare = -0.12f;
+inline constexpr float seaIceSnowInlandCovered = -0.02f;
 // Surface rise per block (tan 35 degrees) at which a capped column is too steep to hold snow
 inline constexpr float snowSteepGradient = 0.700f;
 // Steeper limit (tan 45 degrees) for snow layers, so the rock a too-steep cap exposes still
@@ -240,15 +248,19 @@ void init()
     }
 
     {
-        // Patches a few blocks across, so partial snow layer cover reads as drifts and bare spots
-        // rather than per-block speckle
+        // Partial snow cover is drawn against this. The fbm octaves give patches of mixed sizes with
+        // ragged edges; a single octave's evenly sized blobs read as obviously noise-driven. Source
+        // range keeps the octave sum near [-1, 1] (see fnSnowLine), remapped to [0, 1] after sampling.
         auto fnSimplex = FN::New<FN::Simplex>();
         fnSimplex->SetSeedOffset(615203987);
-        fnSimplex->SetScale(7.0f);
-        fnSimplex->SetOutputMin(0.f);
-        fnSimplex->SetOutputMax(1.f);
+        fnSimplex->SetScale(14.0f);
+        fnSimplex->SetOutputMin(-0.55f);
+        fnSimplex->SetOutputMax(0.55f);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnSimplex);
+        fnFractal->SetOctaveCount(3);
 
-        fnSnowLayerPatch = fnSimplex;
+        fnSnowLayerPatch = fnFractal;
     }
 
     {
@@ -556,6 +568,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     fillColumnNoise(swampShoreNoise, fnSwampShore, 190283475);
     fillColumnNoise(snowLineNoise, fnSnowLine, 748120365);
     fillColumnNoise(this->snowLayers.patch.data(), fnSnowLayerPatch, 309184627);
+    for (float& patch : this->snowLayers.patch)
+    {
+        patch = clamp(patch * 0.5f + 0.5f, 0.f, 1.f);
+    }
 
     int terrainNoiseMinY = chunkSizeY;
     int terrainNoiseMaxY = 0;
@@ -1272,6 +1288,19 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     climateLineY(snowLayerLineBaseY, snowLayerLineTemperatureRange, snowLayerLineAridityLift);
                 this->snowLayers.coldCover[columnIdx] = 1.f -
                     smoothstep(snowLayerColdCoverColdTemperature, snowLayerColdCoverWarmTemperature, temperature);
+                if (topBlockUnderwater && this->blocks[baseBlockIdx + waterLevel] == Block::WATER_TOP)
+                {
+                    // Drawn against the same patch noise as snow cover, so the ice edge breaks into floes.
+                    // The snow band lies inside the ice band, so snow never lands past the ice.
+                    const float coldCover = this->snowLayers.coldCover[columnIdx];
+                    const float inland = biomeNoiseGrids.inland[columnIdx];
+                    if (this->snowLayers.patch[columnIdx] < coldCover * smoothstep(seaIceInlandOpen, seaIceInlandFrozen, inland))
+                    {
+                        this->blocks[baseBlockIdx + waterLevel] = Block::ICE;
+                    }
+                    this->snowLayers.coldCover[columnIdx] =
+                        coldCover * smoothstep(seaIceSnowInlandBare, seaIceSnowInlandCovered, inland);
+                }
                 const bool topBlockAboveSnowLine =
                     !topBlockUnderwater && static_cast<float>(topBlockY) >= snowLineY;
 

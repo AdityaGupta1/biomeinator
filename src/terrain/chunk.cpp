@@ -224,8 +224,61 @@ void Chunk::checkStructureNeighbors()
     }
 }
 
+float Chunk::terrainHollowness_WS(ivec2 posXZ_WS) const
+{
+    // Water counts as ground at sea level, so a shoreline does not read as a ridge
+    const auto groundHeightAt = [&](ivec2 samplePosXZ_WS, float& outHeight) -> bool
+    {
+        const ivec2 sampleChunkPos(MathUtil::floorDiv(samplePosXZ_WS.x, static_cast<int>(chunkSizeXZ)),
+                                   MathUtil::floorDiv(samplePosXZ_WS.y, static_cast<int>(chunkSizeXZ)));
+        const ivec2 chunkOffset = sampleChunkPos - this->chunkPos;
+        constexpr int radius = static_cast<int>(structureMaxChunkRadius);
+        constexpr int sideLength = 2 * radius + 1;
+        const Chunk* chunk = this->structureNeighbors[(chunkOffset.y + radius) * sideLength + (chunkOffset.x + radius)];
+        // Imported neighbors keep no terrain heights
+        if (chunk->terrainTopY.empty())
+        {
+            return false;
+        }
+        const ivec2 samplePos_CS = samplePosXZ_WS - sampleChunkPos * static_cast<int>(chunkSizeXZ);
+        const uint16_t topY = chunk->terrainTopY[samplePos_CS.x + chunkSizeXZ * samplePos_CS.y];
+        if (topY == 0)
+        {
+            return false;
+        }
+        outHeight = static_cast<float>(max(static_cast<int>(topY), SEA_LEVEL));
+        return true;
+    };
+
+    float centerHeight;
+    if (!groundHeightAt(posXZ_WS, centerHeight))
+    {
+        return 0.f;
+    }
+
+    // Two ring radii so both small dips and broad valleys count
+    static constexpr ivec2 ringOffsets[] = {
+        { 3, 0 }, { -3, 0 }, { 0, 3 }, { 0, -3 }, { 2, 2 }, { 2, -2 }, { -2, 2 }, { -2, -2 },
+        { 7, 0 }, { -7, 0 }, { 0, 7 }, { 0, -7 }, { 5, 5 }, { 5, -5 }, { -5, 5 }, { -5, -5 },
+    };
+    static_assert(7 < chunkSizeXZ * structureMaxChunkRadius, "hollowness rings must stay in the structure neighborhood");
+    float heightSum = 0.f;
+    int numSamples = 0;
+    for (const ivec2 offset : ringOffsets)
+    {
+        float height;
+        if (groundHeightAt(posXZ_WS + offset, height))
+        {
+            heightSum += height;
+            ++numSamples;
+        }
+    }
+    return (numSamples > 0) ? heightSum / numSamples - centerHeight : 0.f;
+}
+
 void Chunk::placeSnowLayers()
 {
+    const ivec2 chunkOriginXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     for (uint columnIdx = 0; columnIdx < chunkSizeXZSquare; ++columnIdx)
     {
         const float lineY = this->snowLayers.lineY[columnIdx];
@@ -250,8 +303,16 @@ void Chunk::placeSnowLayers()
             continue;
         }
 
-        const float coverage = max(smoothstep(lineY, lineY + SnowLayerData::fadeDepth, static_cast<float>(topY)),
-                                   this->snowLayers.coldCover[columnIdx]);
+        float coverage = max(smoothstep(lineY, lineY + SnowLayerData::fadeDepth, static_cast<float>(topY)),
+                             this->snowLayers.coldCover[columnIdx]);
+        const float partialness = 4.f * coverage * (1.f - coverage);
+        if (partialness > 0.f)
+        {
+            const ivec2 columnPosXZ_WS = chunkOriginXZ_WS + ivec2(columnIdx % chunkSizeXZ, columnIdx / chunkSizeXZ);
+            const float hollowness = this->terrainHollowness_WS(columnPosXZ_WS);
+            coverage += partialness * SnowLayerData::hollowBias *
+                clamp(hollowness / SnowLayerData::hollowScale, -1.f, 1.f);
+        }
         if (this->snowLayers.patch[columnIdx] >= coverage)
         {
             continue;

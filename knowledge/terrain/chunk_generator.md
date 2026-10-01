@@ -202,10 +202,26 @@ own top is plain grass, and its white look comes from layers turning covered gra
   (45°), looser than the cap's 35°, so the rock a too-steep cap exposes still holds snow on its
   ledges. Structure blocks have no sub-block surface to measure, so they only need to be on top.
 - **Coverage is drawn against a noise.** Altitude cover ramps in over `SnowLayerData::fadeDepth`
-  above the line and cold cover over its temperature band; the larger is compared against a
-  mid-frequency noise rather than a per-block hash: a hash gave salt-and-pepper speckle, the noise
-  gives drifts and bare patches. The same value is used for every block in a column, so a
-  canopy's cover matches the ground under it.
+  above the line and cold cover over its temperature band; the larger is compared against an fbm
+  noise rather than a per-block hash (salt-and-pepper speckle) or a single octave (evenly sized
+  blobs that read as obviously noise-driven). The same value is used for every block in a column,
+  so a canopy's cover matches the ground under it.
+- **Terrain shapes partial cover.** Where coverage is partial, hollows gain cover and ridges lose
+  it, from the column's height relative to rings of terrain around it. The bias is weighted by
+  `4c(1-c)`, so fully covered tundra keeps its ridges white. The rings reach into neighbor chunks
+  through the structure neighborhood, reading their `terrainTopY`, which is written once during
+  generation and never again, so it is safe to read while neighbors fill structures; computing it
+  from in-chunk heights alone would put seams on chunk borders. Water counts as ground at sea
+  level, or every shoreline would read as a ridge.
+
+**Sea ice** is placed in the top-block stamp rather than the layer pass, because only generation
+knows the water level and the `inland` coast field. Where cold-climate cover applies, the top
+water block becomes `ICE`, thinning out offshore across a band of `inland`; inland water (lakes,
+ponds) lies past that band and freezes wherever it is cold. It is drawn against the same patch
+noise as snow cover, so the edge breaks into floes. Snow on the ice uses a narrower band nearer the
+shore, so the outer ice stays bare; because both draw against the same noise value and the snow
+band lies inside the ice band, snow never lands beyond the ice edge. Columns
+under ice still count as underwater for the grass and cap rules: only the surface freezes.
 - Layers replace the old fixed snowy-grass band below the cap: grass becomes snowy grass only
   under a layer, so the transition thins out instead of ending at a stripe.
 

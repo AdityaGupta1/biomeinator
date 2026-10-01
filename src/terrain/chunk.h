@@ -155,12 +155,17 @@ struct SnowLayerData
     // Coverage ramps from none at a column's line to a continuous sheet this far above it, so snow
     // thins into patches downhill instead of ending at a hard edge
     static constexpr float fadeDepth = 6.f;
+    // Where cover is partial, hollows hold snow and ridges shed it. A column's hollowness is the mean
+    // terrain height on rings around it minus its own; this many blocks of it shifts coverage by
+    // hollowBias, scaled down to nothing where cover is none or complete.
+    static constexpr float hollowScale = 4.f;
+    static constexpr float hollowBias = 0.4f;
 
     std::vector<float> lineY{};
     // Coverage that applies at any height, from cold climate alone
     std::vector<float> coldCover{};
-    // Low-frequency [0, 1] noise a column's coverage must exceed; spatially coherent so partial
-    // cover forms patches, and shared by every block in the column so canopies match the ground
+    // [0, 1] noise a column's coverage must exceed; spatially coherent so partial cover forms
+    // patches, and shared by every block in the column so canopies match the ground
     std::vector<float> patch{};
     // Whether the terrain top itself may hold a layer (not too steep); structure blocks above it
     // are not slope-limited
@@ -229,6 +234,9 @@ private:
     bool getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const;
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
     void placeSurfaceStructures();
+    // Mean terrain height on rings around a column minus its own: positive in hollows, negative on
+    // ridges. Reads neighbors' immutable terrain heights, so only valid during the structure pass.
+    float terrainHollowness_WS(glm::ivec2 posXZ_WS) const;
     void placeSnowLayers();
     void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures, CaveStructureType type);
     void runStructuresAndDecoratorPass();
