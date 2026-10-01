@@ -318,9 +318,9 @@ void init()
         data.structureGens = {
             {
                 {
-                    { StructureType::FIR_TREE, 80.f },
-                    { StructureType::PINE_TREE, 15.f },
-                    { StructureType::BIRCH_TREE, 5.f },
+                    { StructureType::FIR_TREE, 70.f },
+                    { StructureType::BOREAL_PINE_TREE, 25.f },
+                    { StructureType::BOREAL_BIRCH_TREE, 5.f },
                 },
                 9,
                 3,

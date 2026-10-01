@@ -26,6 +26,8 @@ enum class StructureType : uint8_t
 
     FIR_TREE,
     CHERRY_TREE,
+    BOREAL_PINE_TREE,
+    BOREAL_BIRCH_TREE,
 
     COUNT
 };

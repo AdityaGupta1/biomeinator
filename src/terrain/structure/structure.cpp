@@ -197,12 +197,14 @@ fillStructureBlocksHeader(LARGE_OAK_TREE)
     }
 }
 
-fillStructureBlocksHeader(BIRCH_TREE)
+// Leaf colors are chosen per tree: green below greenChance, else yellow below yellowChance, else orange
+static void fillBirchTree(ivec3 structurePos_CS, std::vector<Block>& blocks, RandomNumberGenerator& rng,
+                          float greenChance, float yellowChance)
 {
     const float colorRoll = rng.nextFloat();
-    const Block leafBlock = (colorRoll < 0.7f)    ? Block::BIRCH_LEAVES_GREEN
-                            : (colorRoll < 0.95f) ? Block::BIRCH_LEAVES_YELLOW
-                                                  : Block::BIRCH_LEAVES_ORANGE;
+    const Block leafBlock = (colorRoll < greenChance)    ? Block::BIRCH_LEAVES_GREEN
+                            : (colorRoll < yellowChance) ? Block::BIRCH_LEAVES_YELLOW
+                                                         : Block::BIRCH_LEAVES_ORANGE;
 
     const int trunkHeight = rng.nextInt(7, 11);
     const ivec3 trunkTopPos_CS = structurePos_CS + ivec3(0, trunkHeight, 0);
@@ -241,6 +243,17 @@ fillStructureBlocksHeader(BIRCH_TREE)
     }
 
     placeBlobCanopy(blocks, trunkTopPos_CS, rng, leafBlock);
+}
+
+fillStructureBlocksHeader(BIRCH_TREE)
+{
+    fillBirchTree(structurePos_CS, blocks, rng, 0.7f, 0.95f);
+}
+
+// Taiga birches turn yellow but never orange
+fillStructureBlocksHeader(BOREAL_BIRCH_TREE)
+{
+    fillBirchTree(structurePos_CS, blocks, rng, 0.75f, 1.f);
 }
 
 fillStructureBlocksHeader(SAGUARO_CACTUS)
@@ -556,6 +569,35 @@ fillStructureBlocksHeader(CYPRESS_TREE)
     }
 }
 
+// Unlike fillLine, consecutive blocks always share a face, so a diagonal branch reads as one solid
+// limb rather than a staircase of blocks touching only at their edges
+static void fillFaceConnectedLine(std::vector<Block>& blocks, vec3 start, vec3 end, Block block)
+{
+    const auto place = [&](ivec3 pos_CS)
+    {
+        if (Chunk::isInChunk(pos_CS))
+        {
+            tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), block);
+        }
+    };
+
+    ivec3 pos_CS(glm::floor(start));
+    place(pos_CS);
+    const int numSteps = static_cast<int>(glm::ceil(length(end - start) * 4.f));
+    for (int i = 1; i <= numSteps; ++i)
+    {
+        const ivec3 nextPos_CS(glm::floor(mix(start, end, i / static_cast<float>(numSteps))));
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            if (nextPos_CS[axis] != pos_CS[axis])
+            {
+                pos_CS[axis] = nextPos_CS[axis];
+                place(pos_CS);
+            }
+        }
+    }
+}
+
 static void fillConiferTrunk(std::vector<Block>& blocks, ivec3 rootPos_CS, int height, Block logBlock)
 {
     for (int y = 0; y <= height; ++y)
@@ -623,44 +665,79 @@ static void placePinePad(std::vector<Block>& blocks, ivec3 centerPos_CS, float r
     placeConiferWhorl(blocks, centerPos_CS + ivec3(0, 1, 0), 1.2f, Block::PINE_LEAVES);
 }
 
-fillStructureBlocksHeader(PINE_TREE)
+struct PadCrownShape
 {
-    const int height = rng.nextInt(5, 8);
-    fillConiferTrunk(blocks, structurePos_CS, height, Block::PINE_LOG);
+    int topY;
+    int minPadY;
+    int minSidePads;
+    int maxSidePads; // exclusive
+    float minBranchLength;
+    float maxBranchLength;
+    float minPadRadius;
+    float maxPadRadius;
+    float topPadRadius;
+};
 
-    // Foliage grows in separate flat pads held out on short branches over a long bare trunk, so
-    // the crown's outline is irregular and flat-topped rather than one rounded mass
+// Foliage in separate flat pads held out on branches over a bare trunk, so the crown's outline is
+// irregular and flat-topped rather than one rounded mass. Side pads step down from just below the
+// trunk top; a pad also caps the trunk.
+static void placePadCrown(std::vector<Block>& blocks, ivec3 structurePos_CS, const PadCrownShape& shape, RandomNumberGenerator& rng)
+{
     struct Pad
     {
         ivec3 pos_CS;
         float radius;
     };
     std::vector<Pad> pads;
-    const int numSidePads = rng.nextInt(2, 4);
+    const int numSidePads = rng.nextInt(shape.minSidePads, shape.maxSidePads);
     pads.reserve(numSidePads + 1);
     const float firstPadAngle = rng.nextFloat(glm::two_pi<float>());
     // Golden-angle steps never put two pads directly opposite, which reads as a symmetric pair of arms
     constexpr float padAngleStepRadians = 137.5f * glm::pi<float>() / 180.f;
     constexpr float maxAngleJitterRadians = 20.f * glm::pi<float>() / 180.f;
-    const vec2 trunkCenterXZ = vec2(structurePos_CS.x, structurePos_CS.z) + 0.5f;
-    int padY = height - 2;
+    const vec3 trunkCenter = vec3(structurePos_CS) + vec3(0.5f, 0.f, 0.5f);
+    int padY = shape.topY - 2;
     for (int i = 0; i < numSidePads; ++i)
     {
         const float angle = firstPadAngle + i * padAngleStepRadians + rng.nextFloatAbs(maxAngleJitterRadians);
-        const float branchLength = rng.nextFloat(1.5f, 2.2f);
-        const vec2 tipXZ = trunkCenterXZ + branchLength * vec2(glm::cos(angle), glm::sin(angle));
-        const ivec3 tipPos_CS(static_cast<int>(glm::floor(tipXZ.x)), structurePos_CS.y + padY, static_cast<int>(glm::floor(tipXZ.y)));
-        fillLine(blocks, structurePos_CS + ivec3(0, padY - 1, 0), tipPos_CS, Block::PINE_LOG);
-        pads.push_back({ tipPos_CS, rng.nextFloat(2.f, 2.4f) });
-        padY = max(padY - rng.nextInt(1, 3), height / 2);
+        // Lower branches reach further out, widening the crown toward its base
+        const float reach = numSidePads > 1 ? static_cast<float>(i) / (numSidePads - 1) : 0.f;
+        const float branchLength = mix(shape.minBranchLength, shape.maxBranchLength, reach) + rng.nextFloatAbs(0.3f);
+        const vec3 tip = trunkCenter + vec3(branchLength * glm::cos(angle), padY + 0.5f, branchLength * glm::sin(angle));
+        fillFaceConnectedLine(blocks, trunkCenter + vec3(0.f, padY - 0.5f, 0.f), tip, Block::PINE_LOG);
+        pads.push_back({ ivec3(glm::floor(tip)), rng.nextFloat(shape.minPadRadius, shape.maxPadRadius) });
+        padY = max(padY - rng.nextInt(1, 3), shape.minPadY);
     }
-    pads.push_back({ structurePos_CS + ivec3(0, height, 0), 2.2f });
+    pads.push_back({ structurePos_CS + ivec3(0, shape.topY, 0), shape.topPadRadius });
 
     // Pads go in after every branch so their leaves can't block a later branch's logs
     for (const Pad& pad : pads)
     {
         placePinePad(blocks, pad.pos_CS, pad.radius);
     }
+}
+
+fillStructureBlocksHeader(PINE_TREE)
+{
+    const int height = rng.nextInt(5, 8);
+    fillConiferTrunk(blocks, structurePos_CS, height, Block::PINE_LOG);
+    placePadCrown(blocks, structurePos_CS,
+                  { .topY = height, .minPadY = height / 2, .minSidePads = 2, .maxSidePads = 4,
+                    .minBranchLength = 1.5f, .maxBranchLength = 2.2f, .minPadRadius = 2.f, .maxPadRadius = 2.4f,
+                    .topPadRadius = 2.2f },
+                  rng);
+}
+
+// A tall Scots pine: a long bare trunk with the crown only in its upper part
+fillStructureBlocksHeader(BOREAL_PINE_TREE)
+{
+    const int height = rng.nextInt(12, 17);
+    fillConiferTrunk(blocks, structurePos_CS, height, Block::PINE_LOG);
+    placePadCrown(blocks, structurePos_CS,
+                  { .topY = height, .minPadY = height * 3 / 5, .minSidePads = 3, .maxSidePads = 6,
+                    .minBranchLength = 1.5f, .maxBranchLength = 3.f, .minPadRadius = 1.8f, .maxPadRadius = 2.3f,
+                    .topPadRadius = 2.5f },
+                  rng);
 }
 
 fillStructureBlocksHeader(PINE_SHRUB)
@@ -714,35 +791,6 @@ fillStructureBlocksHeader(FIR_TREE)
             // Leaving the plus-shaped top steps straight out to radius 2; later cycles restart at 1
             radius = (radius == 1) ? 2 : 1;
             cycleMaxRadius = min(cycleMaxRadius + 1, maxRadius);
-        }
-    }
-}
-
-// Unlike fillLine, consecutive blocks always share a face, so a diagonal branch reads as one solid
-// limb rather than a staircase of blocks touching only at their edges
-static void fillFaceConnectedLine(std::vector<Block>& blocks, vec3 start, vec3 end, Block block)
-{
-    const auto place = [&](ivec3 pos_CS)
-    {
-        if (Chunk::isInChunk(pos_CS))
-        {
-            tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), block);
-        }
-    };
-
-    ivec3 pos_CS(glm::floor(start));
-    place(pos_CS);
-    const int numSteps = static_cast<int>(glm::ceil(length(end - start) * 4.f));
-    for (int i = 1; i <= numSteps; ++i)
-    {
-        const ivec3 nextPos_CS(glm::floor(mix(start, end, i / static_cast<float>(numSteps))));
-        for (int axis = 0; axis < 3; ++axis)
-        {
-            if (nextPos_CS[axis] != pos_CS[axis])
-            {
-                pos_CS[axis] = nextPos_CS[axis];
-                place(pos_CS);
-            }
         }
     }
 }
@@ -847,6 +895,12 @@ void init()
 
     SET_FILL_STRUCTURE_FUNC(CHERRY_TREE);
     STRUCTURE_BOUNDS_BY_NAME(CHERRY_TREE) = 11;
+
+    SET_FILL_STRUCTURE_FUNC(BOREAL_PINE_TREE);
+    STRUCTURE_BOUNDS_BY_NAME(BOREAL_PINE_TREE) = 7;
+
+    SET_FILL_STRUCTURE_FUNC(BOREAL_BIRCH_TREE);
+    STRUCTURE_BOUNDS_BY_NAME(BOREAL_BIRCH_TREE) = 3;
 
     for (const FillStructureFunc func : fillStructureFuncs)
     {
