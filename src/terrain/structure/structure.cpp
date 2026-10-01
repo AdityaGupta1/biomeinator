@@ -79,20 +79,19 @@ struct BranchTip
 
 // Fills the branch's log spline and records its tip for a later leaf blob. The midpoint is
 // pulled down so the branch sags out of the crown before rising.
-static void placeBranch(std::vector<Block>& blocks,
-                        std::vector<BranchTip>& branchTips,
-                        vec3 branchStart,
-                        float angle,
-                        float branchLength,
-                        float branchRise,
-                        float blobRadius,
-                        Block logBlock)
+static void placeOakBranch(std::vector<Block>& blocks,
+                           std::vector<BranchTip>& branchTips,
+                           vec3 branchStart,
+                           float angle,
+                           float branchLength,
+                           float branchRise,
+                           float blobRadius)
 {
     const vec3 branchDir(glm::cos(angle), 0.f, glm::sin(angle));
     const vec3 branchEnd = branchStart + branchDir * branchLength + vec3(0.f, branchRise, 0.f);
     const vec3 branchMid = glm::mix(branchStart, branchEnd, 0.5f) - vec3(0.f, branchRise * 0.35f, 0.f);
     const std::vector<vec3> spline = buildSpline({ branchStart, branchMid, branchEnd }, 4);
-    fillSpline(blocks, spline, logBlock);
+    fillSpline(blocks, spline, Block::OAK_LOG);
 
     branchTips.push_back({ ivec3(glm::floor(branchEnd)), blobRadius });
 }
@@ -175,7 +174,7 @@ fillStructureBlocksHeader(LARGE_OAK_TREE)
         const float branchRise = rng.nextFloat(0.5f, 3.5f);
         const vec3 branchStart = trunkTopCenter - vec3(0.f, rng.nextFloat(2.f), 0.f);
         const float blobRadius = rng.nextFloat(2.2f, 3.f);
-        placeBranch(blocks, branchTips, branchStart, angle, branchLength, branchRise, blobRadius, Block::OAK_LOG);
+        placeOakBranch(blocks, branchTips, branchStart, angle, branchLength, branchRise, blobRadius);
     }
 
     // One or two shorter branches lower on the trunk so the foliage isn't all at the crown
@@ -188,7 +187,7 @@ fillStructureBlocksHeader(LARGE_OAK_TREE)
         const float startHeight = rng.nextFloat(0.45f, 0.7f) * trunkHeight;
         const vec3 branchStart = vec3(structurePos_CS) + vec3(1.f, startHeight, 1.f);
         const float blobRadius = rng.nextFloat(1.8f, 2.4f);
-        placeBranch(blocks, branchTips, branchStart, angle, branchLength, branchRise, blobRadius, Block::OAK_LOG);
+        placeOakBranch(blocks, branchTips, branchStart, angle, branchLength, branchRise, blobRadius);
     }
 
     placeLeafBlob(blocks, ivec3(glm::floor(trunkTopCenter)), 3.f, rng, Block::OAK_LEAVES);
@@ -719,40 +718,77 @@ fillStructureBlocksHeader(FIR_TREE)
     }
 }
 
+// Unlike fillLine, consecutive blocks always share a face, so a diagonal branch reads as one solid
+// limb rather than a staircase of blocks touching only at their edges
+static void fillFaceConnectedLine(std::vector<Block>& blocks, vec3 start, vec3 end, Block block)
+{
+    const auto place = [&](ivec3 pos_CS)
+    {
+        if (Chunk::isInChunk(pos_CS))
+        {
+            tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), block);
+        }
+    };
+
+    ivec3 pos_CS(glm::floor(start));
+    place(pos_CS);
+    const int numSteps = static_cast<int>(glm::ceil(length(end - start) * 4.f));
+    for (int i = 1; i <= numSteps; ++i)
+    {
+        const ivec3 nextPos_CS(glm::floor(mix(start, end, i / static_cast<float>(numSteps))));
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            if (nextPos_CS[axis] != pos_CS[axis])
+            {
+                pos_CS[axis] = nextPos_CS[axis];
+                place(pos_CS);
+            }
+        }
+    }
+}
+
 fillStructureBlocksHeader(CHERRY_TREE)
 {
     const ivec2 chunkPosXZ_WS =
         ivec2(structure.pos_WS.x, structure.pos_WS.z) - ivec2(structurePos_CS.x, structurePos_CS.z);
     const Block leafBlock = rng.chance(0.2f) ? Block::CHERRY_LEAVES_WHITE : Block::CHERRY_LEAVES_PINK;
 
+    // Sunk a block into the ground so the bare trunk stays short
+    const ivec3 trunkBasePos_CS = structurePos_CS - ivec3(0, 1, 0);
     const int trunkHeight = rng.nextInt(3, 6);
-    fillLine(blocks, structurePos_CS, structurePos_CS + ivec3(0, trunkHeight, 0), Block::CHERRY_LOG);
+    fillLine(blocks, trunkBasePos_CS, trunkBasePos_CS + ivec3(0, trunkHeight, 0), Block::CHERRY_LOG);
 
-    // The trunk forks into a few arching branches, each carrying its own broad canopy
+    // The trunk forks into a few branches angling up and out, each carrying its own broad canopy
     const int numBranches = rng.nextInt(2, 4);
     const float firstBranchAngle = rng.nextFloat(glm::two_pi<float>());
     constexpr float maxAngleJitterRadians = 25.f * glm::pi<float>() / 180.f;
-    const vec3 trunkTopCenter = vec3(structurePos_CS) + vec3(0.5f, static_cast<float>(trunkHeight), 0.5f);
+    const vec3 trunkTopCenter = vec3(trunkBasePos_CS) + vec3(0.5f, static_cast<float>(trunkHeight) + 0.5f, 0.5f);
 
-    std::vector<BranchTip> branchTips;
-    branchTips.reserve(numBranches);
+    struct Canopy
+    {
+        ivec3 pos_CS;
+        float radius;
+    };
+    std::vector<Canopy> canopies;
+    canopies.reserve(numBranches);
 
-    // All branch logs are filled before any leaves so canopies can't block later splines
+    // All branch logs are filled before any leaves so canopies can't block later branches
     for (int i = 0; i < numBranches; ++i)
     {
         const float angle =
             firstBranchAngle + (i / static_cast<float>(numBranches)) * glm::two_pi<float>() + rng.nextFloatAbs(maxAngleJitterRadians);
-        const float branchLength = rng.nextFloat(3.5f, 6.f);
-        const float branchRise = rng.nextFloat(2.5f, 4.5f);
-        const float canopyRadius = rng.nextFloat(3.5f, 4.5f);
-        placeBranch(blocks, branchTips, trunkTopCenter, angle, branchLength, branchRise, canopyRadius, Block::CHERRY_LOG);
+        const float branchLength = rng.nextFloat(3.f, 5.f);
+        const float branchRise = rng.nextFloat(2.f, 3.5f);
+        const vec3 branchEnd = trunkTopCenter + vec3(glm::cos(angle) * branchLength, branchRise, glm::sin(angle) * branchLength);
+        fillFaceConnectedLine(blocks, trunkTopCenter, branchEnd, Block::CHERRY_LOG);
+        canopies.push_back({ ivec3(glm::floor(branchEnd)), rng.nextFloat(3.8f, 4.8f) });
     }
 
-    constexpr float canopyDroopChance = 0.35f;
-    for (const BranchTip& branchTip : branchTips)
+    constexpr float canopyDroopChance = 0.5f;
+    for (const Canopy& canopy : canopies)
     {
-        // A flat-bottomed dome sunk one block so the branch end sits inside it
-        placeLeafCap(blocks, branchTip.pos_CS - ivec3(0, 1, 0), 1.5f, branchTip.blobRadius, 3.5f, rng, leafBlock,
+        // A wide, low dome resting on the branch end, so the branch stays visible beneath it
+        placeLeafCap(blocks, canopy.pos_CS, 1.5f, canopy.radius, 3.f, rng, leafBlock,
                      canopyDroopChance, chunkPosXZ_WS);
     }
 }
