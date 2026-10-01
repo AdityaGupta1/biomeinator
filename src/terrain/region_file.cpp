@@ -15,6 +15,7 @@
 #include <fstream>
 #include <limits>
 #include <stdexcept>
+#include <unordered_map>
 
 namespace RegionFile
 {
@@ -52,7 +53,7 @@ static_assert(static_cast<size_t>(CaveStructureType::COUNT) <= 256);
 // then v7 LZ4(air mask + solid-cube mask + ordered cave and surface-placement candidates).
 // The structure payload starts with its count(u32). Each structure's type/position
 // is packed [type:8, x:4, y:9, z:4, unused:7]; cave records append availableHeight(u32).
-// Surface-placement candidates append position (type=0), gen (biome:8, index:24), priority,
+// Surface-placement candidates append position (type=0), stable generator ID, priority,
 // headroom (all u32). Rejected candidates also affect neighboring placement decisions.
 
 void require(bool condition, const char* message)
@@ -61,6 +62,32 @@ void require(bool condition, const char* message)
     {
         throw std::runtime_error(message);
     }
+}
+
+struct SurfaceGenerators
+{
+    std::unordered_map<const StructureGen*, uint32_t> ids;
+    std::unordered_map<uint32_t, const StructureGen*> byId;
+};
+
+SurfaceGenerators getSurfaceGenerators()
+{
+    SurfaceGenerators result;
+    for (uint32_t biome = 0; biome < static_cast<uint32_t>(Biome::COUNT); ++biome)
+    {
+        for (const StructureGen& gen : Biomes::getBiomeData(static_cast<Biome>(biome)).structureGens)
+        {
+            if (!gen.surfacePlacement)
+            {
+                continue;
+            }
+            const uint32_t id = static_cast<uint32_t>(gen.surfacePlacement->id);
+            require(id != static_cast<uint32_t>(SurfaceStructureGenId::INVALID), "missing surface generator ID");
+            require(result.byId.emplace(id, &gen).second, "duplicate surface generator ID");
+            result.ids.emplace(&gen, id);
+        }
+    }
+    return result;
 }
 
 void append(std::vector<char>& bytes, const void* data, size_t size)
@@ -227,19 +254,7 @@ bool write(const std::filesystem::path& path, glm::ivec2 position, std::span<con
         }
         std::sort(chunks.begin(), chunks.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
 
-        std::unordered_map<const StructureGen*, uint32_t> surfaceGenIds;
-        for (uint32_t biome = 0; biome < static_cast<uint32_t>(Biome::COUNT); ++biome)
-        {
-            const auto& gens = Biomes::getBiomeData(static_cast<Biome>(biome)).structureGens;
-            require(gens.size() <= (1u << 24), "too many structure generators");
-            for (uint32_t i = 0; i < gens.size(); ++i)
-            {
-                if (gens[i].surfacePlacement)
-                {
-                    surfaceGenIds.emplace(&gens[i], biome | (i << 8));
-                }
-            }
-        }
+        const auto surfaceGenerators = getSurfaceGenerators();
 
         return FileUtil::writeAtomically(path, [&](std::ostream& file)
         {
@@ -320,8 +335,8 @@ bool write(const std::filesystem::path& path, glm::ivec2 position, std::span<con
                 for (const auto& candidate : surfaceCandidates)
                 {
                     append(payload, packCandidate(0, candidate.pos_WS, origin, 1));
-                    const auto gen = surfaceGenIds.find(candidate.gen);
-                    require(gen != surfaceGenIds.end(), "unregistered surface generator");
+                    const auto gen = surfaceGenerators.ids.find(candidate.gen);
+                    require(gen != surfaceGenerators.ids.end(), "unregistered surface generator");
                     require(candidate.headroom > 0 && candidate.headroom <= chunkSizeY - candidate.pos_WS.y,
                             "invalid surface headroom");
                     append(payload, gen->second);
@@ -373,6 +388,7 @@ std::optional<DecodedRegion> read(const std::filesystem::path& path, glm::ivec2 
         require(count <= regionChunkCount, "invalid region chunk count");
         DecodedRegion chunks;
         chunks.reserve(count);
+        const auto surfaceGenerators = version >= generationDataVersion ? getSurfaceGenerators() : SurfaceGenerators{};
         const glm::ivec2 regionOrigin = expectedPos * static_cast<int>(regionSideLength);
         std::bitset<regionChunkCount> seen;
         for (uint16_t i = 0; i < count; ++i)
@@ -468,16 +484,13 @@ std::optional<DecodedRegion> read(const std::filesystem::path& path, glm::ivec2 
                 {
                     const size_t offset = surfaceOffset + s * 4 * sizeof(uint32_t);
                     const auto position = candidatePosition(wordAt(generation, offset), origin, 1);
-                    const uint32_t gen = wordAt(generation, offset + sizeof(uint32_t));
-                    const auto biome = static_cast<Biome>(gen & 0xffu);
-                    require(biome < Biome::COUNT, "invalid surface generator biome");
-                    const auto& gens = Biomes::getBiomeData(biome).structureGens;
-                    const uint32_t genIndex = gen >> 8;
-                    require(genIndex < gens.size() && gens[genIndex].surfacePlacement, "invalid surface generator");
+                    const uint32_t genId = wordAt(generation, offset + sizeof(uint32_t));
+                    const auto gen = surfaceGenerators.byId.find(genId);
+                    require(gen != surfaceGenerators.byId.end(), "unknown surface generator ID");
                     const uint32_t priority = wordAt(generation, offset + 2 * sizeof(uint32_t));
                     const uint32_t headroom = wordAt(generation, offset + 3 * sizeof(uint32_t));
                     require(headroom > 0 && headroom <= chunkSizeY - position.y, "invalid surface headroom");
-                    data.surfaceStructureCandidates.push_back({ position, &gens[genIndex], priority, headroom });
+                    data.surfaceStructureCandidates.push_back({ position, gen->second, priority, headroom });
                 }
             }
             chunks.push_back({ chunkPos, std::move(data) });

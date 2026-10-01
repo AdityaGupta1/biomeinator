@@ -259,7 +259,10 @@ void init()
         std::vector<Block> pineGroundBlocks{ Block::GRASS_BLOCK, Block::STONE, FormationRock::tianziPatchBlock };
         pineGroundBlocks.insert(pineGroundBlocks.end(), FormationRock::tianziLayerBlocks.begin(),
                                 FormationRock::tianziLayerBlocks.end());
-        data.structureGens.back().surfacePlacement = StructureSurfacePlacement{ std::move(pineGroundBlocks) };
+        data.structureGens.back().surfacePlacement = StructureSurfacePlacement{
+            .id = SurfaceStructureGenId::TIANZI_PINES,
+            .groundBlocks = std::move(pineGroundBlocks),
+        };
         data.decorator.addEntry(Block::GRASS, 3.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::AIR, 22.f);

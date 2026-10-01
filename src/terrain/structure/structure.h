@@ -68,8 +68,16 @@ struct StructureGenVariant
     StructureSurfaceFit surfaceFit{};
 };
 
+// Persisted in region files. Keep assigned values stable and never reuse removed IDs.
+enum class SurfaceStructureGenId : uint32_t
+{
+    INVALID = 0,
+    TIANZI_PINES = 1,
+};
+
 struct StructureSurfacePlacement
 {
+    SurfaceStructureGenId id{ SurfaceStructureGenId::INVALID };
     std::vector<Block> groundBlocks{ Block::GRASS_BLOCK };
 };
 

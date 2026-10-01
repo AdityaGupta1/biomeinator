@@ -1,4 +1,4 @@
-_Last edited: 2026-09-23_
+_Last edited: 2026-09-30_
 
 # World Export / Import
 
@@ -21,9 +21,12 @@ Exposed-surface placement candidates retain their priority and headroom.
 Saving accepted trees alone loses rejected competitors that suppress trees across
 an imported boundary. Grid structures remain separate so fresh neighbors fill
 grid structures before resolving exposed-surface candidates,
-just as uninterrupted generation does. Generator pointers are encoded as biome/index
-pairs and rebound to the immutable biome configuration on read; existing generator
-indices must remain stable. v5/v6 have no exposed-surface candidates, so they retain
+just as uninterrupted generation does. Generator pointers are encoded using explicit,
+globally unique IDs and rebound to the immutable biome configuration on read. Moving
+or inserting generators in biome configuration does not change their saved identity.
+Keep assigned IDs stable and never reuse a removed ID; unknown IDs fail the import
+instead of selecting a different rule. Missing or duplicate IDs also fail serialization.
+v5/v6 have no exposed-surface candidates, so they retain
 their saved blocks without recovering these missing inputs.
 
 `RegionFile` returns chunk coordinates and owned serialized data, without constructing

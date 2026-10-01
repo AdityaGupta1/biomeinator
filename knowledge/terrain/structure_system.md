@@ -1,4 +1,4 @@
-_Last edited: 2026-09-23_
+_Last edited: 2026-09-30_
 
 # Structure System
 
@@ -68,8 +68,9 @@ may require expanding that dependency halo, not just increasing its spacing valu
 Region v7 saves all exposed-surface candidates, including rejected competitors, alongside
 the original terrain masks. Fresh neighbors need those competitors to reproduce spacing
 at an imported boundary. Grid structures remain a separate ordered list to preserve fill
-precedence. Generator pointers are serialized as biome/index pairs; preserve existing
-generator indices in biome configuration. See [world_export_import.md](world_export_import.md).
+precedence. Exposed-surface rules have explicit, globally unique IDs for serialization;
+their position in biome configuration can change freely. Assigned IDs remain stable
+and removed IDs must never be reused. See [world_export_import.md](world_export_import.md).
 
 ## Cross-Chunk Filling
 
