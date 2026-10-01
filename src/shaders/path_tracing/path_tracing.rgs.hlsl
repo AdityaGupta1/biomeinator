@@ -616,7 +616,8 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         if (didMiss)
         {
             float3 domeLightContrib = payload.pathWeight * missDomeLightColor;
-            if (doMis)
+            // Delta bounces never sample the dome light, so a miss after one keeps full weight
+            if (doMis && !bounceWasSpecular)
             {
                 const float bsdfSampleDomeLightPdf = domeLightPdf(ray.Direction, surfShadingNor_WS); // 0 if !voxelMode
                 domeLightContrib *= balanceHeuristic(bounceBsdfPdf, bsdfSampleDomeLightPdf);

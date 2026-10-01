@@ -2,7 +2,65 @@ _Last edited: 2026-09-30_
 
 # World Export / Import
 
-`Terrain::exportWorld` / `importWorld` / `reimportWorld` serialize all populated chunks (blocks, biomes, structures), the camera, and `worldSeed` to disk. Originally built to give voxel-mode regression tests reproducible terrain; will eventually be reused for chunk offloading. Binding: `Ctrl+U` exports, `Ctrl+O` reimports a directory mid-run, `--world=<dir>` imports at startup. Region binary format and `world.json` schema live in code (`terrain.cpp` near `worldRegionMagic`) — do not duplicate here.
+`Terrain::exportWorld` / `importWorld` / `reimportWorld` save completed chunks, the camera, and `worldSeed` to disk. Originally built to give voxel-mode regression tests reproducible terrain; region serialization is also intended for future chunk offloading. Binding: `Ctrl+U` exports, `Ctrl+O` reimports a directory mid-run, `--world=<dir>` imports at startup. The binary format lives in `region_file.cpp`; `terrain.cpp` owns the `world.json` schema and whole-world integration.
+
+## Generation inputs and decoding without live pointers
+
+Region v7 preserves original pre-structure terrain masks, per-column terrain heights,
+and ordered cave and exposed-surface candidates, in addition to final blocks and the
+existing data. Fresh neighbors use these inputs when placing structures, decorators,
+and snow (whose slope and hollow tests sample neighbors' heights). Rebuilding
+masks from decorated blocks changes generation; reordering candidates changes
+structure precedence. Imported v7 chunks therefore retain both masks and candidate
+order exactly. The v5/v6 readers keep the historical approximations (masks rebuilt
+from final blocks, no cave candidates, no heights), acceptable for the bounded test worlds.
+Re-exporting those legacy chunks retains the approximations; a format upgrade
+cannot recover their missing original terrain. Missing heights are written as zeros,
+which neighbors already treat as "no surface", so the approximation round-trips unchanged.
+Exactness applies to freshly generated worlds saved with all their generation inputs and
+subsequent round trips of that data. Any new per-chunk data that neighbors read during
+generation must be serialized too, under a new region version with v7 kept as a legacy reader;
+appending to the v7 layout would break every existing v7 file.
+
+Exposed-surface placement candidates retain their priority and headroom.
+Saving accepted trees alone loses rejected competitors that suppress trees across
+an imported boundary. Grid structures remain separate so fresh neighbors fill
+grid structures before resolving exposed-surface candidates,
+just as uninterrupted generation does. Generator pointers are encoded using explicit,
+globally unique IDs and rebound to the immutable biome configuration on read. Moving
+or inserting generators in biome configuration does not change their saved identity.
+Keep assigned IDs stable and never reuse a removed ID; unknown IDs fail the import
+instead of selecting a different rule.
+v5/v6 have no exposed-surface candidates, so they retain
+their saved blocks without recovering these missing inputs.
+
+`RegionFile` is a pure codec: it reads into owned `SerializedChunkData` and writes from
+borrowed `SerializedChunkView`s, never touching `Chunk`, and takes the block state kinds and
+surface-generator table it validates against as a `RegionFile::Registry`. That keeps it free of
+`chunk.h`'s renderer dependencies and of loaded assets, so the CPU-only unit target tests it
+directly. Write and read share one chunk validation, so the writer's inputs and the reader's
+outputs obey the same rules. Reads return chunk coordinates and owned data, without
+constructing live chunks or regions. A failure discards the entire decoded result. Whole-world
+import assembles private regions before attaching them; a cache can instead move
+the data into reserved `NEEDS_TERRAIN` chunks in existing regions. The caller must
+prevent generation and other readers from accessing those chunks during attachment.
+No reparenting of chunks or replacement of live neighbor pointers is required.
+
+Writes accept a view of completed chunks and stream one encoded chunk at a time to
+a sibling temporary file, replacing the destination only after successful write and
+close. The caller must retain the chunks until writing returns. Scratch memory scales
+with one chunk rather than a whole region. Input validation remains enabled in release
+builds so bad data cannot become a supposedly successful cache write.
+
+`FileUtil::PathLock` serializes this process's reads and writes to the same normalized
+path, including file close, rename, and failure cleanup. Different paths can proceed
+concurrently. Lock ownership covers waiting operations; expired entries are pruned
+so the registry does not grow with explored terrain. Cross-process isolation remains
+the responsibility of unique export directories and the future session cache lock.
+Whole-world export reserves a fresh directory and publishes `world.json` last, so
+a failed region write cannot advertise a complete export. Reported failures clean up
+the newly created export directory; crashes can still leave an incomplete directory.
+This is not a power-loss durability guarantee.
 
 Sparse block-state records are sorted by local block index before export so the
 in-memory unordered map does not make world files nondeterministic. State bytes are
@@ -11,7 +69,7 @@ rejecting unused packed bits. Surface-mounted blocks explicitly store every face
 including the ordinary upward/floor-facing value; absence never implicitly means floor.
 Region v5 imports predate block-state records; as a narrow migration, every block that
 now declares `surface_mount` receives an explicit upward-facing entry in memory. A later
-export writes those migrated entries in v6 format.
+export writes those migrated entries in the current format.
 
 ## Block palette decouples exports from enum values
 
@@ -22,20 +80,20 @@ The generated `Block` enum's values are not stable across builds (see [block_sys
 Export gates per chunk on `state >= HAS_ALL_BLOCKS`. Anything below that — including `HAS_TERRAIN` boundary chunks at the rim of the work zone — is skipped, then regenerated by the normal task pipeline on import. Two reasons:
 
 - Past `HAS_ALL_BLOCKS`, no task ever mutates a chunk's `blocks` / `biomes` / `structures` again, so the export reads stable data without any lock. A `HAS_TERRAIN` chunk could transition to `FILLING_STRUCTURES` mid-export and produce a torn read.
-- Bumping the gate to `HAS_ALL_BLOCKS` also collapses what used to be a per-chunk import-level enum to a single `wasImported` boolean.
+- Saving only completed blocks means restored chunks can skip generation without retaining an intermediate generation stage.
 
 ## Early-return is correctness, not optimization
 
-Imported chunks load their data, set `wasImported = true`, and **traverse the full state machine** starting at `NEEDS_TERRAIN`. Each task whose data product was already serialized early-returns its inner data work but still runs the state advance and atomic-counter side effects:
+Restored chunks load their data, set `hasSerializedData = true`, and **traverse the full state machine** starting at `NEEDS_TERRAIN`. This applies equally to explicit imports and future cache reloads. Each task whose data product was already serialized skips its inner data work but still runs the state advance and atomic-counter side effects:
 
-| Task | If `wasImported` |
+| Task | If `hasSerializedData` |
 |---|---|
-| `generateTerrain` | skip `fillTerrainBlocksAndCreateStructures`; advance to `HAS_TERRAIN` |
-| `checkStructureNeighbors` | unchanged (always runs — drives 5×5 counter on 25 neighbors) |
+| `generateTerrain` | skip generation; retain v7 masks or build the legacy approximation; advance to `HAS_TERRAIN` |
+| `checkStructureNeighbors` | unchanged (always runs — drives 3×3 counter on 9 neighbors) |
 | `fillStructuresAndDecorators` | skip structure fill loop AND decorator pass; advance to `HAS_ALL_BLOCKS` |
 | `generateSegments`, `createInstances` | unchanged (segments + geometry are not serialized) |
 
-The counter side effects (`numReadyStructureNeighbors`, `numNeighborsWithBlocks`) drive dependency-driven state transitions on neighbors. Skipping them strands fresh-generated boundary chunks at `HAS_TERRAIN` (need 5×5 counter) or `HAS_ALL_BLOCKS` (need 4-cardinal counter). Re-running the inner data work is also unsafe — re-stamping already-final blocks risks divergence even when individual operations look idempotent. So early-return must wrap exactly the data-mutating section, never the counter section.
+The counter side effects (`numReadyStructureNeighbors`, `numNeighborsWithBlocks`) drive dependency-driven state transitions on neighbors. Skipping them strands fresh-generated boundary chunks at `HAS_TERRAIN` (need 3×3 counter) or `HAS_ALL_BLOCKS` (need 4-cardinal counter). Re-running the inner data work is also unsafe — re-stamping already-final blocks risks divergence even when individual operations look idempotent. So early-return must wrap exactly the data-mutating section, never the counter section.
 
 ## `ChunkGenerator::init()` must rerun after `setWorldSeed`
 
@@ -52,11 +110,19 @@ procedural ring would change their existing test behavior.
 
 ### Counter mechanics
 
-Three statics in `terrain.cpp` drive the gate:
+Completion belongs to a particular initial-import batch, independently of whether a
+chunk's blocks were restored. `pendingImportedChunks` contains only that batch's
+coordinates within BLAS distance. Enqueueing erases a coordinate under the existing
+BLAS queue mutex; only a successful erase increments the completion count. Repeated
+geometry enqueueing or unrelated cache loads cannot inflate the counter.
+The batch and terrain scan share the camera-to-chunk calculation (floor division, so a
+negative coordinate maps to the chunk containing it); different rounding at negative
+positions otherwise leaves the gate waiting for chunks outside the scan.
 
-- `expectedImportedChunks` — total imported chunks within `createBlasDistance` of the imported camera position. Tallied inside `loadRegionFile` as each chunk is decoded; stored once at the end of `importWorldImpl` while no workers are running yet, so a `relaxed` store suffices.
-- `importedChunksEnqueuedForBlas` — incremented by `addChunkToCreateBlas` whenever an imported chunk reaches the BLAS-create queue. `relaxed` increments are fine because the values are only consumed by `pollHeadlessTerrain()`, which doesn't synchronize anything else against them.
-- `worldImportActive` — the publish flag. Stored `release` at the end of `importWorldImpl`; loaded `acquire` by `addChunkToCreateBlas` so workers see a fully-populated `expectedImportedChunks` before they start ticking the counter. `pollHeadlessTerrain()` reads it `relaxed` because by the time the renderer calls it, the corresponding `addChunkToCreateBlas` happens-before edges through the BLAS-create-queue mutex have already established visibility of the counter values.
+The batch is prepared privately by `readWorld` and published by `applyImportedWorld`
+before any of its chunks can run. `worldImportActive` publishes with release/acquire;
+the counters use relaxed operations because the BLAS queue mutex already supplies
+visibility before the renderer polls completion. Resetting terrain clears the batch.
 
 ### Why the gate is one frame early
 
@@ -68,13 +134,23 @@ All counter mutation in `addChunkToCreateBlas` is wrapped in `if (headless && wo
 
 ## Structure count bound
 
-The per-chunk structure scratch buffers are sized generously, not for a typical count, because
-exposed-surface placement can anchor a structure on every shelf of a multi-ledge cliff. The limit
-is not a proof: separate gens never compete, so several can share an anchor. Export therefore
-fails loudly when a chunk exceeds it, and import rejects a count over the limit before doing any
-size arithmetic with it (which would otherwise wrap). Both writes go into fixed-size buffers, so
-an ASSERT alone would leave a Release heap overflow.
+The decoder permits larger structure lists from v5/v6 exports containing accepted
+cliff-surface trees. v7 keeps grid structures and exposed-surface candidates separate.
+Counts are bounded before decompression and size arithmetic; release builds reject
+oversized payloads as well. These are defensive limits, not typical population sizes
+or proofs about placement density, since separate generators can share an anchor.
 
 ## `reimportWorld` flushes everything
 
-`Ctrl+O` mid-run requires shutting the thread pool down (`threadPool.shutdown`), tearing down all regions + per-chunk state + queues, resetting BLAS tracking, then rebuilding the pool and rerunning the import body. Half-running tasks holding `Chunk*` pointers into a torn-down `regions` map would crash, hence the full flush.
+`Ctrl+O` first decodes and allocates the replacement privately. Failed reads leave the
+current terrain, camera, and seed intact. This temporarily requires memory for both
+worlds. Only after preparation succeeds does it stop workers, clear old terrain and
+queues, install the replacement and settings, and restart workers. Half-running tasks
+holding `Chunk*` pointers into a torn-down `regions` map would crash, hence the full flush.
+
+## Validation
+
+Unit tests cover the v7 codec in isolation and rendering tests cover imported worlds.
+Neither exercises fresh generation across an exported boundary, which is where lost or
+reordered generation inputs show up; check that with the
+[resume generation harness](../tests/resume_generation.md) when changing them.
