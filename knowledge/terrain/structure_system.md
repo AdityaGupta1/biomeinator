@@ -1,4 +1,4 @@
-_Last edited: 2026-09-22_
+_Last edited: 2026-09-23_
 
 # Structure System
 
@@ -15,7 +15,7 @@ The padding is one-sided rather than centred purely for spacing resolution: one-
 
 Because the candidate is a pure function of the (global) cell corner, any chunk overlapping a cell computes the identical candidate, and exactly one chunk — the one whose bounds contain the candidate XZ — emplaces it. The high-edge inset also means no neighbouring cell's candidate can ever land inside this chunk, so only cells overlapping the chunk are iterated (no padded neighbour ring).
 
-Additional rejection: must be in this chunk's bounds, on valid ground (heightfield > 0), matching biome, not underwater (unless flagged).
+Additional rejection: must be in this chunk's bounds, on valid ground (heightfield > 0), matching biome, not underwater (unless flagged), and not in a column the snow line capped — the cap doubles as the treeline (see [chunk_generator.md](chunk_generator.md#snow-line)). That last check reads a per-column flag from the top-block stamp, not the ground block, because steep capped columns end up bare rock rather than snow. Exposed-surface placement applies the same treeline to a capped column's top voxel.
 
 **Weighted variants:** a `StructureGen` holds a weighted list of structure types sharing one grid; the type is rolled per accepted candidate (seeded by candidate position). This is how mixed forests keep different tree types spaced from each other — all variants inherit the grid's spacing guarantee, so cross-type spacing needs no distance checks. The candidate grid is salted by a fold-hash of the variant list (`gridSalt`), which is what keeps multiple gens in the same biome on distinct grids.
 

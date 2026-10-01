@@ -154,7 +154,9 @@ bottom layer index in gives each pocket an independent grid.
   tighter `chunkSizeXZ / 2` limit above applies only to fills that read the neighbourhood air mask,
   which this one does not.
 - **`availableHeight` users:** `STONE_COLUMN` fills floor→ceiling for `end - start`
-  blocks; `CAVE_VINES` caps strand length at `availableHeight - 1` so a strand never
+  blocks, so it carries `CAVE_STRUCTURE_GEN_FLAG_NEEDS_CEILING`: on a pocket open to the sky,
+  `end` is the old ground level rather than a ceiling, and the column would stand free in
+  the crater; `CAVE_VINES` caps strand length at `availableHeight - 1` so a strand never
   touches the floor. The fixed-height gens ignore it; their high `minLayerHeight`
   guarantees clearance. `tryPlaceStructureBlock` is AIR-only, so a 3×3 pillar
   auto-clips per column to whatever air actually exists.
