@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cwctype>
 #include <fstream>
+#include <optional>
 #include <shlobj.h>
 #include <stdexcept>
 #include <unordered_map>
@@ -42,12 +43,14 @@ PathLock::PathLock(const std::filesystem::path& path) : mutex(getPathMutex(path)
 
 bool writeAtomically(const std::filesystem::path& path, const std::function<void(std::ostream&)>& write)
 {
-    PathLock lock(path);
     std::filesystem::path temporaryPath = path;
     temporaryPath += ".tmp";
+    // Outlives the try block so failure cleanup still holds it
+    std::optional<PathLock> lock;
     bool createdTemporary = false;
     try
     {
+        lock.emplace(path);
         std::ofstream file(temporaryPath, std::ios::binary | std::ios::trunc);
         if (!file)
         {

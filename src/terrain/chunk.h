@@ -7,7 +7,9 @@
 #include "block.h"
 #include "cave_biome.h"
 #include "cave_biome_noise.h"
+#include "chunk_dimensions.h"
 #include "scene/scene.h"
+#include "serialized_chunk.h"
 #include "structure/cave_structure.h"
 #include "structure/structure.h"
 #include "util/math.h"
@@ -70,10 +72,6 @@ enum class ChunkSegment : uint8_t
     MIXED,
 };
 
-inline constexpr uint32_t chunkSizeXZ = 16;
-inline constexpr uint32_t chunkSizeXZSquare = chunkSizeXZ * chunkSizeXZ;
-inline constexpr uint32_t chunkSizeY = 512;
-inline constexpr uint32_t numChunkBlocks = chunkSizeXZSquare * chunkSizeY;
 inline constexpr glm::ivec3 chunkSizeVec = { chunkSizeXZ, chunkSizeY, chunkSizeXZ };
 inline constexpr uint32_t caveMaxY = 320;
 
@@ -92,19 +90,6 @@ inline constexpr uint32_t numChunkSegments = numChunkSegmentsXZ * numChunkSegmen
 
 class Region;
 class ThreadMemoryAllocator;
-
-// Completed block generation only. Empty masks are permitted solely for legacy imports.
-struct SerializedChunkData
-{
-    std::vector<Block> blocks;
-    std::vector<Biome> biomes;
-    std::vector<Structure> structures;
-    std::unordered_map<uint32_t, uint8_t> blockStates;
-    std::vector<CaveStructure> caveStructures;
-    std::vector<SurfaceStructureCandidate> surfaceStructureCandidates;
-    std::vector<uint64_t> terrainAirMask;
-    std::vector<uint64_t> terrainSolidCubeMask;
-};
 
 // Chunk-owned inputs for deferred cave decoration. Neighboring chunks read only
 // the immutable terrain masks; these fields live until this chunk finishes decoration.
@@ -314,14 +299,9 @@ public:
 
     bool tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const;
 
-    const std::vector<Block>& getBlocks() const;
     const std::vector<Biome>& getBiomes() const;
-    const std::vector<Structure>& getStructures() const;
-    const std::vector<SurfaceStructureCandidate>& getSurfaceStructureCandidates() const;
-    const std::unordered_map<uint32_t, uint8_t>& getBlockStates() const;
-    const std::vector<CaveStructure>& getCaveStructures() const;
-    const std::vector<uint64_t>& getTerrainAirMask() const;
-    const std::vector<uint64_t>& getTerrainSolidCubeMask() const;
+    // Only valid once the chunk has all its blocks
+    SerializedChunkView getSerializedView() const;
 
     void loadSerializedData(SerializedChunkData&& data);
 
@@ -352,8 +332,6 @@ public:
         return isInChunkXZ(pos_CS) && pos_CS.y >= 0 && pos_CS.y < chunkSizeY;
     }
 };
-
-inline constexpr uint32_t regionSideLength = 32;
 
 class Region
 {

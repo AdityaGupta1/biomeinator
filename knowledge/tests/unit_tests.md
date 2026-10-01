@@ -45,6 +45,11 @@ orientation table cannot serve as its own expected result, and RNG bounds alone 
 constant-valued generator. RNG helper vectors also pin stream advancement and negative-range
 selection independently of the production conversion.
 
+Region file tests drive the real `RegionFile` codec through temporary files with a synthetic
+`RegionFile::Registry` (one block marked surface-mounted, one local surface generator), since the
+target loads no block assets or biome configuration. Their candidate lists are deliberately
+unsorted so the round trip proves order, which is fill precedence, survives.
+
 Building `BiomeinatorUnitTests` compiles the executable without executing its test cases.
 Launching `BiomeinatorUnitTests.exe` without arguments runs the complete suite; CTest discovers
 the cases separately so it can filter and report each one. Build and run the suite with:

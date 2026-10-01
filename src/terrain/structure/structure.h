@@ -8,6 +8,7 @@
 
 #include <glm/glm.hpp>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 
 // Serialized by value in world exports — only append new types.
@@ -34,7 +35,7 @@ struct Structure
 };
 
 inline constexpr uint32_t structureMaxChunkRadius = 1;
-inline constexpr uint32_t maxSurfaceStructuresPerChunk = 512;
+inline constexpr uint32_t maxGridStructuresPerChunk = 512;
 
 struct StructureBounds
 {
@@ -105,6 +106,9 @@ struct StructureGen
     // Distinguishes this gen's candidate grid from other gens over the same cells.
     uint32_t gridSalt() const;
 };
+
+// Exposed-surface generators by persisted ID, for rebinding serialized candidates
+using SurfaceStructureGens = std::unordered_map<SurfaceStructureGenId, const StructureGen*>;
 
 // Published with terrain, immutable thereafter. Neighboring chunks independently
 // resolve these against immutable terrain masks before filling the same geometry.

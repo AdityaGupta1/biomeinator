@@ -3,11 +3,13 @@
 
 #pragma once
 
-#include "chunk.h"
+#include "serialized_chunk.h"
 
+#include <filesystem>
 #include <glm/vec2.hpp>
 #include <optional>
 #include <span>
+#include <string>
 
 namespace RegionFile
 {
@@ -20,16 +22,25 @@ struct DecodedChunk
 
 using DecodedRegion = std::vector<DecodedChunk>;
 
+// Engine registries the codec validates against. Passed in so the codec does not depend on
+// loaded block assets or biome configuration.
+struct Registry
+{
+    std::span<const BlockStateKind> blockStateKinds; // indexed by Block
+    const SurfaceStructureGens* surfaceStructureGens;
+};
+
 std::string fileName(glm::ivec2 regionPos);
 bool isValidPosition(glm::ivec2 regionPos);
 
-// The caller retains these completed chunks for the duration of the write.
+// The views' chunks must have all their blocks and outlive the write.
 // An empty region is valid. Block values index the current Blocks::blockIdNames palette.
-bool write(const std::filesystem::path& path, glm::ivec2 position, std::span<const Chunk* const> chunks);
+bool write(const std::filesystem::path& path, glm::ivec2 position, std::span<const SerializedChunkView> chunks,
+           const Registry& registry);
 
 // The result has no live chunk/region pointers. Attach on the main thread only
 // after reserving the destination chunks against generation and other readers.
 std::optional<DecodedRegion> read(const std::filesystem::path& path, glm::ivec2 expectedPos,
-                                  std::span<const Block> blockRemap);
+                                  std::span<const Block> blockRemap, const Registry& registry);
 
 } // namespace RegionFile

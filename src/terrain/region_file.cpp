@@ -3,7 +3,6 @@
 
 #include "region_file.h"
 
-#include "chunk.h"
 #include "logger.h"
 #include "util/file_util.h"
 
@@ -30,7 +29,10 @@ constexpr size_t regionChunkCount = regionSideLength * regionSideLength;
 constexpr size_t blockBiomeBytes = numChunkBlocks * sizeof(Block) + chunkSizeXZSquare * sizeof(Biome);
 constexpr size_t maskWords = numChunkBlocks / 64;
 constexpr size_t maskBytes = maskWords * sizeof(uint64_t);
-// v5/v6 can include accepted exposed-surface trees as well as grid structures.
+constexpr size_t heightBytes = chunkSizeXZSquare * sizeof(uint16_t);
+constexpr size_t candidatesOffset = 2 * maskBytes + 2 * heightBytes;
+// v5/v6 can include accepted exposed-surface trees as well as grid structures, so this is far above
+// maxGridStructuresPerChunk.
 constexpr uint32_t maxStructures = numChunkBlocks / 2;
 constexpr size_t structureBytesLimit = sizeof(uint32_t) * (1 + maxStructures);
 constexpr uint32_t maxSurfaceCandidates = numChunkBlocks;
@@ -49,8 +51,10 @@ static_assert(static_cast<size_t>(CaveStructureType::COUNT) <= 256);
 // chunk count(u16). v5 chunk header: local index(u16), blocks/structures LZ4 sizes(u32).
 // v6 adds block-state count(u32). v7 adds generation LZ4 size, cave count, and
 // surface-placement count (all u32).
-// Payload order: LZ4(blocks + biomes), LZ4(grid/legacy structures), packed block states,
-// then v7 LZ4(air mask + solid-cube mask + ordered cave and surface-placement candidates).
+// Payload order: LZ4(blocks + biomes), LZ4(grid/legacy structures), packed block states, then v7
+// LZ4(air mask + solid-cube mask + terrain top Y (u16/column) + terrain surface height (u16/column)
+// + ordered cave and surface-placement candidates). Legacy imports have no heights and re-export
+// zeros, which neighbors treat as missing.
 // The structure payload starts with its count(u32). Each structure's type/position
 // is packed [type:8, x:4, y:9, z:4, unused:7]; cave records append availableHeight(u32).
 // Surface-placement candidates append position (type=0), stable generator ID, priority,
@@ -64,30 +68,11 @@ void require(bool condition, const char* message)
     }
 }
 
-struct SurfaceGenerators
+bool isSurfaceMount(const Registry& registry, Block block)
 {
-    std::unordered_map<const StructureGen*, uint32_t> ids;
-    std::unordered_map<uint32_t, const StructureGen*> byId;
-};
-
-SurfaceGenerators getSurfaceGenerators()
-{
-    SurfaceGenerators result;
-    for (uint32_t biome = 0; biome < static_cast<uint32_t>(Biome::COUNT); ++biome)
-    {
-        for (const StructureGen& gen : Biomes::getBiomeData(static_cast<Biome>(biome)).structureGens)
-        {
-            if (!gen.surfacePlacement)
-            {
-                continue;
-            }
-            const uint32_t id = static_cast<uint32_t>(gen.surfacePlacement->id);
-            require(id != static_cast<uint32_t>(SurfaceStructureGenId::INVALID), "missing surface generator ID");
-            require(result.byId.emplace(id, &gen).second, "duplicate surface generator ID");
-            result.ids.emplace(&gen, id);
-        }
-    }
-    return result;
+    const size_t index = static_cast<size_t>(block);
+    require(index < registry.blockStateKinds.size(), "invalid block");
+    return registry.blockStateKinds[index] == BlockStateKind::SURFACE_MOUNT;
 }
 
 void append(std::vector<char>& bytes, const void* data, size_t size)
@@ -192,21 +177,25 @@ glm::ivec3 candidatePosition(uint32_t packed, glm::ivec2 chunkOrigin, uint32_t t
              chunkOrigin.y + static_cast<int>((packed >> 21) & 0xfu) };
 }
 
-void validateBlocks(const std::vector<Block>& blocks, const std::unordered_map<uint32_t, uint8_t>& states)
+void validateBlocks(std::span<const Block> blocks, const std::unordered_map<uint32_t, uint8_t>& states,
+                    const Registry& registry)
 {
     require(states.size() <= numChunkBlocks, "too many block states");
     for (const auto& [index, state] : states)
     {
-        require(index < blocks.size() && state < blockFaceCount && blocks[index] < Block::COUNT &&
-                Blocks::getBlockData(blocks[index]).stateKind == BlockStateKind::SURFACE_MOUNT,
+        require(index < blocks.size() && state < blockFaceCount && isSurfaceMount(registry, blocks[index]),
                 "invalid block state");
     }
     for (uint32_t index = 0; index < blocks.size(); ++index)
     {
-        require(blocks[index] < Block::COUNT, "invalid block");
-        require(Blocks::getBlockData(blocks[index]).stateKind != BlockStateKind::SURFACE_MOUNT || states.contains(index),
-                "missing surface-mount block state");
+        require(!isSurfaceMount(registry, blocks[index]) || states.contains(index), "missing surface-mount block state");
     }
+}
+
+template<class T>
+void appendSpan(std::vector<char>& bytes, std::span<const T> values)
+{
+    append(bytes, values.data(), values.size_bytes());
 }
 } // namespace
 
@@ -230,31 +219,29 @@ bool isValidPosition(glm::ivec2 regionPos)
     return true;
 }
 
-bool write(const std::filesystem::path& path, glm::ivec2 position, std::span<const Chunk* const> inputChunks)
+bool write(const std::filesystem::path& path, glm::ivec2 position, std::span<const SerializedChunkView> inputChunks,
+           const Registry& registry)
 {
     try
     {
         require(isValidPosition(position), "region coordinates out of range");
         require(inputChunks.size() <= regionChunkCount, "too many chunks");
         const glm::ivec2 regionOrigin = position * static_cast<int>(regionSideLength);
-        std::vector<std::pair<uint16_t, const Chunk*>> chunks;
+        std::vector<std::pair<uint16_t, const SerializedChunkView*>> chunks;
         chunks.reserve(inputChunks.size());
         std::bitset<regionChunkCount> seen;
-        for (const Chunk* chunk : inputChunks)
+        for (const SerializedChunkView& chunk : inputChunks)
         {
-            require(chunk && chunk->getState() >= ChunkState::HAS_ALL_BLOCKS, "unfinished chunk");
-            const int64_t localX = static_cast<int64_t>(chunk->getChunkPos().x) - regionOrigin.x;
-            const int64_t localZ = static_cast<int64_t>(chunk->getChunkPos().y) - regionOrigin.y;
+            const int64_t localX = static_cast<int64_t>(chunk.position.x) - regionOrigin.x;
+            const int64_t localZ = static_cast<int64_t>(chunk.position.y) - regionOrigin.y;
             require(localX >= 0 && localX < regionSideLength && localZ >= 0 && localZ < regionSideLength,
                     "chunk outside region");
             const uint16_t index = static_cast<uint16_t>(localX + localZ * regionSideLength);
             require(!seen[index], "duplicate chunk");
             seen.set(index);
-            chunks.emplace_back(index, chunk);
+            chunks.emplace_back(index, &chunk);
         }
         std::sort(chunks.begin(), chunks.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
-
-        const auto surfaceGenerators = getSurfaceGenerators();
 
         return FileUtil::writeAtomically(path, [&](std::ostream& file)
         {
@@ -266,43 +253,48 @@ bool write(const std::filesystem::path& path, glm::ivec2 position, std::span<con
             append(bytes, static_cast<uint16_t>(chunks.size()));
             file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
             std::vector<char> payload;
-            for (const auto& [index, chunk] : chunks)
+            for (const auto& [index, chunkPtr] : chunks)
             {
+                const SerializedChunkView& chunk = *chunkPtr;
                 // Reuse scratch for one encoded chunk; never retain a whole region's output.
                 bytes.clear();
-                const auto& blocks = chunk->getBlocks();
-                const auto& biomes = chunk->getBiomes();
-                const auto& air = chunk->getTerrainAirMask();
-                const auto& solid = chunk->getTerrainSolidCubeMask();
-                require(blocks.size() == numChunkBlocks && biomes.size() == chunkSizeXZSquare &&
-                        air.size() == maskWords && solid.size() == maskWords, "incomplete chunk data");
-                for (Biome biome : biomes)
+                require(chunk.blocks.size() == numChunkBlocks && chunk.biomes.size() == chunkSizeXZSquare &&
+                        chunk.blockStates && chunk.terrainAirMask.size() == maskWords &&
+                        chunk.terrainSolidCubeMask.size() == maskWords, "incomplete chunk data");
+                require((chunk.terrainTopY.empty() && chunk.terrainSurfaceHeight.empty()) ||
+                        (chunk.terrainTopY.size() == chunkSizeXZSquare &&
+                         chunk.terrainSurfaceHeight.size() == chunkSizeXZSquare), "incomplete terrain heights");
+                for (Biome biome : chunk.biomes)
                 {
                     require(biome < Biome::COUNT, "invalid biome");
                 }
                 for (size_t word = 0; word < maskWords; ++word)
                 {
-                    require((air[word] & solid[word]) == 0, "overlapping terrain masks");
+                    require((chunk.terrainAirMask[word] & chunk.terrainSolidCubeMask[word]) == 0,
+                            "overlapping terrain masks");
                 }
-                validateBlocks(blocks, chunk->getBlockStates());
-                const glm::ivec2 origin = chunk->getChunkPos() * static_cast<int>(chunkSizeXZ);
+                for (uint16_t topY : chunk.terrainTopY)
+                {
+                    require(topY < chunkSizeY, "invalid terrain top");
+                }
+                validateBlocks(chunk.blocks, *chunk.blockStates, registry);
+                const glm::ivec2 origin = chunk.position * static_cast<int>(chunkSizeXZ);
 
                 append(bytes, index);
                 const size_t headerOffset = bytes.size();
                 bytes.resize(headerOffset + 6 * sizeof(uint32_t));
                 payload.clear();
-                append(payload, blocks.data(), blocks.size() * sizeof(Block));
-                append(payload, biomes.data(), biomes.size() * sizeof(Biome));
+                appendSpan(payload, chunk.blocks);
+                appendSpan(payload, chunk.biomes);
                 const uint32_t compressedBlocks = compress(bytes, payload);
 
                 uint32_t compressedStructures = 0;
-                const auto& structures = chunk->getStructures();
-                require(structures.size() <= maxStructures, "too many structures");
-                if (!structures.empty())
+                require(chunk.structures.size() <= maxStructures, "too many structures");
+                if (!chunk.structures.empty())
                 {
                     payload.clear();
-                    append(payload, static_cast<uint32_t>(structures.size()));
-                    for (const Structure& structure : structures)
+                    append(payload, static_cast<uint32_t>(chunk.structures.size()));
+                    for (const Structure& structure : chunk.structures)
                     {
                         append(payload, packCandidate(static_cast<uint32_t>(structure.type), structure.pos_WS, origin,
                                                       static_cast<uint32_t>(StructureType::COUNT)));
@@ -310,8 +302,8 @@ bool write(const std::filesystem::path& path, glm::ivec2 position, std::span<con
                     compressedStructures = compress(bytes, payload);
                 }
 
-                const auto& states = chunk->getBlockStates();
-                std::vector<std::pair<uint32_t, uint8_t>> sortedStates(states.begin(), states.end());
+                std::vector<std::pair<uint32_t, uint8_t>> sortedStates(chunk.blockStates->begin(),
+                                                                       chunk.blockStates->end());
                 std::sort(sortedStates.begin(), sortedStates.end());
                 for (const auto& [blockIndex, state] : sortedStates)
                 {
@@ -319,34 +311,50 @@ bool write(const std::filesystem::path& path, glm::ivec2 position, std::span<con
                 }
 
                 payload.clear();
-                append(payload, air.data(), maskBytes);
-                append(payload, solid.data(), maskBytes);
-                const auto& caves = chunk->getCaveStructures();
-                require(caves.size() <= maxCaveStructures, "too many cave candidates");
-                for (const CaveStructure& cave : caves)
+                appendSpan(payload, chunk.terrainAirMask);
+                appendSpan(payload, chunk.terrainSolidCubeMask);
+                if (chunk.terrainTopY.empty())
+                {
+                    payload.resize(payload.size() + 2 * heightBytes);
+                }
+                else
+                {
+                    appendSpan(payload, chunk.terrainTopY);
+                    appendSpan(payload, chunk.terrainSurfaceHeight);
+                }
+                require(chunk.caveStructures.size() <= maxCaveStructures, "too many cave candidates");
+                for (const CaveStructure& cave : chunk.caveStructures)
                 {
                     append(payload, packCandidate(static_cast<uint32_t>(cave.type), cave.pos_WS, origin,
-                                                   static_cast<uint32_t>(CaveStructureType::COUNT)));
+                                                  static_cast<uint32_t>(CaveStructureType::COUNT)));
                     require(cave.availableHeight > 0 && cave.availableHeight <= chunkSizeY, "invalid cave height");
                     append(payload, static_cast<uint32_t>(cave.availableHeight));
                 }
-                const auto& surfaceCandidates = chunk->getSurfaceStructureCandidates();
+                const auto& surfaceCandidates = chunk.surfaceStructureCandidates;
                 require(surfaceCandidates.size() <= maxSurfaceCandidates, "too many surface-placement candidates");
-                for (const auto& candidate : surfaceCandidates)
+                for (const SurfaceStructureCandidate& candidate : surfaceCandidates)
                 {
                     append(payload, packCandidate(0, candidate.pos_WS, origin, 1));
-                    const auto gen = surfaceGenerators.ids.find(candidate.gen);
-                    require(gen != surfaceGenerators.ids.end(), "unregistered surface generator");
+                    require(candidate.gen && candidate.gen->surfacePlacement, "candidate without surface generator");
+                    const SurfaceStructureGenId id = candidate.gen->surfacePlacement->id;
+                    const auto registered = registry.surfaceStructureGens->find(id);
+                    require(registered != registry.surfaceStructureGens->end() && registered->second == candidate.gen,
+                            "unregistered surface generator");
                     require(candidate.headroom > 0 && candidate.headroom <= chunkSizeY - candidate.pos_WS.y,
                             "invalid surface headroom");
-                    append(payload, gen->second);
+                    append(payload, static_cast<uint32_t>(id));
                     append(payload, candidate.priority);
                     append(payload, candidate.headroom);
                 }
                 const uint32_t compressedGeneration = compress(bytes, payload);
-                const uint32_t header[] = { compressedBlocks, compressedStructures, static_cast<uint32_t>(states.size()),
-                                            compressedGeneration, static_cast<uint32_t>(caves.size()),
-                                            static_cast<uint32_t>(surfaceCandidates.size()) };
+                const uint32_t header[] = {
+                    compressedBlocks,
+                    compressedStructures,
+                    static_cast<uint32_t>(sortedStates.size()),
+                    compressedGeneration,
+                    static_cast<uint32_t>(chunk.caveStructures.size()),
+                    static_cast<uint32_t>(surfaceCandidates.size()),
+                };
                 memcpy(bytes.data() + headerOffset, header, sizeof(header));
                 file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
                 require(static_cast<bool>(file), "chunk write failed");
@@ -361,7 +369,7 @@ bool write(const std::filesystem::path& path, glm::ivec2 position, std::span<con
 }
 
 std::optional<DecodedRegion> read(const std::filesystem::path& path, glm::ivec2 expectedPos,
-                                  std::span<const Block> blockRemap)
+                                  std::span<const Block> blockRemap, const Registry& registry)
 {
     try
     {
@@ -386,9 +394,9 @@ std::optional<DecodedRegion> read(const std::filesystem::path& path, glm::ivec2 
         require(glm::ivec2(x, z) == expectedPos, "region coordinates do not match filename");
         const uint16_t count = reader.value<uint16_t>();
         require(count <= regionChunkCount, "invalid region chunk count");
+        const bool hasGenerationData = version >= generationDataVersion;
         DecodedRegion chunks;
         chunks.reserve(count);
-        const auto surfaceGenerators = version >= generationDataVersion ? getSurfaceGenerators() : SurfaceGenerators{};
         const glm::ivec2 regionOrigin = expectedPos * static_cast<int>(regionSideLength);
         std::bitset<regionChunkCount> seen;
         for (uint16_t i = 0; i < count; ++i)
@@ -399,9 +407,9 @@ std::optional<DecodedRegion> read(const std::filesystem::path& path, glm::ivec2 
             const uint32_t compressedBlocks = reader.value<uint32_t>();
             const uint32_t compressedStructures = reader.value<uint32_t>();
             const uint32_t stateCount = version >= blockStatesVersion ? reader.value<uint32_t>() : 0;
-            const uint32_t compressedGeneration = version >= generationDataVersion ? reader.value<uint32_t>() : 0;
-            const uint32_t caveCount = version >= generationDataVersion ? reader.value<uint32_t>() : 0;
-            const uint32_t surfaceCount = version >= generationDataVersion ? reader.value<uint32_t>() : 0;
+            const uint32_t compressedGeneration = hasGenerationData ? reader.value<uint32_t>() : 0;
+            const uint32_t caveCount = hasGenerationData ? reader.value<uint32_t>() : 0;
+            const uint32_t surfaceCount = hasGenerationData ? reader.value<uint32_t>() : 0;
             require(stateCount <= numChunkBlocks && caveCount <= maxCaveStructures &&
                     surfaceCount <= maxSurfaceCandidates, "invalid chunk payload count");
 
@@ -410,7 +418,8 @@ std::optional<DecodedRegion> read(const std::filesystem::path& path, glm::ivec2 
             data.blocks.resize(numChunkBlocks);
             data.biomes.resize(chunkSizeXZSquare);
             memcpy(data.blocks.data(), payload.data(), numChunkBlocks * sizeof(Block));
-            memcpy(data.biomes.data(), payload.data() + numChunkBlocks * sizeof(Block), chunkSizeXZSquare * sizeof(Biome));
+            memcpy(data.biomes.data(), payload.data() + numChunkBlocks * sizeof(Block),
+                   chunkSizeXZSquare * sizeof(Biome));
             for (Block& block : data.blocks)
             {
                 const size_t paletteIndex = static_cast<size_t>(block);
@@ -430,11 +439,12 @@ std::optional<DecodedRegion> read(const std::filesystem::path& path, glm::ivec2 
                 const uint32_t structureCount = wordAt(candidates, 0);
                 require(structureCount <= maxStructures &&
                         candidates.size() == sizeof(uint32_t) * (1 + structureCount),
-                        "invalid surface candidate count");
+                        "invalid structure count");
                 for (uint32_t s = 0; s < structureCount; ++s)
                 {
                     const uint32_t packed = wordAt(candidates, sizeof(uint32_t) * (1 + s));
-                    const auto position = candidatePosition(packed, origin, static_cast<uint32_t>(StructureType::COUNT));
+                    const auto position =
+                        candidatePosition(packed, origin, static_cast<uint32_t>(StructureType::COUNT));
                     data.structures.push_back({ static_cast<StructureType>(packed & 0xffu), position });
                 }
             }
@@ -444,37 +454,49 @@ std::optional<DecodedRegion> read(const std::filesystem::path& path, glm::ivec2 
                 const uint32_t blockIndex = packed & blockStateIndexMask;
                 const uint32_t state = packed >> blockStateIndexBits;
                 require(state < blockFaceCount, "invalid packed block state");
-                require(data.blockStates.emplace(blockIndex, static_cast<uint8_t>(state)).second, "duplicate block state");
+                require(data.blockStates.emplace(blockIndex, static_cast<uint8_t>(state)).second,
+                        "duplicate block state");
             }
             if (version == oldestVersion)
             {
                 for (uint32_t blockIndex = 0; blockIndex < numChunkBlocks; ++blockIndex)
                 {
-                    if (Blocks::getBlockData(data.blocks[blockIndex]).stateKind == BlockStateKind::SURFACE_MOUNT)
+                    if (isSurfaceMount(registry, data.blocks[blockIndex]))
                     {
                         data.blockStates.emplace(blockIndex, blockFaceIndex(BlockFace::Y_POS));
                     }
                 }
             }
-            validateBlocks(data.blocks, data.blockStates);
+            validateBlocks(data.blocks, data.blockStates, registry);
 
-            if (version >= generationDataVersion)
+            if (hasGenerationData)
             {
-                const size_t surfaceOffset = 2 * maskBytes + caveCount * 2 * sizeof(uint32_t);
-                const auto generation = reader.compressed(compressedGeneration, surfaceOffset + surfaceCount * 4 * sizeof(uint32_t));
+                const size_t surfaceOffset = candidatesOffset + caveCount * 2 * sizeof(uint32_t);
+                const size_t generationBytes = surfaceOffset + surfaceCount * 4 * sizeof(uint32_t);
+                const auto generation = reader.compressed(compressedGeneration, generationBytes);
                 data.terrainAirMask.resize(maskWords);
                 data.terrainSolidCubeMask.resize(maskWords);
+                data.terrainTopY.resize(chunkSizeXZSquare);
+                data.terrainSurfaceHeight.resize(chunkSizeXZSquare);
                 memcpy(data.terrainAirMask.data(), generation.data(), maskBytes);
                 memcpy(data.terrainSolidCubeMask.data(), generation.data() + maskBytes, maskBytes);
+                memcpy(data.terrainTopY.data(), generation.data() + 2 * maskBytes, heightBytes);
+                memcpy(data.terrainSurfaceHeight.data(), generation.data() + 2 * maskBytes + heightBytes, heightBytes);
                 for (size_t word = 0; word < maskWords; ++word)
                 {
-                    require((data.terrainAirMask[word] & data.terrainSolidCubeMask[word]) == 0, "overlapping terrain masks");
+                    require((data.terrainAirMask[word] & data.terrainSolidCubeMask[word]) == 0,
+                            "overlapping terrain masks");
+                }
+                for (uint16_t topY : data.terrainTopY)
+                {
+                    require(topY < chunkSizeY, "invalid terrain top");
                 }
                 for (uint32_t c = 0; c < caveCount; ++c)
                 {
-                    const size_t offset = 2 * maskBytes + c * 2 * sizeof(uint32_t);
+                    const size_t offset = candidatesOffset + c * 2 * sizeof(uint32_t);
                     const uint32_t packed = wordAt(generation, offset);
-                    const auto position = candidatePosition(packed, origin, static_cast<uint32_t>(CaveStructureType::COUNT));
+                    const auto position =
+                        candidatePosition(packed, origin, static_cast<uint32_t>(CaveStructureType::COUNT));
                     const uint32_t height = wordAt(generation, offset + sizeof(uint32_t));
                     require(height > 0 && height <= chunkSizeY, "invalid cave height");
                     data.caveStructures.push_back({ static_cast<CaveStructureType>(packed & 0xffu), position,
@@ -484,9 +506,10 @@ std::optional<DecodedRegion> read(const std::filesystem::path& path, glm::ivec2 
                 {
                     const size_t offset = surfaceOffset + s * 4 * sizeof(uint32_t);
                     const auto position = candidatePosition(wordAt(generation, offset), origin, 1);
-                    const uint32_t genId = wordAt(generation, offset + sizeof(uint32_t));
-                    const auto gen = surfaceGenerators.byId.find(genId);
-                    require(gen != surfaceGenerators.byId.end(), "unknown surface generator ID");
+                    const auto genId =
+                        static_cast<SurfaceStructureGenId>(wordAt(generation, offset + sizeof(uint32_t)));
+                    const auto gen = registry.surfaceStructureGens->find(genId);
+                    require(gen != registry.surfaceStructureGens->end(), "unknown surface generator ID");
                     const uint32_t priority = wordAt(generation, offset + 2 * sizeof(uint32_t));
                     const uint32_t headroom = wordAt(generation, offset + 3 * sizeof(uint32_t));
                     require(headroom > 0 && headroom <= chunkSizeY - position.y, "invalid surface headroom");

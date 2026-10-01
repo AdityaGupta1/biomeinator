@@ -1520,7 +1520,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         initRng(worldSeed ^ hash(1946793319), candidatePosXZ_WS.x, candidatePosXZ_WS.y /*z*/, gridSalt);
                     const StructureType type = structureGen.pickVariant(variantRng);
                     ASSERT(type < StructureType::COUNT);
-                    ASSERT(this->structures.size() < maxSurfaceStructuresPerChunk);
+                    ASSERT(this->structures.size() < maxGridStructuresPerChunk);
                     this->structures.emplace_back(type, candidatePos_WS);
                 }
             }

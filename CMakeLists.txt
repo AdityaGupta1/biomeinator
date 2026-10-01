@@ -406,6 +406,9 @@ if(BUILD_TESTING)
         "${SRC_DIR}/rendering/buffer/dirty_range_set.cpp"
         "${SRC_DIR}/rendering/buffer/free_range_allocator.cpp"
         "${SRC_DIR}/settings_manager.cpp"
+        "${SRC_DIR}/terrain/region_file.cpp"
+        "${SRC_DIR}/terrain/structure/structure_gen.cpp"
+        "${SRC_DIR}/util/file_util.cpp"
         "${SRC_DIR}/util/halton.cpp"
     )
     assign_source_group("tests\\unit" "${CMAKE_CURRENT_SOURCE_DIR}/tests/unit" "${UNIT_TESTS_SRC}")
@@ -420,7 +423,9 @@ if(BUILD_TESTING)
         "${SRC_DIR}/rendering/buffer/dirty_range_set.cpp"
         "${SRC_DIR}/rendering/buffer/free_range_allocator.cpp"
     )
-    source_group("src\\util" FILES "${SRC_DIR}/util/halton.cpp")
+    source_group("src\\terrain" FILES "${SRC_DIR}/terrain/region_file.cpp")
+    source_group("src\\terrain\\structure" FILES "${SRC_DIR}/terrain/structure/structure_gen.cpp")
+    source_group("src\\util" FILES "${SRC_DIR}/util/file_util.cpp" "${SRC_DIR}/util/halton.cpp")
 
     target_include_directories(BiomeinatorUnitTests PRIVATE
         ${SRC_DIR}
@@ -428,7 +433,7 @@ if(BUILD_TESTING)
         "${EXT}/cxxopts/include"
         "${EXT}/DirectX-Headers/include/directx"
     )
-    target_link_libraries(BiomeinatorUnitTests PRIVATE Catch2::Catch2WithMain glm::glm-header-only)
+    target_link_libraries(BiomeinatorUnitTests PRIVATE Catch2::Catch2WithMain glm::glm-header-only lz4_static)
     target_compile_definitions(BiomeinatorUnitTests PRIVATE
         ENABLE_ASSERTS=$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>
     )

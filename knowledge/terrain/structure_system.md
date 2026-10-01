@@ -1,4 +1,4 @@
-_Last edited: 2026-09-23_
+_Last edited: 2026-09-30_
 
 # Structure System
 
@@ -70,7 +70,8 @@ the original terrain masks. Fresh neighbors need those competitors to reproduce 
 at an imported boundary. Grid structures remain a separate ordered list to preserve fill
 precedence. Exposed-surface rules have explicit, globally unique IDs for serialization;
 their position in biome configuration can change freely. Assigned IDs remain stable
-and removed IDs must never be reused. See [world_export_import.md](world_export_import.md).
+and removed IDs must never be reused. `Biomes::init` throws on a missing or duplicate ID, so a
+misconfigured rule fails at startup instead of on the first export. See [world_export_import.md](world_export_import.md).
 
 ## Cross-Chunk Filling
 

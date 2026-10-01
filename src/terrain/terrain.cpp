@@ -81,6 +81,14 @@ static void task_createInstances(Chunk* chunk, ThreadMemoryAllocator& threadMemo
 
 static ThreadPool threadPool;
 
+// Indexed by Block; filled once block assets are loaded
+static std::vector<BlockStateKind> blockStateKinds;
+
+static RegionFile::Registry getRegionFileRegistry()
+{
+    return { blockStateKinds, &Biomes::getSurfaceStructureGens() };
+}
+
 // Validated here rather than in Decorator::addEntry: BiomeScanner shares biome registration
 // but has no block metadata.
 static void validateDecorators()
@@ -118,6 +126,11 @@ void init(Scene* scene)
     // loads textures for
     Blocks::init();
     TerrainMaterials::init(scene);
+    blockStateKinds.resize(static_cast<size_t>(Block::COUNT));
+    for (size_t block = 0; block < blockStateKinds.size(); ++block)
+    {
+        blockStateKinds[block] = Blocks::getBlockData(static_cast<Block>(block)).stateKind;
+    }
 
     Biomes::init();
     CaveBiomes::init();
@@ -141,7 +154,7 @@ static std::unordered_map<glm::ivec2, std::unique_ptr<Region>, IVec2Hash> region
 
 static glm::ivec2 cameraChunkPosition(glm::ivec3 position)
 {
-    return glm::ivec2(position.x, position.z) / static_cast<int>(chunkSizeXZ);
+    return glmUtil::floorDiv(glm::ivec2(position.x, position.z), glm::ivec2(static_cast<int>(chunkSizeXZ)));
 }
 
 static std::deque<Chunk*> chunksToGenerateTerrain;
@@ -353,21 +366,17 @@ void update(ToFreeList& toFreeList)
     cameraUnderwater = false;
     cameraBiomeValid = false;
     {
-        const glm::ivec2 cameraChunkPos =
-            glm::ivec2(MathUtil::floorDiv(cameraPosInt_WS.x, static_cast<int>(chunkSizeXZ)),
-                       MathUtil::floorDiv(cameraPosInt_WS.z, static_cast<int>(chunkSizeXZ)));
-
-        const glm::ivec2 regionPos = glmUtil::floorDiv(cameraChunkPos, glm::ivec2(regionSideLength));
+        const glm::ivec2 regionPos = glmUtil::floorDiv(currentChunkPos, glm::ivec2(regionSideLength));
         const auto regionIter = regions.find(regionPos);
         if (regionIter != regions.end())
         {
-            const Chunk* cameraChunk = regionIter->second->getChunk(cameraChunkPos);
+            const Chunk* cameraChunk = regionIter->second->getChunk(currentChunkPos);
             const bool chunkValid = cameraChunk != nullptr && cameraChunk->getState() >= ChunkState::HAS_GEOMETRY &&
                                     !cameraChunk->getIsMarkedForDestruction();
             if (chunkValid)
             {
-                const int localX = cameraPosInt_WS.x - (cameraChunkPos.x * static_cast<int>(chunkSizeXZ));
-                const int localZ = cameraPosInt_WS.z - (cameraChunkPos.y /*z*/ * static_cast<int>(chunkSizeXZ));
+                const int localX = cameraPosInt_WS.x - (currentChunkPos.x * static_cast<int>(chunkSizeXZ));
+                const int localZ = cameraPosInt_WS.z - (currentChunkPos.y /*z*/ * static_cast<int>(chunkSizeXZ));
 
                 cameraBiome = cameraChunk->getBiomes()[localX + static_cast<int>(chunkSizeXZ) * localZ];
                 cameraBiomeValid = true;
@@ -653,19 +662,20 @@ void exportWorld()
             {
                 continue;
             }
-            std::vector<const Chunk*> chunks;
+            std::vector<SerializedChunkView> chunks;
             for (const auto& chunk : region->chunks)
             {
                 if (chunk && chunk->getState() >= ChunkState::HAS_ALL_BLOCKS)
                 {
-                    chunks.push_back(chunk.get());
+                    chunks.push_back(chunk->getSerializedView());
                 }
             }
             if (chunks.empty())
             {
                 continue;
             }
-            if (!RegionFile::write(exportDir / RegionFile::fileName(position), position, chunks))
+            if (!RegionFile::write(exportDir / RegionFile::fileName(position), position, chunks,
+                                   getRegionFileRegistry()))
             {
                 throw std::runtime_error("region write failed");
             }
@@ -839,13 +849,13 @@ struct ImportedWorld
 {
     decltype(Terrain::regions) regions;
     std::unordered_set<glm::ivec2, IVec2Hash> pendingChunks;
-    uint32_t seed;
+    uint32_t seed{ 0 };
     uint32_t numChunks{ 0 };
-    int renderDistance;
-    glm::ivec3 cameraPosInt;
-    glm::vec3 cameraPosFloat;
-    float phi;
-    float theta;
+    int renderDistance{ 0 };
+    glm::ivec3 cameraPosInt{ 0 };
+    glm::vec3 cameraPosFloat{ 0.f };
+    float phi{ 0.f };
+    float theta{ 0.f };
 };
 
 static std::optional<ImportedWorld> readWorld(const std::filesystem::path& worldDir)
@@ -880,7 +890,8 @@ static std::optional<ImportedWorld> readWorld(const std::filesystem::path& world
                 Logger::logError("world import: duplicate region (%d, %d)", position.x, position.y);
                 return std::nullopt;
             }
-            auto data = RegionFile::read(worldDir / RegionFile::fileName(position), position, blockRemap);
+            auto data = RegionFile::read(worldDir / RegionFile::fileName(position), position, blockRemap,
+                                         getRegionFileRegistry());
             if (!data)
             {
                 return std::nullopt;

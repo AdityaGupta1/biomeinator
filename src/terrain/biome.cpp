@@ -10,6 +10,7 @@
 
 #include <array>
 #include <limits>
+#include <stdexcept>
 
 #include <glm/glm.hpp>
 
@@ -38,6 +39,7 @@ static std::array<BiomeData, static_cast<size_t>(Biome::COUNT)> biomeDatas;
     data.name = displayName
 
 static std::array<std::vector<Biome>, static_cast<size_t>(BiomeTier::COUNT)> candidatesByTier;
+static SurfaceStructureGens surfaceStructureGens;
 
 void init()
 {
@@ -292,6 +294,32 @@ void init()
     {
         candidatesByTier[static_cast<size_t>(biomeDatas[biomeIdx].tier)].push_back(static_cast<Biome>(biomeIdx));
     }
+
+    surfaceStructureGens.clear();
+    for (const BiomeData& data : biomeDatas)
+    {
+        for (const StructureGen& gen : data.structureGens)
+        {
+            if (!gen.surfacePlacement)
+            {
+                continue;
+            }
+            const SurfaceStructureGenId id = gen.surfacePlacement->id;
+            if (id == SurfaceStructureGenId::INVALID)
+            {
+                throw std::runtime_error("exposed-surface structure gen is missing its SurfaceStructureGenId");
+            }
+            if (!surfaceStructureGens.emplace(id, &gen).second)
+            {
+                throw std::runtime_error("duplicate SurfaceStructureGenId");
+            }
+        }
+    }
+}
+
+const SurfaceStructureGens& getSurfaceStructureGens()
+{
+    return surfaceStructureGens;
 }
 
 const BiomeData& getBiomeData(Biome biome)

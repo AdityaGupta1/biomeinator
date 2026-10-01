@@ -6,15 +6,18 @@ _Last edited: 2026-09-30_
 
 ## Generation inputs and decoding without live pointers
 
-Region v7 preserves original pre-structure terrain masks and ordered cave and
-exposed-surface candidates, in addition to final blocks and the existing data.
-Fresh neighbors use these inputs when placing structures and decorators. Rebuilding
+Region v7 preserves original pre-structure terrain masks, per-column terrain heights,
+and ordered cave and exposed-surface candidates, in addition to final blocks and the
+existing data. Fresh neighbors use these inputs when placing structures, decorators,
+and snow (whose slope and hollow tests sample neighbors' heights). Rebuilding
 masks from decorated blocks changes generation; reordering candidates changes
 structure precedence. Imported v7 chunks therefore retain both masks and candidate
 order exactly. The v5/v6 readers keep the historical approximations (masks rebuilt
-from final blocks and no cave candidates), acceptable for the bounded golden worlds.
+from final blocks, no cave candidates, no heights), acceptable for the bounded test worlds.
 Re-exporting those legacy chunks retains the approximations; a format upgrade
-cannot recover their missing original terrain. Exactness applies to freshly generated
+cannot recover their missing original terrain. Missing heights are written as zeros,
+which neighbors already treat as "no surface", so the approximation round-trips unchanged.
+Any new per-chunk data that neighbors read during generation must be added to v7 too. Exactness applies to freshly generated
 worlds saved with all their generation inputs and subsequent round trips of that data.
 
 Exposed-surface placement candidates retain their priority and headroom.
@@ -25,12 +28,15 @@ just as uninterrupted generation does. Generator pointers are encoded using expl
 globally unique IDs and rebound to the immutable biome configuration on read. Moving
 or inserting generators in biome configuration does not change their saved identity.
 Keep assigned IDs stable and never reuse a removed ID; unknown IDs fail the import
-instead of selecting a different rule. Missing or duplicate IDs also fail serialization.
+instead of selecting a different rule.
 v5/v6 have no exposed-surface candidates, so they retain
 their saved blocks without recovering these missing inputs.
 
-`RegionFile` returns chunk coordinates and owned serialized data, without constructing
-live chunks or regions. A failure discards the entire decoded result. Whole-world
+`RegionFile` is a pure codec: it reads into owned `SerializedChunkData` and writes from
+borrowed `SerializedChunkView`s, never touching `Chunk`, and takes the block state kinds and
+surface-generator table it validates against as a `RegionFile::Registry`. That keeps it free of
+`chunk.h`'s renderer dependencies and of loaded assets, so the CPU-only unit target tests it
+directly. It returns chunk coordinates and owned data, without constructing live chunks or regions. A failure discards the entire decoded result. Whole-world
 import assembles private regions before attaching them; a cache can instead move
 the data into reserved `NEEDS_TERRAIN` chunks in existing regions. The caller must
 prevent generation and other readers from accessing those chunks during attachment.
@@ -105,8 +111,9 @@ chunk's blocks were restored. `pendingImportedChunks` contains only that batch's
 coordinates within BLAS distance. Enqueueing erases a coordinate under the existing
 BLAS queue mutex; only a successful erase increments the completion count. Repeated
 geometry enqueueing or unrelated cache loads cannot inflate the counter.
-The batch and terrain scan share the camera-to-chunk calculation; different rounding
-at negative positions otherwise leaves the gate waiting for chunks outside the scan.
+The batch and terrain scan share the camera-to-chunk calculation (floor division, so a
+negative coordinate maps to the chunk containing it); different rounding at negative
+positions otherwise leaves the gate waiting for chunks outside the scan.
 
 The batch is prepared privately by `readWorld` and published by `applyImportedWorld`
 before any of its chunks can run. `worldImportActive` publishes with release/acquire;
@@ -139,6 +146,7 @@ holding `Chunk*` pointers into a torn-down `regions` map would crash, hence the 
 
 ## Validation
 
-The existing golden screenshot runner exercises imported worlds. It does not exercise
-fresh generation across an exported boundary; check that separately when changing
-the saved generation inputs.
+Unit tests (`tests/unit/region_file_tests.cpp`) cover the v7 codec: exact, order-preserving
+round trips, byte-identical re-export, legacy heights, registry rejection, and corrupt files.
+Rendering tests exercise imported worlds. Neither exercises fresh generation across an exported
+boundary; check that separately when changing the saved generation inputs.

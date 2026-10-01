@@ -242,7 +242,7 @@ float Chunk::terrainHollowness_WS(ivec2 posXZ_WS) const
     {
         ivec2 samplePos_CS;
         const Chunk* chunk = this->structureNeighborAt_WS(samplePosXZ_WS, samplePos_CS);
-        // Imported neighbors keep no terrain heights
+        // Legacy imported neighbors keep no terrain heights
         if (chunk->terrainTopY.empty())
         {
             return false;
@@ -288,7 +288,7 @@ float Chunk::terrainSlopeSquared_WS(ivec2 posXZ_WS) const
     {
         ivec2 samplePos_CS;
         const Chunk* chunk = this->structureNeighborAt_WS(samplePosXZ_WS, samplePos_CS);
-        // Imported neighbors keep no surface heights
+        // Legacy imported neighbors keep no surface heights
         if (chunk->terrainSurfaceHeight.empty())
         {
             return false;
@@ -1305,6 +1305,8 @@ void Chunk::loadSerializedData(SerializedChunkData&& data)
     ASSERT((data.terrainAirMask.empty() && data.terrainSolidCubeMask.empty()) ||
            (data.terrainAirMask.size() == numChunkBlocks / 64 &&
             data.terrainSolidCubeMask.size() == numChunkBlocks / 64));
+    ASSERT((data.terrainTopY.empty() && data.terrainSurfaceHeight.empty()) ||
+           (data.terrainTopY.size() == chunkSizeXZSquare && data.terrainSurfaceHeight.size() == chunkSizeXZSquare));
 
     this->blocks = std::move(data.blocks);
     this->biomes = std::move(data.biomes);
@@ -1314,6 +1316,8 @@ void Chunk::loadSerializedData(SerializedChunkData&& data)
     this->surfaceStructureCandidates = std::move(data.surfaceStructureCandidates);
     this->terrainAirMask = std::move(data.terrainAirMask);
     this->terrainSolidCubeMask = std::move(data.terrainSolidCubeMask);
+    this->terrainTopY = std::move(data.terrainTopY);
+    this->terrainSurfaceHeight = std::move(data.terrainSurfaceHeight);
     this->hasSerializedData = true;
 }
 
@@ -1361,44 +1365,26 @@ bool Chunk::tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const
     return true;
 }
 
-const std::vector<Block>& Chunk::getBlocks() const
-{
-    return this->blocks;
-}
-
 const std::vector<Biome>& Chunk::getBiomes() const
 {
     return this->biomes;
 }
 
-const std::vector<Structure>& Chunk::getStructures() const
+SerializedChunkView Chunk::getSerializedView() const
 {
-    return this->structures;
-}
-
-const std::vector<SurfaceStructureCandidate>& Chunk::getSurfaceStructureCandidates() const
-{
-    return this->surfaceStructureCandidates;
-}
-
-const std::unordered_map<uint32_t, uint8_t>& Chunk::getBlockStates() const
-{
-    return this->blockStates;
-}
-
-const std::vector<CaveStructure>& Chunk::getCaveStructures() const
-{
-    return this->caveStructures;
-}
-
-const std::vector<uint64_t>& Chunk::getTerrainAirMask() const
-{
-    return this->terrainAirMask;
-}
-
-const std::vector<uint64_t>& Chunk::getTerrainSolidCubeMask() const
-{
-    return this->terrainSolidCubeMask;
+    return {
+        .position = this->chunkPos,
+        .blocks = this->blocks,
+        .biomes = this->biomes,
+        .structures = this->structures,
+        .blockStates = &this->blockStates,
+        .caveStructures = this->caveStructures,
+        .surfaceStructureCandidates = this->surfaceStructureCandidates,
+        .terrainAirMask = this->terrainAirMask,
+        .terrainSolidCubeMask = this->terrainSolidCubeMask,
+        .terrainTopY = this->terrainTopY,
+        .terrainSurfaceHeight = this->terrainSurfaceHeight,
+    };
 }
 
 // y changes fastest, then x, then z
