@@ -34,9 +34,28 @@ enum class BlockShape : uint8_t
     X_SHAPED,
     LIQUID_TOP,
     DECORATOR_CUSTOM,
+    // Thin slab along the bottom of the cell (snow layers)
+    LAYER,
 
     COUNT
 };
+
+// Height of a shape's top face within its cell. Solid-vs-solid culling compares these: a side face
+// shows only where the neighbor's top is lower, which is what hides the shared face between two
+// equal partial blocks (adjacent lava tops, adjacent snow layers) while keeping a taller block's
+// side visible above a shorter neighbor.
+constexpr float blockShapeTopHeight(BlockShape shape)
+{
+    switch (shape)
+    {
+    case BlockShape::LIQUID_TOP:
+        return 7.f / 8.f;
+    case BlockShape::LAYER:
+        return 1.f / 8.f;
+    default:
+        return 1.f;
+    }
+}
 
 enum class BlockStateKind : uint8_t
 {
@@ -92,13 +111,20 @@ constexpr bool blockFaceVisible(BlockType type, BlockShape shape, BlockType neig
     if (neighborType == BlockType::AIR) return true;
     if ((type == BlockType::SOLID || type == BlockType::TRANSPARENT_CUTOUT || type == BlockType::GLASS) &&
         isDecoratorShape(neighborShape)) return true;
+    // A layer fills only the bottom of its cell, so it hides no side or bottom face of a non-solid
+    // neighbor (leaves, glass, water). Solid neighbors get this from the height comparison below.
+    if (neighborShape == BlockShape::LAYER && type != BlockType::SOLID && face != BlockFace::Y_POS) return true;
     switch (type)
     {
     case BlockType::SOLID:
+    {
         if (neighborType != BlockType::SOLID) return true;
-        if (face == BlockFace::Y_POS) return shape == BlockShape::LIQUID_TOP;
-        if (face == BlockFace::Y_NEG) return neighborShape == BlockShape::LIQUID_TOP;
-        return neighborShape == BlockShape::LIQUID_TOP && shape != BlockShape::LIQUID_TOP;
+        const float topHeight = blockShapeTopHeight(shape);
+        const float neighborTopHeight = blockShapeTopHeight(neighborShape);
+        if (face == BlockFace::Y_POS) return topHeight < 1.f; // lowered top leaves a gap below the block above
+        if (face == BlockFace::Y_NEG) return neighborTopHeight < 1.f; // gap above a partial block below
+        return neighborTopHeight < topHeight;
+    }
     case BlockType::TRANSPARENT_CUTOUT:
         if (neighborType == BlockType::SOLID) return false;
         // Only the lower-positioned cube owns a shared cutout boundary.

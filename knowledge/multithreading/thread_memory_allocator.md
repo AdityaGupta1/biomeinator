@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-09-22_
 
 # Thread Memory Allocator
 
@@ -14,6 +14,10 @@ Starts at 64 KB. When a `request()` exceeds remaining capacity, the buffer doubl
 
 This means within a single task, multiple backing buffers can coexist. Pointers returned by `request()` remain valid until `clear()`.
 
+Unit coverage deliberately writes through allocations on both sides of repeated growth. A
+size-only test would miss the allocator's most important promise: growing must not invalidate
+scratch pointers that the current task already holds.
+
 ## Alignment
 
 `request<T>()` aligns the bump pointer to `alignof(T)` before allocating. Over-aligned types (alignment > default new alignment) are statically rejected.
@@ -21,3 +25,5 @@ This means within a single task, multiple backing buffers can coexist. Pointers 
 ## Reset Cadence
 
 `clear()` is called by the thread pool worker after each task completes. This means all scratch memory from a task is freed before the next task starts — no accumulation across tasks.
+The tests also alternate growth-heavy and small allocation cycles to verify that clearing
+drops retired buffers and restarts the surviving current buffer at offset zero.

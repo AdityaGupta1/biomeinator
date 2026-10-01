@@ -17,10 +17,10 @@ using WindowManager::hwnd;
 namespace Renderer
 {
 
-void queueScreenshot(const bool useTestOutputPath)
+void queueScreenshot(const bool useRenderingTestOutputPath)
 {
     renderState.screenshotRequest.active = true;
-    renderState.screenshotRequest.useTestOutputPath = useTestOutputPath;
+    renderState.screenshotRequest.useRenderingTestOutputPath = useRenderingTestOutputPath;
 }
 
 void captureQueuedScreenshot()
@@ -86,9 +86,9 @@ void finalizeQueuedScreenshot()
     renderState.screenshotRequest.readbackBuffer->Unmap(0, nullptr);
 
     std::filesystem::path path;
-    if (renderState.screenshotRequest.useTestOutputPath)
+    if (renderState.screenshotRequest.useRenderingTestOutputPath)
     {
-        path = std::filesystem::absolute(SettingsManager::getAsString("testOutput"));
+        path = std::filesystem::absolute(SettingsManager::getAsString("renderingTestOutput"));
         std::filesystem::create_directories(path.parent_path());
     }
     else

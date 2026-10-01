@@ -1,18 +1,52 @@
-_Last edited: 2026-09-23_
+_Last edited: 2026-09-30_
 
-# Golden Image Tests
+# Rendering Tests
 
-`BiomeinatorTests.exe` (`src/tests/main.cpp`) reads `tests/tests.json`, launches
-`Biomeinator.exe` once per entry with the entry's args plus `--testOutput=<path>` (camera locked,
-GUI hidden, animation paused), and compares the screenshot against the entry's golden with
-RMSE over 8-bit RGB normalised to [0, 1]. `-f <regex>` filters by test name. Every run writes
+`BiomeinatorRenderingTests.exe` (`src/tests/main.cpp`) reads `tests/tests.json`, launches
+`Biomeinator.exe` once per entry with the entry's args plus `--renderingTestOutput=<path>`
+(camera locked, GUI hidden, animation paused), and compares the screenshot against its reference image with
+RMSE over 8-bit RGB normalised to [0, 1]. `-f <regex>` filters by test name, while
+`--test <name>` selects exactly one entry and fails rather than silently succeeding if the name
+does not exist. Every run writes
 `<name>_GENERATED.png`, `<name>_GOLDEN.png` and `<name>_DIFF.png` to `build/test_output/`,
 which is the place to look when a test fails.
 
-Run the test runner **outside the agent sandbox** so its child renderer inherits normal
-permissions. On Windows, the sandbox denies NVIDIA telemetry's named-pipe open with
-`ERROR_ACCESS_DENIED`, leaving `slShutdown()` waiting for telemetry cleanup after the
-screenshot is saved. The same executable exits normally outside the sandbox.
+Run the test runner, or CTest when selecting rendering tests, **outside the agent sandbox** so
+the child renderer inherits normal permissions. On Windows, the sandbox denies NVIDIA
+telemetry's named-pipe open with `ERROR_ACCESS_DENIED`, leaving `slShutdown()` waiting for
+telemetry cleanup after the screenshot is saved. Launching the same executable outside the
+sandbox allows normal shutdown; changing its process environment does not remove the sandbox
+restriction. The CTest path was verified this way on 2026-09-30 with
+`rendering::diffuse_albedo_modulation`, which passed and exited in 6.23 seconds.
+
+## CTest registration
+
+CMake reads `tests/tests.json` at configure time and registers every manifest entry as a separate
+`rendering::<name>` CTest test with the `rendering` label. The manifest is a configure dependency, so
+adding, removing, or renaming an entry regenerates the test list. Each entry invokes the runner's
+exact-name mode; duplicate names instead fail CMake configuration.
+
+All rendering test entries share the `biomeinator_gpu` CTest resource lock. This keeps renderer
+processes from competing for the GPU under parallel CTest runs without preventing CPU-only tests from being
+scheduled concurrently. Each invocation removes only its own generated, copied-golden, and diff
+images, so diagnostics from other entries survive individual or `--rerun-failed` runs.
+
+`BiomeinatorRenderingTests` is an executable build target: building it also builds `Biomeinator`,
+but does not execute the rendering tests. Launching `BiomeinatorRenderingTests.exe` without
+arguments runs every entry in the manifest; `--test <name>` and `-f <regex>` select a subset.
+Likewise, building `BiomeinatorUnitTests` does not run its suite; launching its executable without
+arguments runs all unit cases. CTest provides individual results and label selection for both.
+
+Build both executables, then run both suites or select one label:
+
+```powershell
+cmake --build build --config RelWithDebInfo --target BiomeinatorUnitTests BiomeinatorRenderingTests
+ctest --test-dir build -C RelWithDebInfo --output-on-failure
+ctest --test-dir build -C RelWithDebInfo -L unit --output-on-failure
+ctest --test-dir build -C RelWithDebInfo -L rendering --output-on-failure
+```
+
+## Procedural entries
 
 A test entry has a `scene` (glTF), a `world` (saved export), or neither: a procedurally generated
 voxel world configured entirely by its args (`--voxelMode`, `--worldSeed`, `--renderDistance`,
@@ -24,7 +58,7 @@ so it would test neither the old nor the new biomes cleanly. Procedural goldens 
 regenerating whenever world generation changes; keep their render distance small to bound
 generation time.
 
-## Three kinds of golden image
+## Reference images
 
 Each glTF test folder holds a `.blend` (the source of truth), the exported `.gltf`/`.bin`
 (see [scene → blender_export.md](../scene/blender_export.md)), and up to three PNGs that mean

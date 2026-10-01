@@ -1,4 +1,4 @@
-_Last edited: 2026-09-23_
+_Last edited: 2026-09-30_
 
 # Common CPU/GPU Structs
 
@@ -33,7 +33,7 @@ encoders in `util/packing.h` must stay bit-identical to the decoders in
 `shaders/util/packing.hlsli`. Positions remain at offset 0 for BLAS builds and water
 displacement. UVs use float32 pairs: half precision can shift a sample by a texel on
 2K normal/roughness textures. Cube-face normals (±X/±Y/±Z) encode exactly; arbitrary
-normals quantize (~0.004° max error), which near-bit-exact golden tests are sensitive to.
+normals quantize (~0.004° max error), which near-bit-exact rendering tests are sensitive to.
 
 `PerFaceData` packs its flags and texture array slice into one word (16 bits each; the slice
 is far below that but the flags are expected to grow) with the area light index in the other,

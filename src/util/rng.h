@@ -65,7 +65,8 @@ struct RandomNumberGenerator
 
     inline int nextInt(int min, int max)
     {
-        return static_cast<int>(min + (max - min) * nextFloat());
+        // Truncate the nonnegative offset, not a shifted negative value (which rounds toward zero).
+        return min + nextInt(max - min);
     }
 };
 

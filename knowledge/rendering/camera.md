@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-22_
 
 # Camera
 
@@ -11,6 +11,12 @@ _Last edited: 2026-09-20_
 accumulates movement into `posFloat_WS`, then floors any overflow into `posInt_WS`. The
 shader-facing `params.pos_WS` is computed relative to `globalInstanceOffset` so it stays
 near zero.
+
+The renderer-independent arithmetic lives in `camera_math.h/cpp`. `Camera` uses the same helper
+for initialization, movement, imports, and renderer-relative positions, so unit tests cover the
+actual normalization path rather than a duplicate. Normalization uses floor semantics, including
+for exact positive boundaries and negative fractions; this is what keeps the fractional component
+canonical and preserves local precision at very large integer coordinates.
 
 ## worldToPrevClipMat Correction
 
@@ -30,3 +36,5 @@ externally via `setJitterHaltonSequenceLength()` — DLSS determines the optimal
 `getFrustumSideNormals_WS` gives the inward normals of the four side planes through the camera
 at the *current* field of view, which is what makes the water animation region follow the zoom
 key; see [scene → scene.md](../scene/scene.md#deformable-instances).
+Direction-basis and frustum-normal construction are also in `camera_math`, keeping their
+orthonormality and symmetry invariants CPU-testable without linking renderer globals.

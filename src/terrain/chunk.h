@@ -161,6 +161,49 @@ struct CaveDecorationData
     void release() { *this = CaveDecorationData{}; }
 };
 
+// Per-column snow inputs computed during terrain generation and consumed by the structure pass:
+// tree canopies can only be covered once they exist, and slopes need neighbor chunks' surfaces
+struct SnowData
+{
+    // Surface rise per block (tan 35 degrees) at which a capped column is too steep to hold snow
+    // and shows its rock instead
+    static constexpr float capSteepGradient = 0.700f;
+    // Steeper limit (tan 45 degrees) for snow layers on terrain, so the rock a too-steep cap exposes
+    // still collects snow on its ledges
+    static constexpr float layerSteepGradient = 1.0f;
+    // Coverage ramps from none at a column's line to a continuous sheet this far above it, so snow
+    // thins into patches downhill instead of ending at a hard edge
+    static constexpr float fadeDepth = 6.f;
+    // Where cover is partial, hollows hold snow and ridges shed it: this many blocks of
+    // Chunk::terrainHollowness_WS shifts coverage by hollowBias, scaled down to nothing where cover
+    // is none or complete.
+    static constexpr float hollowScale = 4.f;
+    static constexpr float hollowBias = 0.4f;
+
+    std::vector<float> lineY{};
+    // Coverage that applies at any height, from cold climate alone
+    std::vector<float> coldCover{};
+    // [0, 1] noise a column's coverage must exceed; spatially coherent so partial cover forms
+    // patches, and shared by every block in the column so canopies match the ground
+    std::vector<float> patch{};
+    // Set where the top-block stamp actually wrote snow. Read by the treeline checks during
+    // generation and by the steep-rock swap; whatever block a capped top ends up as, it stays capped.
+    std::vector<uint8_t> capped{};
+    // Rock a too-steep cap exposes: the landform's surface rock, else stone
+    std::vector<Block> exposedRock{};
+
+    void prepare()
+    {
+        lineY.resize(chunkSizeXZSquare);
+        coldCover.resize(chunkSizeXZSquare);
+        patch.resize(chunkSizeXZSquare);
+        capped.resize(chunkSizeXZSquare);
+        exposedRock.resize(chunkSizeXZSquare);
+    }
+
+    void release() { *this = SnowData{}; }
+};
+
 class Chunk
 {
 private:
@@ -176,6 +219,7 @@ private:
     // support checks while neighboring chunks concurrently fill structures into air/water.
     std::vector<uint64_t> terrainSolidCubeMask{};
     CaveDecorationData caveDecoration{};
+    SnowData snow{};
     // TODO: Consider replacing this unordered_map with a more cache-friendly sparse state store
     // if stateful blocks become common.
     std::unordered_map<uint32_t, uint8_t> blockStates{};
@@ -185,6 +229,13 @@ private:
     // Highest solid terrain block per column (pre-structure). Lets later passes tell an
     // underground transition (cave floor) from the terrain surface.
     std::vector<uint16_t> terrainTopY{};
+    // Sub-block terrain surface height per column, where terrain density crosses zero above the top
+    // block, in 1/terrainSurfaceHeightScale blocks (0: no surface). Whole-block heights quantize a
+    // gradient to multiples of 0.5, which lands on or next to a slope threshold and leaves speckles.
+    // Like terrainTopY it is written once during generation, so neighbors read it for slopes.
+    std::vector<uint16_t> terrainSurfaceHeight{};
+    static constexpr float terrainSurfaceHeightScale = 64.f;
+    static_assert(chunkSizeY * terrainSurfaceHeightScale <= 65535.f, "surface height must fit 16 bits");
     std::vector<Structure> structures{};
     std::vector<SurfaceStructureCandidate> surfaceStructureCandidates{};
     std::vector<CaveStructure> caveStructures{};
@@ -206,9 +257,18 @@ private:
 
     void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
     void buildTerrainAirMask();
+    // The structure neighbor containing a world XZ position, and that position within it
+    const Chunk* structureNeighborAt_WS(glm::ivec2 posXZ_WS, glm::ivec2& outPosXZ_CS) const;
     bool getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const;
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
     void placeSurfaceStructures();
+    // Mean terrain height on rings around a column minus its own: positive in hollows, negative on
+    // ridges. Reads neighbors' immutable terrain heights, so only valid during the structure pass.
+    float terrainHollowness_WS(glm::ivec2 posXZ_WS) const;
+    // Squared magnitude of the terrain surface gradient, by central differences across chunk borders.
+    // Only valid during the structure pass.
+    float terrainSlopeSquared_WS(glm::ivec2 posXZ_WS) const;
+    void placeSnowLayers();
     void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures, CaveStructureType type);
     void runStructuresAndDecoratorPass();
 

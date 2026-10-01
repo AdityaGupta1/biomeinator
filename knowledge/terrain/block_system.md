@@ -1,4 +1,4 @@
-_Last edited: 2026-09-22_
+_Last edited: 2026-09-23_
 
 # Block System
 
@@ -35,6 +35,16 @@ Metadata is published only after the whole definition parses successfully.
 
 The non-obvious culling rules in `shouldGenerateFace`:
 - **TRANSPARENT_CUTOUT** between two cutout blocks: only the one at the lower/equal position generates the face. This prevents double-rendering the shared boundary (both quads would be coplanar and z-fight).
+- **Partial-height solids** (`LIQUID_TOP` lava, `LAYER` snow) cull by *top height*, not by shape:
+  a solid's side face shows only where the neighbor's top is lower than its own
+  (`blockShapeTopHeight`). That single rule is what hides the shared face between two lava tops or
+  two snow layers, keeps a cube's side visible above either, and hides a layer's edge against a
+  cube. It replaced shape-equality tests written for lava alone; `block.cpp` pins both the old lava
+  cases and the layer cases with `static_assert`s, so a change to the rule that alters lava fails
+  to compile rather than quietly changing goldens.
+- **LAYER vs non-solid neighbors:** a layer only fills the bottom of its cell, so it never hides a
+  leaf, glass, or water neighbor's side or bottom face — without that early-out the solid-neighbor
+  rules for those types would punch a hole above every snow layer they touch.
 - **WATER** only generates faces against AIR — water-water faces are hidden, and water against solid is hidden (the solid block's face covers it). Exception: `LIQUID_TOP` blocks always generate the +Y (top) face regardless of neighbor, so the water surface is always visible.
 
 ## GLASS blocks
@@ -74,6 +84,11 @@ deterministic ±0.2-block tangent-plane offset. It defaults off so every block t
 wants displacement must declare it explicitly.
 
 `LIQUID_TOP` is a cube with the +Y face lowered by 1/8 block, creating the "not quite full block" water surface look.
+
+`LAYER` is the opposite: a 1/8-block slab along the bottom of the cell (snow layers). Nothing treats
+it as a `CUBE`, so it never counts toward segment occlusion or as decorator/cave-structure support.
+Its side faces sample only the top 1/8 of the texture (v cropped at mesh time) instead of the whole
+tile squeezed into the slab; lava tops still stretch the full tile, as before.
 
 ## Emissive
 

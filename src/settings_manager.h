@@ -12,6 +12,21 @@ namespace SettingsManager
 
 using SettingValue = std::variant<bool, int, uint32_t, float, std::string>;
 
+enum class ParseArgsStatus
+{
+    Success,
+    Help,
+    Error,
+};
+
+struct ParseArgsOutcome
+{
+    ParseArgsStatus status;
+    std::string message;
+};
+
+// Parses and validates without terminating the process. Settings are replaced only on success.
+ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv);
 void parseArgs(const int argc, const char* const* argv);
 
 bool getAsBool(const std::string& name);
@@ -33,8 +48,8 @@ void setWorldSeed(uint32_t value);
 // Visits every setting in unspecified order
 void forEachSetting(const std::function<void(const std::string& name, const SettingValue& value)>& callback);
 
-// Golden screenshot run: render, save --testOutput, exit
-bool isTestMode();
+// Rendering test run: render, save --renderingTestOutput, exit
+bool isRenderingTestMode();
 // Performance measurement run: warm up, measure, write --perfOutput, exit
 bool isPerfMode();
 // Either automated run: camera locked, GUI hidden, animation paused, vsync off (all as

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-30_
 
 # Perf Runs
 
@@ -47,7 +47,7 @@ loose for the delta being checked; warmup rarely needs touching.
 `renderer_perf.cpp` runs a small state machine, advanced once per frame from `render()`:
 
 - **Waiting for scene** ends when a TLAS exists and, in voxel mode, the world import has
-  finished (the same gate the golden tests use).
+  finished (the same gate the rendering tests use).
 - **Warmup** ends when *all* of `perfWarmupFrames`, `perfWarmupSeconds`, and a streak of
   `PERF_QUIET_FRAMES` frames without a scene change have been satisfied. The frame count covers
   one-time costs (PSO warmup, DLSS feature creation); the time covers voxel worlds still
@@ -61,15 +61,15 @@ loose for the delta being checked; warmup rarely needs touching.
   waits excluded, and it covers the same frames as the GPU samples. It is *not* the frame
   rate; that is what `gpu.frameMs` approximates when the GPU is the bottleneck.
 - **Done** flushes the queue, drains the in-flight slots, writes the JSON, and exits through
-  `Renderer::destroy` like a golden run does. `perfTimeoutSeconds` bounds the whole run; on
+  `Renderer::destroy` like a rendering test run does. `perfTimeoutSeconds` bounds the whole run; on
   timeout the report is still written with whatever was measured and `meta.timedOut` set, but
   the process exits non-zero, `run` reports the entry as failed, and `compare` refuses to diff
   it. The partial report is for diagnosing the timeout, not for comparison.
 
-Perf mode is a *headless* run, sharing that flag with `--testOutput`: camera locked, GUI
+Perf mode is a *headless* run, sharing that flag with `--renderingTestOutput`: camera locked, GUI
 hidden, animation paused, vsync off, Streamline logging off, voxel import awaited.
-`SettingsManager::isHeadless()` is the switch for those; `isTestMode()` stays specific to the
-golden screenshot-and-exit path and to the two things a perf run deliberately keeps: frame
+`SettingsManager::isHeadless()` is the switch for those; `isRenderingTestMode()` stays specific to the
+rendering test screenshot-and-exit path and to the two things a perf run deliberately keeps: frame
 generation with Reflex, and bringing the window to the foreground (fullscreen presentation
 needs an unoccluded window, and the scenes run fullscreen at 1440p so the numbers are what
 the game shows). The headless defaults (`lockCamera`,

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-22_
+_Last edited: 2026-09-30_
 
 # Cave Structure System
 
@@ -154,7 +154,9 @@ bottom layer index in gives each pocket an independent grid.
   tighter `chunkSizeXZ / 2` limit above applies only to fills that read the neighbourhood air mask,
   which this one does not.
 - **`availableHeight` users:** `STONE_COLUMN` fills floor→ceiling for `end - start`
-  blocks; `CAVE_VINES` caps strand length at `availableHeight - 1` so a strand never
+  blocks, so it carries `CAVE_STRUCTURE_GEN_FLAG_NEEDS_CEILING`: on a pocket open to the sky,
+  `end` is the old ground level rather than a ceiling, and the column would stand free in
+  the crater; `CAVE_VINES` caps strand length at `availableHeight - 1` so a strand never
   touches the floor. The fixed-height gens ignore it; their high `minLayerHeight`
   guarantees clearance. `tryPlaceStructureBlock` is AIR-only, so a 3×3 pillar
   auto-clips per column to whatever air actually exists.
@@ -180,7 +182,7 @@ imported chunk keeps its overhang. Neither sorting candidates nor rebuilding mas
 from final blocks is safe. Legacy v5/v6 fixture worlds retain empty cave lists and
 approximate masks; exploring beyond those old fixture boundaries is not a goal.
 
-Voxel golden screenshots load baked blocks, so they do not test this boundary
+Voxel rendering tests load baked blocks, so they do not test this boundary
 behavior. Re-exporting legacy chunks keeps those approximations even though the
 new file uses v7. When changing this path, check fresh generation against exported
-neighbors as well as golden screenshots of already completed chunks.
+neighbors as well as rendering tests of already completed chunks.

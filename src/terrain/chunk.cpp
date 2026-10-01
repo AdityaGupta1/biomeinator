@@ -114,7 +114,9 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
         this->blocks.resize(numChunkBlocks);
         this->biomes.resize(chunkSizeXZSquare);
         this->terrainTopY.resize(chunkSizeXZSquare);
+        this->terrainSurfaceHeight.resize(chunkSizeXZSquare);
         this->caveDecoration.prepare();
+        this->snow.prepare();
 
         this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
         this->buildTerrainAirMask();
@@ -153,6 +155,17 @@ void Chunk::buildTerrainAirMask()
     }
 }
 
+const Chunk* Chunk::structureNeighborAt_WS(glm::ivec2 posXZ_WS, glm::ivec2& outPosXZ_CS) const
+{
+    const glm::ivec2 posChunk(MathUtil::floorDiv(posXZ_WS.x, chunkSizeXZ), MathUtil::floorDiv(posXZ_WS.y, chunkSizeXZ));
+    const glm::ivec2 chunkOffset = posChunk - this->chunkPos;
+    constexpr int radius = static_cast<int>(structureMaxChunkRadius);
+    ASSERT(glm::abs(chunkOffset.x) <= radius && glm::abs(chunkOffset.y) <= radius, "position outside structure neighborhood");
+    constexpr int sideLength = 2 * radius + 1;
+    outPosXZ_CS = posXZ_WS - posChunk * static_cast<int>(chunkSizeXZ);
+    return this->structureNeighbors[(chunkOffset.y + radius) * sideLength + (chunkOffset.x + radius)];
+}
+
 bool Chunk::getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const
 {
     if (pos_WS.y < 0 || pos_WS.y >= static_cast<int>(chunkSizeY))
@@ -160,16 +173,9 @@ bool Chunk::getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> 
         return false;
     }
 
-    const glm::ivec2 posChunk(MathUtil::floorDiv(pos_WS.x, chunkSizeXZ), MathUtil::floorDiv(pos_WS.z, chunkSizeXZ));
-    const glm::ivec2 chunkOffset = posChunk - this->chunkPos;
-    constexpr int radius = static_cast<int>(structureMaxChunkRadius);
-    ASSERT(glm::abs(chunkOffset.x) <= radius && glm::abs(chunkOffset.y) <= radius, "position outside structure neighborhood");
-    constexpr int sideLength = 2 * radius + 1;
-    const Chunk* chunk = this->structureNeighbors[(chunkOffset.y + radius) * sideLength + (chunkOffset.x + radius)];
-
-    const glm::ivec2 chunkOriginXZ_WS = posChunk * static_cast<int>(chunkSizeXZ);
-    const uint32_t blockIdx =
-        blockPosToIdx(glm::uvec3(pos_WS.x - chunkOriginXZ_WS.x, pos_WS.y, pos_WS.z - chunkOriginXZ_WS.y /*z*/));
+    glm::ivec2 posXZ_CS;
+    const Chunk* chunk = this->structureNeighborAt_WS(glm::ivec2(pos_WS.x, pos_WS.z), posXZ_CS);
+    const uint32_t blockIdx = blockPosToIdx(glm::uvec3(posXZ_CS.x, pos_WS.y, posXZ_CS.y /*z*/));
     const std::vector<uint64_t>& terrainMask = chunk->*mask;
     return (terrainMask[blockIdx / 64] >> (blockIdx % 64)) & 1;
 }
@@ -229,6 +235,166 @@ void Chunk::checkStructureNeighbors()
     }
 }
 
+float Chunk::terrainHollowness_WS(ivec2 posXZ_WS) const
+{
+    // Water counts as ground at sea level, so a shoreline does not read as a ridge
+    const auto groundHeightAt = [&](ivec2 samplePosXZ_WS, float& outHeight) -> bool
+    {
+        ivec2 samplePos_CS;
+        const Chunk* chunk = this->structureNeighborAt_WS(samplePosXZ_WS, samplePos_CS);
+        // Imported neighbors keep no terrain heights
+        if (chunk->terrainTopY.empty())
+        {
+            return false;
+        }
+        const uint16_t topY = chunk->terrainTopY[samplePos_CS.x + chunkSizeXZ * samplePos_CS.y];
+        if (topY == 0)
+        {
+            return false;
+        }
+        outHeight = static_cast<float>(max(static_cast<int>(topY), SEA_LEVEL));
+        return true;
+    };
+
+    float centerHeight;
+    if (!groundHeightAt(posXZ_WS, centerHeight))
+    {
+        return 0.f;
+    }
+
+    // Two ring radii so both small dips and broad valleys count
+    static constexpr ivec2 ringOffsets[] = {
+        { 3, 0 }, { -3, 0 }, { 0, 3 }, { 0, -3 }, { 2, 2 }, { 2, -2 }, { -2, 2 }, { -2, -2 },
+        { 7, 0 }, { -7, 0 }, { 0, 7 }, { 0, -7 }, { 5, 5 }, { 5, -5 }, { -5, 5 }, { -5, -5 },
+    };
+    static_assert(7 < chunkSizeXZ * structureMaxChunkRadius, "hollowness rings must stay in the structure neighborhood");
+    float heightSum = 0.f;
+    int numSamples = 0;
+    for (const ivec2 offset : ringOffsets)
+    {
+        float height;
+        if (groundHeightAt(posXZ_WS + offset, height))
+        {
+            heightSum += height;
+            ++numSamples;
+        }
+    }
+    return (numSamples > 0) ? heightSum / numSamples - centerHeight : 0.f;
+}
+
+float Chunk::terrainSlopeSquared_WS(ivec2 posXZ_WS) const
+{
+    const auto surfaceHeightAt = [&](ivec2 samplePosXZ_WS, float& outHeight) -> bool
+    {
+        ivec2 samplePos_CS;
+        const Chunk* chunk = this->structureNeighborAt_WS(samplePosXZ_WS, samplePos_CS);
+        // Imported neighbors keep no surface heights
+        if (chunk->terrainSurfaceHeight.empty())
+        {
+            return false;
+        }
+        const uint16_t height = chunk->terrainSurfaceHeight[samplePos_CS.x + chunkSizeXZ * samplePos_CS.y];
+        if (height == 0)
+        {
+            return false;
+        }
+        outHeight = height / terrainSurfaceHeightScale;
+        return true;
+    };
+    // Central difference, or one-sided where a neighbor has no surface
+    const auto gradientAlong = [&](ivec2 axis) -> float
+    {
+        float center, lowSide, highSide;
+        if (!surfaceHeightAt(posXZ_WS, center))
+        {
+            return 0.f;
+        }
+        const bool hasLow = surfaceHeightAt(posXZ_WS - axis, lowSide);
+        const bool hasHigh = surfaceHeightAt(posXZ_WS + axis, highSide);
+        if (hasLow && hasHigh)
+        {
+            return (highSide - lowSide) * 0.5f;
+        }
+        if (hasHigh)
+        {
+            return highSide - center;
+        }
+        if (hasLow)
+        {
+            return center - lowSide;
+        }
+        return 0.f;
+    };
+
+    const float gradX = gradientAlong(ivec2(1, 0));
+    const float gradZ = gradientAlong(ivec2(0, 1));
+    return gradX * gradX + gradZ * gradZ;
+}
+
+void Chunk::placeSnowLayers()
+{
+    const ivec2 chunkOriginXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
+    for (uint columnIdx = 0; columnIdx < chunkSizeXZSquare; ++columnIdx)
+    {
+        const float lineY = this->snow.lineY[columnIdx];
+        const uint baseBlockIdx = chunkSizeY * columnIdx;
+        const ivec2 columnPosXZ_WS = chunkOriginXZ_WS + ivec2(columnIdx % chunkSizeXZ, columnIdx / chunkSizeXZ);
+
+        // Snow does not hold on steep ground: a too-steep cap shows its rock, and terrain steeper
+        // still takes no layer. Done here rather than during generation because a slope at a chunk
+        // border needs the neighbor's surface, and a one-sided difference there seams at ridge crests.
+        const float slopeSquared = this->terrainSlopeSquared_WS(columnPosXZ_WS);
+        if (this->snow.capped[columnIdx] && slopeSquared >= SnowData::capSteepGradient * SnowData::capSteepGradient)
+        {
+            this->blocks[baseBlockIdx + this->terrainTopY[columnIdx]] = this->snow.exposedRock[columnIdx];
+        }
+        const bool terrainTopAccepts = slopeSquared < SnowData::layerSteepGradient * SnowData::layerSteepGradient;
+
+        // Only the highest block in the column, so overhangs and cave mouths stay bare beneath it
+        uint topY = chunkSizeY - 1;
+        while (topY > 0 && this->blocks[baseBlockIdx + topY] == Block::AIR)
+        {
+            --topY;
+        }
+        if (topY == chunkSizeY - 1)
+        {
+            continue;
+        }
+
+        Block& topBlock = this->blocks[baseBlockIdx + topY];
+        const BlockData& topBlockData = Blocks::getBlockData(topBlock);
+        if (topBlockData.shape != BlockShape::CUBE ||
+            (topBlockData.type != BlockType::SOLID && topBlockData.type != BlockType::TRANSPARENT_CUTOUT))
+        {
+            continue;
+        }
+        if (topY == this->terrainTopY[columnIdx] && !terrainTopAccepts)
+        {
+            continue;
+        }
+
+        float coverage = max(smoothstep(lineY, lineY + SnowData::fadeDepth, static_cast<float>(topY)),
+                             this->snow.coldCover[columnIdx]);
+        const float partialness = 4.f * coverage * (1.f - coverage);
+        if (partialness > 0.f)
+        {
+            const float hollowness = this->terrainHollowness_WS(columnPosXZ_WS);
+            coverage += partialness * SnowData::hollowBias *
+                clamp(hollowness / SnowData::hollowScale, -1.f, 1.f);
+        }
+        if (this->snow.patch[columnIdx] >= coverage)
+        {
+            continue;
+        }
+
+        this->blocks[baseBlockIdx + topY + 1] = Block::SNOW_LAYER;
+        if (topBlock == Block::GRASS_BLOCK)
+        {
+            topBlock = Block::SNOWY_GRASS_BLOCK;
+        }
+    }
+}
+
 void Chunk::runStructuresAndDecoratorPass()
 {
     for (const Chunk* structureNeighbor : this->structureNeighbors)
@@ -250,6 +416,9 @@ void Chunk::runStructuresAndDecoratorPass()
                 neighborCaveStructures.data(), neighborCaveStructures.size(), static_cast<CaveStructureType>(typeIdx));
         }
     }
+
+    // Before decorators, which only fill air: a layer keeps plants off the ground it covers
+    this->placeSnowLayers();
 
     const uint worldSeed = SettingsManager::getWorldSeed();
     RandomNumberGenerator decoratorRng = initRng(worldSeed ^ hash(198594190), this->chunkPos.x, this->chunkPos.y /*z*/);
@@ -423,6 +592,7 @@ void Chunk::fillStructuresAndDecorators()
     {
         this->runStructuresAndDecoratorPass();
         this->caveDecoration.release();
+        this->snow.release();
     }
 
     this->advanceState(ChunkState::HAS_ALL_BLOCKS);
@@ -939,13 +1109,17 @@ void Chunk::createInstances()
                             appendOmmIdxs(texArraySliceIdx, 4);
                         }
                     }
-                    else // BlockShape::LIQUID_TOP or BlockShape::CUBE
+                    else // BlockShape::CUBE, LIQUID_TOP or LAYER
                     {
                         const bool isWater = (blockData.type == BlockType::WATER);
                         std::vector<Vertex>& verts = isWater ? waterVerts : terrainVerts;
                         std::vector<uint32_t>& idxs = isWater ? waterIdxs : terrainIdxs;
                         std::vector<PerFaceData>& perFaceDatas = isWater ? waterPerFaceDatas : terrainPerFaceDatas;
-                        const float topYSubtract = (blockData.shape == BlockShape::LIQUID_TOP) ? (1.f / 8.f) : 0.f;
+                        const float topHeight = blockShapeTopHeight(blockData.shape);
+                        const float topYSubtract = 1.f - topHeight;
+                        // A layer's side faces show the top strip of the texture instead of the whole
+                        // tile squeezed into 1/8 of a block. Lava tops keep the full tile, as before.
+                        const bool cropSideUvs = (blockData.shape == BlockShape::LAYER);
 
                         for (uint faceIdx = 0; faceIdx < blockFaceCount; ++faceIdx)
                         {
@@ -969,7 +1143,14 @@ void Chunk::createInstances()
                                     vertPos_CS.y -= topYSubtract;
                                 }
 
-                                verts.emplace_back(makeVertex(vertPos_CS, vec3(neighborOffset), vec2(uvOffsets[i])));
+                                vec2 uv = vec2(uvOffsets[i]);
+                                // Side faces (+X, +Z, -X, -Z) run v = 0 at the top edge to 1 at the bottom
+                                if (cropSideUvs && faceIdx < 4 && thisFaceVertPositions[i].y == 0)
+                                {
+                                    uv.y = topHeight;
+                                }
+
+                                verts.emplace_back(makeVertex(vertPos_CS, vec3(neighborOffset), uv));
                             }
 
                             const uint32_t triangleIdx = static_cast<uint32_t>(idxs.size() / 3u);
