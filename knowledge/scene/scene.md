@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-30_
 
 # Scene
 
@@ -64,7 +64,7 @@ the entries into the frame's instance desc array with the global offset applied.
 
 ## Deformable Instances
 
-`Instance::isDeformable` (set by chunk meshing for water) routes an instance into
+`Instance::isDeformable` (set by chunk meshing for water and waterline bands) routes an instance into
 `deformableInstances` after its first BLAS build. The set drives the per-frame displacement
 dispatches (`WaterDisplacer`) and BLAS refits, but only for the subset within the circular
 animation radius that `Terrain::update` sets (24 chunks, a constant there) *and*

@@ -75,13 +75,30 @@ for any dielectric, and roughness comes from the packed aux b channel so differe
 can differ without new shader constants.
 
 `getHitMaterial` resolves overrides for primary and secondary hits and for the DLSS gbuffer.
-Overrides precede backface IOR inversion, so exiting glass uses reciprocal IOR. Secondary-hit
+A terrain face that is a medium boundary takes its IOR from the media on its two sides (back over
+front) rather than from the material, so the same glass refracts less under water than in air, and
+water faces get water's IOR the same way. Overrides and this IOR precede backface inversion, so
+exiting glass uses the reciprocal. Secondary-hit
 resolution follows footprint propagation but precedes lobe-dependent ray-cone widening and DLSS
 look-through albedo evaluation; the shared diffuse terrain material must not leak into those decisions.
 It deliberately does *not* touch `acceptHitCandidate`: rough glass is a
 real bounce rather than a passthrough, so glass triangles occlude shadow rays like any opaque
 geometry. An emitter enclosed in glass is therefore lit into the world by BSDF-sampled refraction
 paths only — NEE towards it is always shadowed.
+
+## Scattering surfaces
+
+Ice is a scattering medium, but volumetric scattering is not implemented, so its faces
+(`FACE_FLAG_IS_SCATTERING`, `applyScatteringMaterial`) stand in for it: untinted glossy reflection
+over a diffuse lobe that transmits a fixed share of its light. Light that gets past the Fresnel
+reflection enters the medium and leaves through either side, and the diffuse split models that:
+diffuse *reflection* is what reads as milky from above (transmitting everything would show only the
+dark water below), and the transmitted share is the glow under the ice. Both the ice-air and the
+ice-water faces are such sheets, so light can bounce between them like multiple scattering in a
+slab, and the two compound when tuning the transmission share. The ice-water face's IOR ratio is
+close to 1, so its Fresnel reflection all but vanishes, as for the near index-matched real
+interface. Because they reuse the existing diffuse-transmission and glossy-over-diffuse lobes,
+scattering surfaces block shadow rays like any opaque surface.
 
 ## Procedural color
 

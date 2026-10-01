@@ -77,7 +77,7 @@ Structs that are uploaded to the GPU each frame (or once at init) via `ParamBloc
 
 **`CameraParams`** — current and previous frame camera state, including `globalInstanceOffset` / `prevGlobalInstanceOffset` (the integer world-space chunk offset used to reconstruct true world positions in shaders).
 
-**`SceneParams`** — scene-level flags: `voxelMode`, `numAreaLights`, `cameraUnderwater`, voxel world bounds.
+**`SceneParams`** — scene-level flags: `voxelMode`, `numAreaLights`, `cameraMedium`, voxel world bounds.
 
 **`RenderParams`**, **`DebugParams`** — mirrors of the corresponding settings groups. Field names match the setting names closely enough to cross-reference directly.
 
