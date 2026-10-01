@@ -261,20 +261,20 @@ void init()
         data.grassTint = glmUtil::colorFromHex("#4a8a34");
         data.topBlocks = {
             .patches = { {
-                { Block::COARSE_DIRT, 0.45f },
+                { Block::COARSE_DIRT, 0.7f },
                 { Block::PODZOL, -0.1f },
             } },
         };
         data.structureGens = {
             {
                 {
-                    { StructureType::LARGE_OAK_TREE, 45.f },
-                    { StructureType::OAK_TREE, 35.f },
+                    { StructureType::LARGE_OAK_TREE, 50.f },
+                    { StructureType::OAK_TREE, 30.f },
                     { StructureType::BIRCH_TREE, 20.f },
-                    { StructureType::GIANT_OAK_TREE, 6.f },
+                    { StructureType::GIANT_OAK_TREE, 9.f },
                 },
-                12,
-                5,
+                9,
+                3,
             },
         };
         data.decorator.addEntry(Block::FERN, 6.f, { Block::GRASS_BLOCK, Block::PODZOL });
