@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-30_
 
 # Decorator System
 
@@ -40,6 +40,8 @@ determines the position-hashed face choice.
 ## Ordering Guarantees
 
 Decorators run **after** structures in `runStructuresAndDecoratorPass`. Since decorators only write into AIR blocks, tree trunks/leaves placed by structures are never overwritten. Conversely, decorators can place blocks at the base of trees where air still exists.
+
+Snow layers are placed between the two (see [chunk_generator.md](chunk_generator.md#snow-layers)), so a covered cell is no longer air and gets no decorator. That also shifts which cells consume the per-chunk surface RNG, so adding or tuning layers reshuffles decorators in affected chunks.
 
 ## RNG Is Per-Chunk
 

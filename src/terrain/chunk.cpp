@@ -115,6 +115,7 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
         this->biomes.resize(chunkSizeXZSquare);
         this->terrainTopY.resize(chunkSizeXZSquare);
         this->caveDecoration.prepare();
+        this->snowLayers.prepare();
 
         this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
     }
@@ -223,6 +224,47 @@ void Chunk::checkStructureNeighbors()
     }
 }
 
+void Chunk::placeSnowLayers()
+{
+    for (uint columnIdx = 0; columnIdx < chunkSizeXZSquare; ++columnIdx)
+    {
+        const float lineY = this->snowLayers.lineY[columnIdx];
+        const uint baseBlockIdx = chunkSizeY * columnIdx;
+
+        // Only the highest block in the column, so overhangs and cave mouths stay bare beneath it
+        uint topY = chunkSizeY - 2;
+        while (topY > 0 && this->blocks[baseBlockIdx + topY] == Block::AIR)
+        {
+            --topY;
+        }
+
+        Block& topBlock = this->blocks[baseBlockIdx + topY];
+        const BlockData& topBlockData = Blocks::getBlockData(topBlock);
+        if (topBlockData.shape != BlockShape::CUBE ||
+            (topBlockData.type != BlockType::SOLID && topBlockData.type != BlockType::TRANSPARENT_CUTOUT))
+        {
+            continue;
+        }
+        if (topY == this->terrainTopY[columnIdx] && !this->snowLayers.terrainTopAccepts[columnIdx])
+        {
+            continue;
+        }
+
+        const float coverage = max(smoothstep(lineY, lineY + SnowLayerData::fadeDepth, static_cast<float>(topY)),
+                                   this->snowLayers.coldCover[columnIdx]);
+        if (this->snowLayers.patch[columnIdx] >= coverage)
+        {
+            continue;
+        }
+
+        this->blocks[baseBlockIdx + topY + 1] = Block::SNOW_LAYER;
+        if (topBlock == Block::GRASS_BLOCK)
+        {
+            topBlock = Block::SNOWY_GRASS_BLOCK;
+        }
+    }
+}
+
 void Chunk::runStructuresAndDecoratorPass()
 {
     for (const Chunk* structureNeighbor : this->structureNeighbors)
@@ -244,6 +286,9 @@ void Chunk::runStructuresAndDecoratorPass()
                 neighborCaveStructures.data(), neighborCaveStructures.size(), static_cast<CaveStructureType>(typeIdx));
         }
     }
+
+    // Before decorators, which only fill air: a layer keeps plants off the ground it covers
+    this->placeSnowLayers();
 
     const uint worldSeed = SettingsManager::getWorldSeed();
     RandomNumberGenerator decoratorRng = initRng(worldSeed ^ hash(198594190), this->chunkPos.x, this->chunkPos.y /*z*/);
@@ -417,6 +462,7 @@ void Chunk::fillStructuresAndDecorators()
     {
         this->runStructuresAndDecoratorPass();
         this->caveDecoration.release();
+        this->snowLayers.release();
     }
 
     this->advanceState(ChunkState::HAS_ALL_BLOCKS);

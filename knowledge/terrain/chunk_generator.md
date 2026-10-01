@@ -1,4 +1,4 @@
-_Last edited: 2026-09-23_
+_Last edited: 2026-09-30_
 
 # Chunk Generator
 
@@ -115,29 +115,28 @@ altitude effect that cuts across biomes: relief raises ground everywhere, not on
 Per column it is a base height plus:
 
 - **temperature**, so cold columns whiten lower. Temperature is an unnormalised fbm sum (about
-  ±0.7 at the 5th-95th percentile, ±1.1 at the extremes), so the very tallest hot peaks can still
-  cap; that is intended.
-- **aridity** (negative humidity), which raises it. Dry climates' real snow lines sit far higher,
-  and this is what keeps hot, dry Mesa and red desert highlands essentially bare without naming
-  them. A steeper temperature term was tried instead and made things worse: it lowered the line
-  in cold forest and tundra more than it raised it in the warm regimes.
+  ±0.7 at the 5th-95th percentile, ±1.1 at the extremes). The response is **asymmetric**: above
+  zero an extra `snowLineWarmTemperatureLift` applies. Hot regimes (Mesa massifs, red desert
+  mountains) are as tall as relief makes them, so any single slope gentle enough to let cold
+  lowlands snow also snowed on hot peaks; a symmetric steepening instead dropped the line in cold
+  forest far more than it raised it where it was needed.
+- **aridity** (negative humidity), which raises it, faded in only between cool and warm
+  temperatures. Dryness is what keeps hot, dry highlands bare, but tundra and ice fields are dry
+  too, and an unconditional lift left them bare.
 - **a dedicated low-frequency 2D field** (`fnSnowLine`) for wander. Reusing the biome noise would
   tie the snow boundary to biome boundaries and bring back the isosurface look.
 
-**Tianzi is the one exception climate cannot express.** It is humid, spans cool to warm, and its
-towers clear the line by 150+ blocks even in warm columns, where snow would erase its planted
-summits. Its *landform* weight lifts the line out of reach, faded out with falling temperature so
-only genuinely cold karst gets snowy tower tops. Landform weight, not style or coverage: it is the
-weight that raises the towers, so the lift tracks exactly how much tower a column has. Style weight
-extends past the label and was measured stripping snow from ~2% of the mountains biome next to
-Tianzi; landform weight is zero outside the label.
+**No landform is special-cased**, Tianzi included: its warm towers stay bare through the warm-side
+lift, and cold ones snow like any other cold peak.
 
-**The base is calibrated against measured terrain, and depends on relief heights.** It was
-chosen by sweeping `computeNaturalTerrain` over a large area on several seeds and counting each
-biome's land above the line: roughly 40-60% of mountains, ~1% of forest, 1-3% of tundra, and a
-few percent at most of Tianzi (cold edges), red desert and Mesa. #400's taller relief moved the
-mountains figure from about half to ~90% at the old base, so re-measure whenever relief changes.
-`baseHeight` is not the exact surface (3D noise still moves it), so treat the numbers as relative.
+**The constants are tuned against generated terrain and depend on relief heights.** They were
+set by generating several seeds with mixed hot, temperate and cold biomes and logging the share of
+each biome's columns that ended up covered; hot regimes (Mesa, red desert, desert, savanna) were
+held at zero. Relief changes move these shares (taller relief once pushed mountains from about
+half capped to ~90%), so re-measure whenever relief changes. Forest is the hard case: biomes are
+chosen by nearest climate target and forest is the only humid cold one, so humid columns as cold
+as tundra are labelled forest and snow like tundra. A dedicated cold humid biome is the intended
+fix, not a snow-rule exception.
 
 Constraints worth keeping:
 
@@ -154,7 +153,7 @@ Constraints worth keeping:
   of the formula would silently diverge the next time the threshold changes.
 
 **Steep rock.** After the fill loop, capped columns whose surface gradient reaches
-`snowSteepGradient` (1 = 45°) get rock instead of snow:
+`snowSteepGradient` (35°) get rock instead of snow:
 
 - The rock is the **landform's surface rock** (`SurfaceMaterials::Column::rock`: terracotta,
   Tianzi strata, red sandstone) or plain stone. Never the voxel the fill loop left at the top:
@@ -171,10 +170,44 @@ Constraints worth keeping:
 The cap doubles as the **treeline** for both placement paths: grid candidates are rejected in
 capped columns, and exposed-surface placement (Tianzi's pines and shrubs) skips a capped column's
 top voxel. Both read the capped flag rather than the ground block, since steep capped columns end
-up as rock, which is valid ground for those gens. Shelves below a capped top and the snowy-grass
-band stay plantable, which is where a real treeline sits. Decorators need nothing: every surface
+up as rock, which is valid ground for those gens. Shelves below a capped top and ground below the
+line stay plantable, which is where a real treeline sits. Decorators need nothing: every surface
 decorator entry is restricted to supports like `GRASS_BLOCK`, which snow, snowy grass and rock
 already fail.
+
+### Snow layers
+
+Below and around the cap, a thin `snow_layer` cover comes from **two sources**, and a column is
+covered if either is:
+
+- **Altitude cover:** a second climate line built from the same terms as the cap (wander noise,
+  warm lift, warm-only aridity) with a lower base, so high ground whitens below the full cap.
+- **Cold-climate cover:** a ramp in temperature alone, with no height term, so tundra and ice
+  fields are white down to sea level. Aridity is deliberately absent: cold dry ground is exactly
+  what this cover is for.
+
+One steep line could not do both. Forest's climate target is only slightly warmer than tundra's,
+so a line low enough to reach tundra lowlands also buried most forest. Full snow stays
+concentrated on high, cold ground while layers are the prevalent cover. Tundra relies on this: its
+own top is plain grass, and its white look comes from layers turning covered grass into snowy grass.
+
+- **Placed after structures, before decorators** (`Chunk::placeSnowLayers`), because canopies
+  only exist once neighbors' trees are filled in. Generation can't see them, so it hands the pass
+  per-column inputs (`SnowLayerData`), released with the cave decoration data. Running before
+  decorators means a layer keeps plants off the cell it occupies, since decorators only fill air.
+- **Only the highest block in a column** gets one, so overhangs and cave mouths stay bare and
+  ground under a canopy keeps a snow shadow. Leaves are tested against the line at their own
+  height, so canopies whiten before the ground beneath them.
+- **Slope only limits terrain.** Terrain tops take a layer below `snowLayerSteepGradient`
+  (45°), looser than the cap's 35°, so the rock a too-steep cap exposes still holds snow on its
+  ledges. Structure blocks have no sub-block surface to measure, so they only need to be on top.
+- **Coverage is drawn against a noise.** Altitude cover ramps in over `SnowLayerData::fadeDepth`
+  above the line and cold cover over its temperature band; the larger is compared against a
+  mid-frequency noise rather than a per-block hash: a hash gave salt-and-pepper speckle, the noise
+  gives drifts and bare patches. The same value is used for every block in a column, so a
+  canopy's cover matches the ground under it.
+- Layers replace the old fixed snowy-grass band below the cap: grass becomes snowy grass only
+  under a layer, so the transition thins out instead of ending at a stripe.
 
 ## 3D Noise Bounds Optimization
 

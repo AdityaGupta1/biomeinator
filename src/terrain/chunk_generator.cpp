@@ -113,28 +113,44 @@ static FN::SmartNode<FN::Generator> fnSwampShore;
 //
 // The temperature term is what makes this track climate rather than pure altitude. Temperature
 // spans about ±0.7 (5th-95th percentile, ±1.1 at the extremes), so before aridity the line ranges
-// from roughly y=200 in the coldest columns to y=320 in the hottest. The base is calibrated against
-// measured terrain (knowledge/terrain/chunk_generator.md): roughly 40-60% of the mountains biome is
-// capped and about 1% of forest. It depends on relief heights, so re-measure after changing them.
+// from roughly y=200 in the coldest columns to above any terrain in the hottest. The constants are
+// tuned against generated terrain (knowledge/terrain/chunk_generator.md) and depend on relief
+// heights, so re-measure after changing them.
 inline constexpr float snowLineBaseY = 260.f;
 inline constexpr float snowLineTemperatureRange = 55.f;
 inline constexpr float snowLineNoiseAmplitude = 13.f;
-// Band directly below the line where a grass top becomes snowy grass instead of bare grass,
-// softening the transition on biomes that have one. Biomes topped with stone or sand step
-// straight from their own block to snow.
-inline constexpr float snowLineGrassBandDepth = 7.f;
-// Surface rise per block (1 = 45 degrees) at which a capped column is too steep to hold snow
-inline constexpr float snowSteepGradient = 1.0f;
+// Extra raise per unit of temperature above zero, shared by both lines. Warmth has to win
+// decisively: hot regimes (Mesa massifs, red desert mountains) are as tall as the relief makes
+// them, so a linear term that still lets cold columns snow low would also snow on hot peaks.
+inline constexpr float snowLineWarmTemperatureLift = 250.f;
+// Snow layers have two sources, and a column is covered if either is. Altitude cover is a second,
+// lower line built from the same terms as the cap, so high ground whitens below the full cap.
+// Cold-climate cover ignores height and fades in with falling temperature alone, so tundra and ice
+// fields are white down to sea level. One steep line could not do both: forest is only slightly
+// warmer than tundra, so a line low enough for tundra lowlands also buried most forest. Layers are
+// placed after structures so canopies are covered too; see SnowLayerData for how coverage is drawn.
+inline constexpr float snowLayerLineBaseY = 225.f;
+inline constexpr float snowLayerLineTemperatureRange = 120.f;
+inline constexpr float snowLayerLineAridityLift = 100.f;
+// Cold-climate cover is none at the warm temperature and complete at the cold one. The band sits
+// between forest's and tundra's climate targets, so the edge breaks into patches near their border.
+inline constexpr float snowLayerColdCoverWarmTemperature = -0.25f;
+inline constexpr float snowLayerColdCoverColdTemperature = -0.4f;
+// Surface rise per block (tan 35 degrees) at which a capped column is too steep to hold snow
+inline constexpr float snowSteepGradient = 0.700f;
+// Steeper limit (tan 45 degrees) for snow layers, so the rock a too-steep cap exposes still
+// collects snow on its ledges
+inline constexpr float snowLayerSteepGradient = 1.0f;
 // Raise per unit of dryness (negative humidity). Dry climates hold far less snow; this is what
-// keeps hot, dry Mesa and red desert highlands bare without special-casing their labels.
+// keeps hot, dry Mesa and red desert highlands bare without special-casing their labels. It fades
+// out between these temperatures: cold dry ground (tundra, ice fields) keeps what little snow
+// falls, and lifting the line there left tundra bare.
 inline constexpr float snowLineAridityLift = 100.f;
-// Lift at full Tianzi landform weight, above any pillar Tianzi builds, faded out between the warm and
-// cold temperatures so only cold karst is capped (see the stamp for why Tianzi needs its own term)
-inline constexpr float snowLineTianziLift = 400.f;
-inline constexpr float snowLineTianziColdTemperature = -0.4f;
-inline constexpr float snowLineTianziWarmTemperature = 0.f;
+inline constexpr float snowLineAridityColdTemperature = -0.3f;
+inline constexpr float snowLineAridityWarmTemperature = 0.2f;
 
 static FN::SmartNode<FN::Generator> fnSnowLine;
+static FN::SmartNode<FN::Generator> fnSnowLayerPatch;
 
 static uint worldSeed;
 static ivec2 noiseOffsetXZ;
@@ -221,6 +237,18 @@ void init()
         fnFractal->SetOctaveCount(3);
 
         fnSnowLine = fnFractal;
+    }
+
+    {
+        // Patches a few blocks across, so partial snow layer cover reads as drifts and bare spots
+        // rather than per-block speckle
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(615203987);
+        fnSimplex->SetScale(7.0f);
+        fnSimplex->SetOutputMin(0.f);
+        fnSimplex->SetOutputMax(1.f);
+
+        fnSnowLayerPatch = fnSimplex;
     }
 
     {
@@ -527,6 +555,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     fillColumnNoise(swampWarpFineZNoise, fnSwampWarpFine, 412093871);
     fillColumnNoise(swampShoreNoise, fnSwampShore, 190283475);
     fillColumnNoise(snowLineNoise, fnSnowLine, 748120365);
+    fillColumnNoise(this->snowLayers.patch.data(), fnSnowLayerPatch, 309184627);
 
     int terrainNoiseMinY = chunkSizeY;
     int terrainNoiseMaxY = 0;
@@ -832,6 +861,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             snowCappedArray[columnIdx] = 0; // scratch memory is not zeroed
             surfaceHeightArray[columnIdx] = -1.f;
             snowExposedRockArray[columnIdx] = Block::STONE;
+            this->snowLayers.lineY[columnIdx] = std::numeric_limits<float>::infinity();
+            this->snowLayers.coldCover[columnIdx] = 0.f;
 
             const ColumnShape& shape = columnShapes[columnIdx];
             const float terrainBaseHeight = shape.baseHeight;
@@ -1226,25 +1257,23 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 // The line comes from climate, not biome labels. Temperature lowers it in cold
                 // columns; aridity raises it in dry ones, as dry climates' real snow lines sit far
                 // higher, which keeps Mesa and red desert (both hot and dry) bare without naming
-                // them. Tianzi is the exception climate can't express: it is humid and its pillars
-                // clear the line by 150+ blocks even when warm, so its landform weight lifts the line
-                // out of reach, faded out with falling temperature so only genuinely cold karst gets
-                // snowy tower tops. Landform weight, not style or coverage: it is the weight that
-                // raises the towers, so the lift tracks exactly how much tower a column has. Style
-                // weight extends past the label and was measured stripping snow from ~2% of the
-                // mountains biome next to Tianzi; landform weight is zero outside the label.
+                // them.
                 const float temperature = biomeNoiseGrids.temperature[columnIdx];
-                const float aridity = max(0.f, -biomeNoiseGrids.humidity[columnIdx]);
-                const float warmTianzi = naturalTerrain.regimeWeights[TerrainRegime::TIANZI] *
-                    smoothstep(snowLineTianziColdTemperature, snowLineTianziWarmTemperature, temperature);
-                const float snowLineY = snowLineBaseY + temperature * snowLineTemperatureRange +
-                    aridity * snowLineAridityLift + snowLineNoise[columnIdx] * snowLineNoiseAmplitude +
-                    warmTianzi * snowLineTianziLift;
+                const float aridity = max(0.f, -biomeNoiseGrids.humidity[columnIdx]) *
+                    smoothstep(snowLineAridityColdTemperature, snowLineAridityWarmTemperature, temperature);
+                const auto climateLineY = [&](float baseY, float temperatureRange, float aridityLift)
+                {
+                    return baseY + temperature * temperatureRange +
+                        max(temperature, 0.f) * snowLineWarmTemperatureLift + aridity * aridityLift +
+                        snowLineNoise[columnIdx] * snowLineNoiseAmplitude;
+                };
+                const float snowLineY = climateLineY(snowLineBaseY, snowLineTemperatureRange, snowLineAridityLift);
+                this->snowLayers.lineY[columnIdx] =
+                    climateLineY(snowLayerLineBaseY, snowLayerLineTemperatureRange, snowLayerLineAridityLift);
+                this->snowLayers.coldCover[columnIdx] = 1.f -
+                    smoothstep(snowLayerColdCoverColdTemperature, snowLayerColdCoverWarmTemperature, temperature);
                 const bool topBlockAboveSnowLine =
                     !topBlockUnderwater && static_cast<float>(topBlockY) >= snowLineY;
-                const bool topBlockInSnowGrassBand =
-                    !topBlockUnderwater && !topBlockAboveSnowLine &&
-                    static_cast<float>(topBlockY) >= snowLineY - snowLineGrassBandDepth;
 
                 // What a too-steep cap exposes: the landform's own surface rock where one covers
                 // this column (terracotta band, Tianzi stratum, red sandstone), else plain stone.
@@ -1278,10 +1307,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         else if (topBlockOnShore)
                         {
                             newBlock = topBlocks.shoreTop;
-                        }
-                        else if (topBlockInSnowGrassBand && y == topBlockY)
-                        {
-                            newBlock = Block::SNOWY_GRASS_BLOCK;
                         }
                     }
                     // Outside the grass rules, not an arm of them: the cap has to replace stone
@@ -1344,7 +1369,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     }
 
     // Snow does not hold on steep ground, so capped columns whose surface gradient is steep get bare
-    // rock instead. This needs every column's surface height, hence a pass after the fill loop
+    // rock instead, and terrain steeper still takes no snow layer. This needs every column's surface
+    // height, hence a pass after the fill loop
     // rather than a test in the stamp. Neighbor chunks' heights are not available (they generate
     // concurrently), so border columns fall back to a one-sided difference against their in-chunk
     // neighbor. On the sub-block surface that differs from the central difference only by the
@@ -1373,14 +1399,13 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             for (int blockX = 0; blockX < static_cast<int>(chunkSizeXZ); ++blockX)
             {
                 const uint columnIdx = blockX + chunkSizeXZ * blockZ;
-                if (!snowCappedArray[columnIdx])
-                {
-                    continue;
-                }
                 const float height = surfaceHeightAt(blockX, blockZ);
                 const float gradX = gradientAlong(surfaceHeightAt(blockX - 1, blockZ), height, surfaceHeightAt(blockX + 1, blockZ));
                 const float gradZ = gradientAlong(surfaceHeightAt(blockX, blockZ - 1), height, surfaceHeightAt(blockX, blockZ + 1));
-                if (gradX * gradX + gradZ * gradZ >= snowSteepGradient * snowSteepGradient)
+                const float gradientSquared = gradX * gradX + gradZ * gradZ;
+                this->snowLayers.terrainTopAccepts[columnIdx] =
+                    gradientSquared < snowLayerSteepGradient * snowLayerSteepGradient;
+                if (snowCappedArray[columnIdx] && gradientSquared >= snowSteepGradient * snowSteepGradient)
                 {
                     this->blocks[chunkSizeY * columnIdx + this->terrainTopY[columnIdx]] = snowExposedRockArray[columnIdx];
                 }
@@ -1493,7 +1518,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     }
 
                     // Treeline: nothing grows above the snow line, including on the steep rock the
-                    // cap leaves bare. Snowy grass below the line stays plantable, so forests thin
+                    // cap leaves bare. Ground below the line stays plantable, so forests thin
                     // out at the cap instead of running up into it.
                     if (snowCappedArray[columnIdx])
                     {

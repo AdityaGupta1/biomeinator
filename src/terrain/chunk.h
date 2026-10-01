@@ -148,6 +148,35 @@ struct CaveDecorationData
     void release() { *this = CaveDecorationData{}; }
 };
 
+// Per-column snow layer inputs computed during terrain generation and consumed once structures are
+// in place, since tree canopies can only be covered after they exist
+struct SnowLayerData
+{
+    // Coverage ramps from none at a column's line to a continuous sheet this far above it, so snow
+    // thins into patches downhill instead of ending at a hard edge
+    static constexpr float fadeDepth = 6.f;
+
+    std::vector<float> lineY{};
+    // Coverage that applies at any height, from cold climate alone
+    std::vector<float> coldCover{};
+    // Low-frequency [0, 1] noise a column's coverage must exceed; spatially coherent so partial
+    // cover forms patches, and shared by every block in the column so canopies match the ground
+    std::vector<float> patch{};
+    // Whether the terrain top itself may hold a layer (not too steep); structure blocks above it
+    // are not slope-limited
+    std::vector<uint8_t> terrainTopAccepts{};
+
+    void prepare()
+    {
+        lineY.resize(chunkSizeXZSquare);
+        coldCover.resize(chunkSizeXZSquare);
+        patch.resize(chunkSizeXZSquare);
+        terrainTopAccepts.resize(chunkSizeXZSquare);
+    }
+
+    void release() { *this = SnowLayerData{}; }
+};
+
 class Chunk
 {
 private:
@@ -163,6 +192,7 @@ private:
     // support checks while neighboring chunks concurrently fill structures into air/water.
     std::vector<uint64_t> terrainSolidCubeMask{};
     CaveDecorationData caveDecoration{};
+    SnowLayerData snowLayers{};
     // TODO: Consider replacing this unordered_map with a more cache-friendly sparse state store
     // if stateful blocks become common.
     std::unordered_map<uint32_t, uint8_t> blockStates{};
@@ -199,6 +229,7 @@ private:
     bool getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const;
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
     void placeSurfaceStructures();
+    void placeSnowLayers();
     void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures, CaveStructureType type);
     void runStructuresAndDecoratorPass();
 
