@@ -152,22 +152,23 @@ Constraints worth keeping:
   the voxel fill and the snow line's surface height, including the per-voxel detail term. A copy
   of the formula would silently diverge the next time the threshold changes.
 
-**Steep rock.** After the fill loop, capped columns whose surface gradient reaches
-`snowSteepGradient` (35°) get rock instead of snow:
+**Steep rock.** Capped columns whose surface gradient reaches `SnowData::capSteepGradient` (35°)
+get rock instead of snow:
 
 - The rock is the **landform's surface rock** (`SurfaceMaterials::Column::rock`: terracotta,
   Tianzi strata, red sandstone) or plain stone. Never the voxel the fill loop left at the top:
   that carries cave-biome rock theming, which the topsoil stamp always hides, and exposing it put
   large dark basalt patches across mountain faces.
-- The gradient comes from the **sub-block surface height**, where terrain density crosses zero
-  between the top block and the air above, not from `terrainTopY`. Whole-block heights quantize a
-  central difference to multiples of 0.5, which land on or right next to a threshold and turn rock
-  into isolated speckles.
-- It needs neighbor heights the stamp doesn't have yet, hence a separate pass. Neighbor chunks
-  generate concurrently, so border columns use a one-sided difference. That differs from the
-  central one by the surface's curvature: negligible on open slopes, but at a ridge crest or valley
-  floor crossing a chunk border the one-sided slope is the full flank, which can leave a
-  one-column line of rock (or of missing layers) along the border.
+- The gradient comes from the **sub-block surface height** (`Chunk::terrainSurfaceHeight`), not
+  from `terrainTopY`; see that member for why whole-block heights speckle.
+- **It runs in the structure pass, not during generation**, because a border column's central
+  difference needs the neighbor chunk's surface, and neighbors generate concurrently. A one-sided
+  difference at borders was tried: it differs from the central one by the surface's curvature,
+  which at a ridge crest or valley floor crossing a border is the whole flank slope, leaving
+  one-column lines of rock or missing layers along chunk borders. The generator therefore keeps
+  each column's surface height on the chunk (written once, like `terrainTopY`, so neighbors can
+  read it) and hands the capped flag and exposed rock to the pass in `SnowData`. Moving the swap
+  after structure placement is safe because the treeline reads the capped flag, not the block.
 
 The cap doubles as the **treeline** for both placement paths: grid candidates are rejected in
 capped columns, and exposed-surface placement (Tianzi's pines and shrubs) skips a capped column's
@@ -197,15 +198,15 @@ fixed band.
 
 - **Placed after structures, before decorators** (`Chunk::placeSnowLayers`), because canopies
   only exist once neighbors' trees are filled in. Generation can't see them, so it hands the pass
-  per-column inputs (`SnowLayerData`), released with the cave decoration data. Running before
+  per-column inputs (`SnowData`), released with the cave decoration data. Running before
   decorators means a layer keeps plants off the cell it occupies, since decorators only fill air.
 - **Only the highest block in a column** gets one, so overhangs and cave mouths stay bare and
   ground under a canopy keeps a snow shadow. Leaves are tested against the line at their own
   height, so canopies whiten before the ground beneath them.
-- **Slope only limits terrain.** Terrain tops take a layer below `snowLayerSteepGradient`
+- **Slope only limits terrain.** Terrain tops take a layer below `SnowData::layerSteepGradient`
   (45°), looser than the cap's 35°, so the rock a too-steep cap exposes still holds snow on its
   ledges. Structure blocks have no sub-block surface to measure, so they only need to be on top.
-- **Coverage is drawn against a noise.** Altitude cover ramps in over `SnowLayerData::fadeDepth`
+- **Coverage is drawn against a noise.** Altitude cover ramps in over `SnowData::fadeDepth`
   above the line and cold cover over its temperature band; the larger is compared against an fbm
   noise rather than a per-block hash (salt-and-pepper speckle) or a single octave (evenly sized
   blobs that read as obviously noise-driven). The same value is used for every block in a column,

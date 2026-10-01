@@ -114,8 +114,9 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
         this->blocks.resize(numChunkBlocks);
         this->biomes.resize(chunkSizeXZSquare);
         this->terrainTopY.resize(chunkSizeXZSquare);
+        this->terrainSurfaceHeight.resize(chunkSizeXZSquare);
         this->caveDecoration.prepare();
-        this->snowLayers.prepare();
+        this->snow.prepare();
 
         this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
     }
@@ -275,13 +276,73 @@ float Chunk::terrainHollowness_WS(ivec2 posXZ_WS) const
     return (numSamples > 0) ? heightSum / numSamples - centerHeight : 0.f;
 }
 
+float Chunk::terrainSlopeSquared_WS(ivec2 posXZ_WS) const
+{
+    const auto surfaceHeightAt = [&](ivec2 samplePosXZ_WS, float& outHeight) -> bool
+    {
+        ivec2 samplePos_CS;
+        const Chunk* chunk = this->structureNeighborAt_WS(samplePosXZ_WS, samplePos_CS);
+        // Imported neighbors keep no surface heights
+        if (chunk->terrainSurfaceHeight.empty())
+        {
+            return false;
+        }
+        const uint16_t height = chunk->terrainSurfaceHeight[samplePos_CS.x + chunkSizeXZ * samplePos_CS.y];
+        if (height == 0)
+        {
+            return false;
+        }
+        outHeight = height / terrainSurfaceHeightScale;
+        return true;
+    };
+    // Central difference, or one-sided where a neighbor has no surface
+    const auto gradientAlong = [&](ivec2 axis) -> float
+    {
+        float center, lowSide, highSide;
+        if (!surfaceHeightAt(posXZ_WS, center))
+        {
+            return 0.f;
+        }
+        const bool hasLow = surfaceHeightAt(posXZ_WS - axis, lowSide);
+        const bool hasHigh = surfaceHeightAt(posXZ_WS + axis, highSide);
+        if (hasLow && hasHigh)
+        {
+            return (highSide - lowSide) * 0.5f;
+        }
+        if (hasHigh)
+        {
+            return highSide - center;
+        }
+        if (hasLow)
+        {
+            return center - lowSide;
+        }
+        return 0.f;
+    };
+
+    const float gradX = gradientAlong(ivec2(1, 0));
+    const float gradZ = gradientAlong(ivec2(0, 1));
+    return gradX * gradX + gradZ * gradZ;
+}
+
 void Chunk::placeSnowLayers()
 {
     const ivec2 chunkOriginXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     for (uint columnIdx = 0; columnIdx < chunkSizeXZSquare; ++columnIdx)
     {
-        const float lineY = this->snowLayers.lineY[columnIdx];
+        const float lineY = this->snow.lineY[columnIdx];
         const uint baseBlockIdx = chunkSizeY * columnIdx;
+        const ivec2 columnPosXZ_WS = chunkOriginXZ_WS + ivec2(columnIdx % chunkSizeXZ, columnIdx / chunkSizeXZ);
+
+        // Snow does not hold on steep ground: a too-steep cap shows its rock, and terrain steeper
+        // still takes no layer. Done here rather than during generation because a slope at a chunk
+        // border needs the neighbor's surface, and a one-sided difference there seams at ridge crests.
+        const float slopeSquared = this->terrainSlopeSquared_WS(columnPosXZ_WS);
+        if (this->snow.capped[columnIdx] && slopeSquared >= SnowData::capSteepGradient * SnowData::capSteepGradient)
+        {
+            this->blocks[baseBlockIdx + this->terrainTopY[columnIdx]] = this->snow.exposedRock[columnIdx];
+        }
+        const bool terrainTopAccepts = slopeSquared < SnowData::layerSteepGradient * SnowData::layerSteepGradient;
 
         // Only the highest block in the column, so overhangs and cave mouths stay bare beneath it
         uint topY = chunkSizeY - 1;
@@ -301,22 +362,21 @@ void Chunk::placeSnowLayers()
         {
             continue;
         }
-        if (topY == this->terrainTopY[columnIdx] && !this->snowLayers.terrainTopAccepts[columnIdx])
+        if (topY == this->terrainTopY[columnIdx] && !terrainTopAccepts)
         {
             continue;
         }
 
-        float coverage = max(smoothstep(lineY, lineY + SnowLayerData::fadeDepth, static_cast<float>(topY)),
-                             this->snowLayers.coldCover[columnIdx]);
+        float coverage = max(smoothstep(lineY, lineY + SnowData::fadeDepth, static_cast<float>(topY)),
+                             this->snow.coldCover[columnIdx]);
         const float partialness = 4.f * coverage * (1.f - coverage);
         if (partialness > 0.f)
         {
-            const ivec2 columnPosXZ_WS = chunkOriginXZ_WS + ivec2(columnIdx % chunkSizeXZ, columnIdx / chunkSizeXZ);
             const float hollowness = this->terrainHollowness_WS(columnPosXZ_WS);
-            coverage += partialness * SnowLayerData::hollowBias *
-                clamp(hollowness / SnowLayerData::hollowScale, -1.f, 1.f);
+            coverage += partialness * SnowData::hollowBias *
+                clamp(hollowness / SnowData::hollowScale, -1.f, 1.f);
         }
-        if (this->snowLayers.patch[columnIdx] >= coverage)
+        if (this->snow.patch[columnIdx] >= coverage)
         {
             continue;
         }
@@ -526,7 +586,7 @@ void Chunk::fillStructuresAndDecorators()
     {
         this->runStructuresAndDecoratorPass();
         this->caveDecoration.release();
-        this->snowLayers.release();
+        this->snow.release();
     }
 
     this->advanceState(ChunkState::HAS_ALL_BLOCKS);
