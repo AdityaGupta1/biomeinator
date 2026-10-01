@@ -7,6 +7,7 @@
 #include "structure/decorator.h"
 #include "structure/structure.h"
 
+#include <array>
 #include <vector>
 
 class RandomNumberGenerator;
@@ -47,7 +48,18 @@ enum class Biome : uint8_t
     RED_DESERT,
     OASIS,
 
+    FLOWER_MEADOW,
+    OLD_GROWTH_FOREST,
+    CHERRY_GROVE,
+    TAIGA,
+
     COUNT
+};
+
+struct TopBlockPatch
+{
+    Block block{ Block::AIR };
+    float minNoise{ 0.f };
 };
 
 struct TopBlocks
@@ -58,6 +70,12 @@ struct TopBlocks
     // fallback) or in the noise-driven shore band just above water level.
     Block underwaterTop{ Block::AIR };
     Block shoreTop{ Block::AIR };
+    // Replace a dry grass top where a shared ground noise in about [-1, 1] exceeds minNoise. Tested in
+    // order, so list the rarest block (highest minNoise) first: coarse dirt inside podzol, as in
+    // vanilla's old-growth taiga.
+    std::array<TopBlockPatch, 2> patches{};
+
+    Block patchedTop(float groundPatchNoise) const;
 };
 
 // Which climate search a biome competes in. Relief and coastline pick the tier; climate then picks

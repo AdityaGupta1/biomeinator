@@ -5,6 +5,8 @@
 
 #include "debug.h"
 
+#include <algorithm>
+
 namespace
 {
 
@@ -45,7 +47,14 @@ void Decorator::addEntry(Block block, float weight, std::initializer_list<Block>
     totalWeight += weight;
 }
 
-Block Decorator::getBlock(float rndSample, Block supportBlock, uint8_t surface) const
+void Decorator::addDriftEntry(Block block, float weight, std::initializer_list<Block> supportBlocks)
+{
+    this->addEntry(block, weight, supportBlocks);
+    this->entries.back().isDrift = true;
+    this->driftBlocks.push_back(block);
+}
+
+Block Decorator::getBlock(float rndSample, float driftSample, Block supportBlock, uint8_t surface) const
 {
     if (this->isEmpty())
     {
@@ -70,7 +79,16 @@ Block Decorator::getBlock(float rndSample, Block supportBlock, uint8_t surface) 
 
     const DecoratorEntry& entry = this->entries[entryIdx];
     const bool supportBlockValid = entry.supportBlocks.empty() || entry.supportBlocks.contains(supportBlock);
-    return supportBlockValid && (entry.surfaces & surface) ? entry.block : Block::AIR;
+    if (!supportBlockValid || !(entry.surfaces & surface))
+    {
+        return Block::AIR;
+    }
+    if (entry.isDrift)
+    {
+        const size_t driftIdx = static_cast<size_t>(driftSample * this->driftBlocks.size());
+        return this->driftBlocks[std::min(driftIdx, this->driftBlocks.size() - 1)];
+    }
+    return entry.block;
 }
 
 bool Decorator::supportsSurface(uint8_t surface, Block supportBlock) const

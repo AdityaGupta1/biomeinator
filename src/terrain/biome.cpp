@@ -26,6 +26,18 @@ BiomeNoise BiomeNoise::randomOffset(const BiomeNoise& base, RandomNumberGenerato
     };
 }
 
+Block TopBlocks::patchedTop(float groundPatchNoise) const
+{
+    for (const TopBlockPatch& patch : this->patches)
+    {
+        if (patch.block != Block::AIR && groundPatchNoise > patch.minNoise)
+        {
+            return patch.block;
+        }
+    }
+    return this->top;
+}
+
 namespace Biomes
 {
 
@@ -213,6 +225,112 @@ void init()
             .top = Block::SNOW,
             .mid = Block::ICE,
         };
+    }
+
+    // FLOWER_MEADOW
+    {
+        BIOME_INIT(FLOWER_MEADOW, "flower meadow");
+        data.tier = BiomeTier::LOWLAND;
+        data.climate = { .temperature = 0.15f, .humidity = 0.1f };
+        data.grassTint = glmUtil::colorFromHex("#86c254");
+        data.structureGens = {
+            {
+                {
+                    { StructureType::OAK_TREE, 60.f },
+                    { StructureType::BIRCH_TREE, 40.f },
+                },
+                48,
+                24,
+            },
+        };
+        data.decorator.addEntry(Block::TALL_GRASS_BOTTOM, 8.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::SHORT_GRASS, 14.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::GRASS, 6.f, { Block::GRASS_BLOCK });
+        data.decorator.addDriftEntry(Block::LUPINE_BOTTOM, 2.5f, { Block::GRASS_BLOCK });
+        data.decorator.addDriftEntry(Block::POPPY, 2.5f, { Block::GRASS_BLOCK });
+        data.decorator.addDriftEntry(Block::CORNFLOWER, 2.5f, { Block::GRASS_BLOCK });
+        data.decorator.addDriftEntry(Block::OXEYE_DAISY_1, 2.5f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::AIR, 12.f);
+    }
+
+    // OLD_GROWTH_FOREST
+    {
+        BIOME_INIT(OLD_GROWTH_FOREST, "old-growth forest");
+        data.tier = BiomeTier::LOWLAND;
+        data.climate = { .temperature = -0.05f, .humidity = 0.5f };
+        data.grassTint = glmUtil::colorFromHex("#4a8a34");
+        data.topBlocks = {
+            .patches = { {
+                { Block::COARSE_DIRT, 0.45f },
+                { Block::PODZOL, -0.1f },
+            } },
+        };
+        data.structureGens = {
+            {
+                {
+                    { StructureType::LARGE_OAK_TREE, 45.f },
+                    { StructureType::OAK_TREE, 35.f },
+                    { StructureType::BIRCH_TREE, 20.f },
+                },
+                12,
+                5,
+            },
+        };
+        data.decorator.addEntry(Block::FERN, 6.f, { Block::GRASS_BLOCK, Block::PODZOL });
+        data.decorator.addEntry(Block::LARGE_FERN_BOTTOM, 3.f, { Block::GRASS_BLOCK, Block::PODZOL });
+        data.decorator.addEntry(Block::SHORT_GRASS, 5.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::BROWN_MUSHROOM, 1.f, { Block::GRASS_BLOCK, Block::PODZOL, Block::COARSE_DIRT });
+        data.decorator.addEntry(Block::LILY_OF_THE_VALLEY, 1.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::WOOD_ANEMONE, 1.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::AIR, 15.f);
+    }
+
+    // CHERRY_GROVE
+    {
+        BIOME_INIT(CHERRY_GROVE, "cherry grove");
+        data.tier = BiomeTier::LOWLAND;
+        data.climate = { .temperature = 0.35f, .humidity = 0.25f };
+        data.grassTint = glmUtil::colorFromHex("#8fc65a");
+        data.structureGens = {
+            { StructureType::CHERRY_TREE, 14, 6 },
+        };
+        data.decorator.addEntry(Block::SHORT_GRASS, 8.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::GRASS, 4.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::PINK_TULIP, 2.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::WHITE_TULIP, 1.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::PINK_DAFFODIL, 2.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::AZURE_BLUET, 1.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::LILY_OF_THE_VALLEY, 1.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::AIR, 12.f);
+    }
+
+    // TAIGA
+    {
+        BIOME_INIT(TAIGA, "taiga");
+        data.tier = BiomeTier::LOWLAND;
+        data.climate = { .temperature = -0.5f, .humidity = 0.2f };
+        data.grassTint = glmUtil::colorFromHex("#6a9a5b");
+        data.topBlocks = {
+            .patches = { {
+                { Block::PODZOL, 0.3f },
+            } },
+        };
+        data.structureGens = {
+            {
+                {
+                    { StructureType::FIR_TREE, 80.f },
+                    { StructureType::PINE_TREE, 15.f },
+                    { StructureType::BIRCH_TREE, 5.f },
+                },
+                9,
+                3,
+            },
+        };
+        data.decorator.addEntry(Block::FERN, 5.f, { Block::GRASS_BLOCK, Block::PODZOL });
+        data.decorator.addEntry(Block::LARGE_FERN_BOTTOM, 1.f, { Block::GRASS_BLOCK, Block::PODZOL });
+        data.decorator.addEntry(Block::SHORT_GRASS, 6.f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::FIREWEED_BOTTOM, 1.5f, { Block::GRASS_BLOCK });
+        data.decorator.addEntry(Block::AIR, 15.f);
     }
 
     // ==================================================

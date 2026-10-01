@@ -155,6 +155,8 @@ inline constexpr float seaIceSnowInlandCovered = -0.02f;
 
 static FN::SmartNode<FN::Generator> fnSnowLine;
 static FN::SmartNode<FN::Generator> fnSnowLayerPatch;
+// Drives the biomes' top-block patches (TopBlocks::patches), e.g. podzol through grass
+static FN::SmartNode<FN::Generator> fnGroundPatch;
 
 static uint worldSeed;
 static ivec2 noiseOffsetXZ;
@@ -257,6 +259,21 @@ void init()
         fnFractal->SetOctaveCount(3);
 
         fnSnowLayerPatch = fnFractal;
+    }
+
+    {
+        // Patches of mixed size, roughly 15-40 blocks across like vanilla's surface noise. Source
+        // range keeps the octave sum near [-1, 1], the range TopBlockPatch::minNoise is set against.
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(830194572);
+        fnSimplex->SetScale(48.0f);
+        fnSimplex->SetOutputMin(-0.55f);
+        fnSimplex->SetOutputMax(0.55f);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnSimplex);
+        fnFractal->SetOctaveCount(3);
+
+        fnGroundPatch = fnFractal;
     }
 
     {
@@ -541,6 +558,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* swampWarpFineZNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* swampShoreNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* snowLineNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    float* groundPatchNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     const auto fillColumnNoise = [&](float* data, const FN::SmartNode<FN::Generator>& fn, uint seedSalt)
     {
         fn->GenUniformGrid2D(data,
@@ -558,6 +576,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     fillColumnNoise(swampWarpFineZNoise, fnSwampWarpFine, 412093871);
     fillColumnNoise(swampShoreNoise, fnSwampShore, 190283475);
     fillColumnNoise(snowLineNoise, fnSnowLine, 748120365);
+    fillColumnNoise(groundPatchNoise, fnGroundPatch, 520938417);
     fillColumnNoise(this->snow.patch.data(), fnSnowLayerPatch, 309184627);
     for (float& patch : this->snow.patch)
     {
@@ -1327,6 +1346,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         else if (topBlockOnShore)
                         {
                             newBlock = topBlocks.shoreTop;
+                        }
+                        else
+                        {
+                            newBlock = topBlocks.patchedTop(groundPatchNoise[columnIdx]);
                         }
                     }
                     // Outside the grass rules, not an arm of them: the cap has to replace stone

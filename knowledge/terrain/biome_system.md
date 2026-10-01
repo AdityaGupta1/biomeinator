@@ -132,3 +132,9 @@ Both follow climate rather than labels, with no landform exceptions; a landform 
 never snow needs a climate reason in the line, not a `BiomeData` flag. A cold
 biome should therefore use a plain grass top and let layers whiten it, rather than hardcoding
 snowy grass, which would leave no transition.
+
+`TopBlocks::patches` breaks a dry grass top into noise-driven patches (podzol, coarse dirt), the way
+vanilla's old-growth taiga does. All biomes share one ground noise, so patches in neighboring
+biomes line up across the border instead of restarting at the label. Patches replace only grass that the underwater and shore rules left alone, and run before
+the snow cap. Decorators read the patched block as their support, so a biome with patches has to
+list podzol or coarse dirt in its decorator supports, or those patches stay bare.
