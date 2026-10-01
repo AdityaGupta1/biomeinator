@@ -303,6 +303,15 @@ static_assert(sizeof(PackedTerrainVertex) == 12, "PackedTerrainVertex must be 12
 #define FACE_FLAG_PROCEDURAL_COLOR (1 << 5)
 // The terrain texture array slice has a normal map.
 #define FACE_FLAG_NORMAL_MAP (1 << 6)
+// The terrain texture array slice has at least one per-texel mask bit set in packed aux alpha
+// (AUX_MASK_*), so hits must decode it (see applyAuxMasks)
+#define FACE_FLAG_AUX_MASKS (1 << 7)
+
+// Per-texel binary masks packed as bits into the terrain aux alpha channel at startup. Each is
+// authored as its own <texture>.<suffix>.png (see TerrainMaterials::auxMaskDefs). Voxel mode point
+// samples, so a sample always reads one texel's bits intact; mips are built per bit.
+// Texels shaded as diffuse with a glossy reflection coat on top, roughness from aux b
+#define AUX_MASK_GLOSSY (1u << 0)
 
 #define FACE_FLAGS_BITS 16
 #define FACE_FLAGS_MASK ((1u << FACE_FLAGS_BITS) - 1u)

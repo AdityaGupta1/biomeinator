@@ -25,6 +25,8 @@ static std::array<uint32_t, static_cast<size_t>(TerrainMaterial::COUNT)> materia
 // Aux map g channel is the biome tint mask; per-slice presence drives FACE_FLAG_BIOME_TINT
 static std::vector<bool> sliceBiomeTintMask;
 static std::vector<bool> sliceNormalMap;
+// Whether the aux tile carries any AUX_MASK_* bit; drives FACE_FLAG_AUX_MASKS
+static std::vector<bool> sliceAuxMasks;
 
 #define MATERIAL_IDX(material) materialIdxs[static_cast<size_t>(material)]
 
@@ -66,7 +68,9 @@ static void createMaterials(Scene* scene)
                                                           .outSliceHasBiomeTintMask = &sliceBiomeTintMask,
                                                           .alphaOverrides = &diffuseAlphas,
                                                           .useOpaqueCutoutMips = useOmms,
-                                                          .missingFilesAreZero = true });
+                                                          .missingFilesAreZero = true,
+                                                          .mergeAuxMasks = true,
+                                                          .outSliceHasAuxMasks = &sliceAuxMasks });
     if (auxTextureId == TEXTURE_ID_INVALID)
     {
         return;
@@ -117,6 +121,11 @@ bool sliceHasBiomeTint(uint32_t sliceIdx)
 bool sliceHasNormalMap(uint32_t sliceIdx)
 {
     return sliceIdx < sliceNormalMap.size() && sliceNormalMap[sliceIdx];
+}
+
+bool sliceHasAuxMasks(uint32_t sliceIdx)
+{
+    return sliceIdx < sliceAuxMasks.size() && sliceAuxMasks[sliceIdx];
 }
 
 } // namespace TerrainMaterials

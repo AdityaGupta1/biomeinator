@@ -754,6 +754,10 @@ static PerFaceData makeBlockFaceData(const BlockData& block, uint32_t slice, uin
     {
         flags |= FACE_FLAG_NORMAL_MAP;
     }
+    if (TerrainMaterials::sliceHasAuxMasks(slice))
+    {
+        flags |= FACE_FLAG_AUX_MASKS;
+    }
     if (block.translucent)
     {
         flags |= FACE_FLAG_DIFFUSE_TRANSMISSION;

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-10_
+_Last edited: 2026-09-30_
 
 # Blender glTF Export
 
@@ -8,7 +8,8 @@ glTF export operator; `blender/reexport_gltf.py` drives it headlessly
 scenes can be regenerated without opening the UI.
 
 Blender is not on `PATH`; it is typically reachable through the shortcut `D:\blender.lnk`. If
-that shortcut is missing, ask the user where Blender is installed rather than guessing.
+that shortcut is missing, ask the user where Blender is installed rather than guessing. This
+applies to every Blender script in `blender/`, including `generate_normal_maps.py`.
 
 ## Node group design
 

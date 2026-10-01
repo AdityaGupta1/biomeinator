@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-23_
 
 # Material Model and BSDFs
 
@@ -173,3 +173,17 @@ sampling GGX, just as dielectric sampling does. A zero-density mixture sample is
 terminated with `deadBsdfSample`, avoiding `0 / 0` throughput and accumulated black pixels.
 The GGX distribution keeps its small alpha-squared term separate from subtraction from one;
 `precise` prevents compiler reassociation from reintroducing cancellation near smooth peaks.
+
+## Glossy mask texels (mixed glossy + diffuse in voxel mode)
+
+Faces flagged `FACE_FLAG_AUX_MASKS` decode the aux alpha bitfield per hit (`applyAuxMasks`, see
+[scene → materials_textures.md](../scene/materials_textures.md)). An `AUX_MASK_GLOSSY` texel keeps
+the shared terrain material's diffuse lobe and *adds* glossy reflection over it — the macro-normal
+Fresnel "glossy over diffuse" convention above, as glTF materials already use — untinted, with
+roughness from aux b and a fixed coat IOR. It runs where the glass override does and is skipped on
+glass faces, which replace the diffuse lobe outright.
+
+The closest hit decides `hasGlossy` (which enables Cycles' specular-reflection normal correction)
+before the texel is known, so every mask-bearing face gets the correction. That is conservative:
+the correction only moves shading normals whose reflection would dip below the geometric surface,
+which a diffuse texel never depends on.
