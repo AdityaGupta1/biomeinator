@@ -152,4 +152,5 @@ holding `Chunk*` pointers into a torn-down `regions` map would crash, hence the 
 
 Unit tests cover the v7 codec in isolation and rendering tests cover imported worlds.
 Neither exercises fresh generation across an exported boundary, which is where lost or
-reordered generation inputs show up; check that separately when changing them.
+reordered generation inputs show up; check that with the
+[resume generation harness](../tests/resume_generation.md) when changing them.
