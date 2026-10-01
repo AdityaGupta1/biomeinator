@@ -1,4 +1,4 @@
-_Last edited: 2026-09-02_
+_Last edited: 2026-09-23_
 
 # Shaders Knowledgebase
 
@@ -14,4 +14,4 @@ Shaders are organized into subdirectories under `src/shaders/`: `common/` (share
 | [collect.md](collect.md) | Temporal accumulation compute shader, tonemapping (AGX, Khronos) |
 | [common_structs.md](common_structs.md) | CPU/GPU shared structs, params, registers, enums, hit groups |
 | [hlsli_libraries.md](hlsli_libraries.md) | Utility .hlsli headers: math, rng, sampling, material, dome |
-| [shader_compilation.md](shader_compilation.md) | dxc build-time compilation, .hlsl → .fxh embedding, shader types |
+| [shader_compilation.md](shader_compilation.md) | dxc quirks around DXR payload access qualifiers |

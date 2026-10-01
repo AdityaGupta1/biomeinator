@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-22_
 
 # Terrain Knowledgebase
 
@@ -12,11 +12,12 @@ Procedural voxel world: chunk lifecycle, noise generation, biomes, structures, a
 | [chunk_segments.md](chunk_segments.md) | 4×8×4 ChunkSegment subdivision, AIR/SOLID_SURROUNDED/MIXED culling |
 | [chunk_generator.md](chunk_generator.md) | FastNoise2-based height maps, cave carving, coarse cave fields, biome allocation |
 | [CPU terrain experiments](../tests/cpu_terrain_benchmarks.md) | Temporary benchmark harness to adapt for algorithm comparisons, with timing and correctness gotchas |
-| [biome_system.md](biome_system.md) | Voronoi biome distribution, BiomeNoise parameters, swamp override |
+| [biome_system.md](biome_system.md) | Noise-chooses-biome-and-terrain rule, regime table and weights, tiers and climate targets |
+| [terrain_profiles.md](terrain_profiles.md) | Shared erosion shaping, reusable formations, strata and contained pond oases |
 | [cave_biome_system.md](cave_biome_system.md) | 3D cave biome noise, downsampled classification, surface bias, carve-noise skin/fringe, secondary rock |
 | [block_system.md](block_system.md) | JSON block definitions, generated Block enum, BlockData, emissive blocks |
 | [custom_models.md](custom_models.md) | Cached GLB decorator geometry, placement, rotation, opaque-atlas contract |
-| [structure_system.md](structure_system.md) | StructureGen grid placement, structure types, StructureBounds |
+| [structure_system.md](structure_system.md) | Ground grids, reusable ledge placement, clearance/spacing and cross-chunk filling |
 | [cave_structure_system.md](cave_structure_system.md) | Underground floor/ceiling structures, column-centric placement, CaveLayer capture, terrain air mask, type-major fill order |
 | [decorator_system.md](decorator_system.md) | Per-biome vegetation decorators, weighted random block placement, all-face cave decorators |
 | [greedy_meshing.md](greedy_meshing.md) | Voxel-to-mesh greedy merge, UV assignment, crack prevention |

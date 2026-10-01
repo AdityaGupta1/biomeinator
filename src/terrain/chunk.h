@@ -173,6 +173,10 @@ private:
     // underground transition (cave floor) from the terrain surface.
     std::vector<uint16_t> terrainTopY{};
     std::vector<Structure> structures{};
+    std::vector<SurfaceStructureCandidate> surfaceStructureCandidates{};
+    // Owner-only accepted list for export. Neighbors read the immutable candidates,
+    // never this list, which is populated during structure filling.
+    std::vector<Structure> placedSurfaceStructures{};
     std::vector<CaveStructure> caveStructures{};
     std::vector<const Chunk*> structureNeighbors{};
     std::atomic<uint32_t> numReadyStructureNeighbors{ 0 };
@@ -194,6 +198,7 @@ private:
     void buildTerrainAirMask();
     bool getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const;
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
+    void placeSurfaceStructures();
     void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures, CaveStructureType type);
     void runStructuresAndDecoratorPass();
 
@@ -243,7 +248,7 @@ public:
 
     const std::vector<Block>& getBlocks() const;
     const std::vector<Biome>& getBiomes() const;
-    const std::vector<Structure>& getStructures() const;
+    std::vector<Structure> getStructures() const;
     const std::unordered_map<uint32_t, uint8_t>& getBlockStates() const;
 
     void loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes,

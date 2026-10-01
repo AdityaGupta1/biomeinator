@@ -335,7 +335,6 @@ static uint32_t loadBlockTextureArray(Scene* scene,
     namespace fs = std::filesystem;
 
     const fs::path texturesDir = fs::path(TARGET_FILE_DIR) / fs::path("assets/blocks/textures/");
-
     constexpr uint32_t numMips = 5;
     static_assert(TERRAIN_TILE_SIZE >> (numMips - 1) == 1);
     constexpr size_t texelCount = static_cast<size_t>(TERRAIN_TILE_SIZE) * TERRAIN_TILE_SIZE;

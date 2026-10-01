@@ -650,16 +650,16 @@ void render()
     const double animTimeDelta = renderState.animTime - renderState.prevAnimTime;
     renderState.prevAnimTime = renderState.animTime;
 
-    const bool waitingForImport = renderState.headless && renderState.voxelMode && !Terrain::pollHeadlessImport();
+    const bool waitingForTerrain = renderState.headless && renderState.voxelMode && !Terrain::pollHeadlessTerrain();
 
-    perfRunUpdate(renderState.scene.hasTlas() && !waitingForImport, didSceneChange);
+    perfRunUpdate(renderState.scene.hasTlas() && !waitingForTerrain, didSceneChange);
 
-    if (resetAccumulation)
+    if (resetAccumulation || waitingForTerrain)
     {
         renderState.accumulatedFrameNumber = 0;
         renderState.stopAccumulating = false;
     }
-    else if (!renderState.stopAccumulating && !waitingForImport)
+    else if (!renderState.stopAccumulating)
     {
         if (++renderState.accumulatedFrameNumber == SettingsManager::getAsUint("maxAccumulatedFrames"))
         {

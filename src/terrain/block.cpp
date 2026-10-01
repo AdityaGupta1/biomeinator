@@ -49,7 +49,41 @@ static const std::unordered_map<std::string, BlockShape> blockShapesByName = {
     { "x_shaped", BlockShape::X_SHAPED },
     { "liquid_top", BlockShape::LIQUID_TOP },
     { "decorator_custom", BlockShape::DECORATOR_CUSTOM },
+    { "layer", BlockShape::LAYER },
 };
+
+// Culling contract for partial-height solids, checked at compile time. The height comparison
+// replaced shape-equality tests that were written for lava alone, so the first group pins the
+// pre-existing lava/cube behavior; the second is the snow-layer behavior built on it.
+namespace
+{
+constexpr int sideFace = blockFaceIndex(BlockFace::X_POS);
+constexpr int topFace = blockFaceIndex(BlockFace::Y_POS);
+constexpr int bottomFace = blockFaceIndex(BlockFace::Y_NEG);
+constexpr bool solidFaceVisible(BlockShape shape, BlockShape neighborShape, int face)
+{
+    return blockFaceVisible(BlockType::SOLID, shape, BlockType::SOLID, neighborShape, face);
+}
+
+static_assert(!solidFaceVisible(BlockShape::CUBE, BlockShape::CUBE, sideFace));
+static_assert(!solidFaceVisible(BlockShape::LIQUID_TOP, BlockShape::LIQUID_TOP, sideFace)); // adjacent lava tops
+static_assert(solidFaceVisible(BlockShape::CUBE, BlockShape::LIQUID_TOP, sideFace));
+static_assert(!solidFaceVisible(BlockShape::LIQUID_TOP, BlockShape::CUBE, sideFace));
+static_assert(solidFaceVisible(BlockShape::LIQUID_TOP, BlockShape::CUBE, topFace));
+static_assert(!solidFaceVisible(BlockShape::CUBE, BlockShape::CUBE, topFace));
+static_assert(solidFaceVisible(BlockShape::CUBE, BlockShape::LIQUID_TOP, bottomFace));
+
+static_assert(!solidFaceVisible(BlockShape::LAYER, BlockShape::LAYER, sideFace)); // like lava: shared face hidden
+static_assert(!solidFaceVisible(BlockShape::LAYER, BlockShape::CUBE, sideFace));
+static_assert(solidFaceVisible(BlockShape::CUBE, BlockShape::LAYER, sideFace));
+static_assert(solidFaceVisible(BlockShape::LIQUID_TOP, BlockShape::LAYER, sideFace));
+static_assert(!solidFaceVisible(BlockShape::LAYER, BlockShape::LIQUID_TOP, sideFace));
+static_assert(!solidFaceVisible(BlockShape::CUBE, BlockShape::LAYER, topFace)); // ground under a layer
+static_assert(solidFaceVisible(BlockShape::LAYER, BlockShape::CUBE, topFace));
+static_assert(!solidFaceVisible(BlockShape::LAYER, BlockShape::CUBE, bottomFace));
+static_assert(blockFaceVisible(BlockType::TRANSPARENT_CUTOUT, BlockShape::CUBE, BlockType::SOLID, BlockShape::LAYER, sideFace));
+static_assert(!blockFaceVisible(BlockType::TRANSPARENT_CUTOUT, BlockShape::CUBE, BlockType::SOLID, BlockShape::LAYER, topFace));
+} // namespace
 
 static const std::unordered_map<std::string, BlockStateKind> blockStateKindsByName = {
     { "none", BlockStateKind::NONE },

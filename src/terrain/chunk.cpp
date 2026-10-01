@@ -231,6 +231,8 @@ void Chunk::runStructuresAndDecoratorPass()
         this->fillStructureBlocks(neighborStructures.data(), neighborStructures.size());
     }
 
+    this->placeSurfaceStructures();
+
     // Cave structures fill one type at a time in enum order so a type's blocks are all in place
     // before a lower-priority type (e.g. vines) reads the world around it
     for (uint32_t typeIdx = 0; typeIdx < static_cast<uint32_t>(CaveStructureType::COUNT); ++typeIdx)
@@ -931,13 +933,17 @@ void Chunk::createInstances()
                             appendOmmIdxs(texArraySliceIdx, 4);
                         }
                     }
-                    else // BlockShape::LIQUID_TOP or BlockShape::CUBE
+                    else // BlockShape::CUBE, LIQUID_TOP or LAYER
                     {
                         const bool isWater = (blockData.type == BlockType::WATER);
                         std::vector<Vertex>& verts = isWater ? waterVerts : terrainVerts;
                         std::vector<uint32_t>& idxs = isWater ? waterIdxs : terrainIdxs;
                         std::vector<PerFaceData>& perFaceDatas = isWater ? waterPerFaceDatas : terrainPerFaceDatas;
-                        const float topYSubtract = (blockData.shape == BlockShape::LIQUID_TOP) ? (1.f / 8.f) : 0.f;
+                        const float topHeight = blockShapeTopHeight(blockData.shape);
+                        const float topYSubtract = 1.f - topHeight;
+                        // A layer's side faces show the top strip of the texture instead of the whole
+                        // tile squeezed into 1/8 of a block. Lava tops keep the full tile, as before.
+                        const bool cropSideUvs = (blockData.shape == BlockShape::LAYER);
 
                         for (uint faceIdx = 0; faceIdx < blockFaceCount; ++faceIdx)
                         {
@@ -961,7 +967,14 @@ void Chunk::createInstances()
                                     vertPos_CS.y -= topYSubtract;
                                 }
 
-                                verts.emplace_back(makeVertex(vertPos_CS, vec3(neighborOffset), vec2(uvOffsets[i])));
+                                vec2 uv = vec2(uvOffsets[i]);
+                                // Side faces (+X, +Z, -X, -Z) run v = 0 at the top edge to 1 at the bottom
+                                if (cropSideUvs && faceIdx < 4 && thisFaceVertPositions[i].y == 0)
+                                {
+                                    uv.y = topHeight;
+                                }
+
+                                verts.emplace_back(makeVertex(vertPos_CS, vec3(neighborOffset), uv));
                             }
 
                             const uint32_t triangleIdx = static_cast<uint32_t>(idxs.size() / 3u);
@@ -1181,9 +1194,13 @@ const std::vector<Biome>& Chunk::getBiomes() const
     return this->biomes;
 }
 
-const std::vector<Structure>& Chunk::getStructures() const
+std::vector<Structure> Chunk::getStructures() const
 {
-    return this->structures;
+    // Grid structures plus the accepted surface structures this chunk owns; transient
+    // surface candidates are never exported.
+    std::vector<Structure> result = this->structures;
+    result.insert(result.end(), this->placedSurfaceStructures.begin(), this->placedSurfaceStructures.end());
+    return result;
 }
 
 const std::unordered_map<uint32_t, uint8_t>& Chunk::getBlockStates() const

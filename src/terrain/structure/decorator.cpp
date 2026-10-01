@@ -19,13 +19,6 @@ void Decorator::addEntry(Block block, float weight, std::initializer_list<Block>
 {
     ASSERT(weight > 0.f);
     ASSERT((surfaces & ~DECORATOR_SURFACE_ALL) == 0 && surfaces != 0);
-    if (block != Block::AIR && (surfaces & (DECORATOR_SURFACE_WALL | DECORATOR_SURFACE_CEILING)))
-    {
-        const BlockData& blockData = Blocks::getBlockData(block);
-        ASSERT(blockData.shape == BlockShape::DECORATOR_CUSTOM &&
-               blockData.stateKind == BlockStateKind::SURFACE_MOUNT,
-               "wall/ceiling decorators require a surface-mounted custom model");
-    }
     this->entries.push_back({
         block,
         weight,
@@ -91,4 +84,9 @@ bool Decorator::supportsSurface(uint8_t surface, Block supportBlock) const
 bool Decorator::isEmpty() const
 {
     return this->entries.empty();
+}
+
+const std::vector<DecoratorEntry>& Decorator::getEntries() const
+{
+    return this->entries;
 }

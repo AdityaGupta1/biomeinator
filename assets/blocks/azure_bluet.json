@@ -1,0 +1,7 @@
+{
+    "textures": "azure_bluet",
+    "type": "transparent_cutout",
+    "shape": "x_shaped",
+    "randomJitter": true,
+    "translucent": true
+}

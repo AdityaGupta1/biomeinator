@@ -17,8 +17,7 @@ struct BiomeNoise
     float humidity{ 0.f };
     float peak{ 0.f };
     float inland{ 0.f };
-
-    float distance2(const BiomeNoise& other) const;
+    float erosion{ 0.f };
 
     static BiomeNoise randomOffset(const BiomeNoise& base, RandomNumberGenerator& rng);
 };
@@ -43,6 +42,11 @@ enum class Biome : uint8_t
 
     SWAMP,
 
+    MESA,
+    TIANZI_MOUNTAINS,
+    RED_DESERT,
+    OASIS,
+
     COUNT
 };
 
@@ -56,10 +60,31 @@ struct TopBlocks
     Block shoreTop{ Block::AIR };
 };
 
+// Which climate search a biome competes in. Relief and coastline pick the tier; climate then picks
+// the nearest target within it.
+enum class BiomeTier : uint8_t
+{
+    // Never a climate candidate: chosen by a terrain regime or a spatial feature (oasis).
+    NONE,
+    OCEAN,
+    BEACH,
+    LOWLAND,
+    HIGHLAND,
+
+    COUNT
+};
+
+struct ClimateTarget
+{
+    float temperature{ 0.f };
+    float humidity{ 0.f };
+};
+
 struct BiomeData
 {
     const char* name{ "" };
-    BiomeNoise biomeNoise{};
+    BiomeTier tier{ BiomeTier::NONE };
+    ClimateTarget climate{};
     TopBlocks topBlocks{};
     glm::vec3 grassTint{ 1.f, 1.f, 1.f }; // sRGB
     std::vector<StructureGen> structureGens{};

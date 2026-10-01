@@ -16,7 +16,10 @@ void Camera::init(float defaultFovYRadians)
 {
     if (SettingsManager::getAsBool("voxelMode"))
     {
-        this->setPos_WS({ 0, 196.f, 0 });
+        this->setPos_WS({ SettingsManager::getAsFloat("cameraX"), SettingsManager::getAsFloat("cameraY"),
+                          SettingsManager::getAsFloat("cameraZ") });
+        this->theta = glm::radians(SettingsManager::getAsFloat("cameraYaw"));
+        this->phi = glm::radians(glm::clamp(SettingsManager::getAsFloat("cameraPitch"), -89.f, 89.f));
     }
     else
     {

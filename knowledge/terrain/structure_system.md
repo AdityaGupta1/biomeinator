@@ -1,10 +1,11 @@
-_Last edited: 2026-08-23_
+_Last edited: 2026-09-22_
 
 # Structure System
 
-`src/terrain/structure/structure.h/cpp` — places multi-block structures (trees, cacti) using grid-based candidate generation. Spacing is enforced by construction (padding), not by any pairwise distance check.
+Surface structures separate geometry from placement rules. The default uses a padded XZ
+grid; an opt-in exposed-surface mode finds ledges and fits/thins plants in three dimensions.
 
-## Placement Algorithm
+## Default ground grid
 
 Each `StructureGen` overlays a world-space grid of `gridCellSideLength` cells. Each cell deterministically produces exactly one candidate (RNG seeded by cell corner + structure type), jittered within an inner region inset by `gridCellPadding` on the cell's **high edge only** (low edge flush to the corner). Because there is one candidate per cell and the inset reserves `gridCellPadding` blocks before the next cell, candidates in adjacent cells are always at least `gridCellPadding + 1` apart — spacing is guaranteed without ever measuring distance. This replaced an earlier scheme that scanned the 8 neighbour cells and rejected on a `minRadius`.
 
@@ -22,6 +23,53 @@ Additional rejection: must be in this chunk's bounds, on valid ground (heightfie
 
 **Gotcha:** `StructureType` values are serialized by value in world exports (8-bit packed field), so new types must be appended to the enum, never inserted.
 
+## Exposed-surface placement
+
+Setting a gen's `surfacePlacement` replaces its grid with an actual surface scan. Every
+eligible upward-facing support is considered, including shelves below the highest surface
+in a column. The ground-block whitelist belongs to the rule, and cave-air anchors are excluded
+before cave metadata is released. A grid can't do this: even one scanning several Y surfaces
+per grid point misses narrow ledges between its sparse XZ points.
+
+Each variant supplies a supported footprint, a clear trunk envelope and horizontal/vertical
+spacing. Configure these for the geometry when opting in. Neighbors may be one block lower
+than the anchor for support; the anchor itself must be a full solid cube. Clearance checks
+actual terrain air, not a heightfield. The clearance radius controls how much space is reserved
+around the trunk; zero requires a clear trunk while allowing foliage to meet a backing cliff.
+Weighted selection considers only variants that fit, so short
+plants fill low shelves without type-specific fallback logic. Tianzi enables the mode for
+pines and shrubs; the placement code knows nothing about that biome or those tree types.
+Terrain still controls soil and exposed rock independently.
+
+Spacing uses world-XYZ hash priorities and ellipsoidal exclusion volumes. A fitting candidate
+with higher priority (smaller hash) suppresses a nearby one even if it is itself suppressed
+elsewhere. This is
+deliberately a local thinning rule, not a recursive greedy packing algorithm: the latter could
+depend on arbitrarily distant sites or chunk generation order. The larger spacing of the two
+variants wins. Different elevation shelves can coexist, and shrubs need less room than pines.
+As with the grid, separate gens do not compete with each other.
+
+Each destination buckets a gen's candidates on an XZ grid over the neighborhood whose cells
+are at least that gen's largest spacing, so competitors are found in the adjacent 3x3 cells
+instead of an all-pairs scan (one candidate per exposed surface makes the all-pairs cost
+quadratic). Buckets are ranges of one index array (counting sort). Candidates farther than
+geometry reach plus spacing from the destination are dropped first: they can neither reach it
+nor suppress a candidate that does. Accepted structures are still filled in neighbor order,
+which every destination shares, so overlapping trees resolve identically across chunk borders.
+
+Terrain publishes immutable surface candidates alongside its immutable air/full-cube masks.
+Filling waits for the existing 3x3 neighborhood, and each destination independently resolves
+the candidates whose geometry can reach it. Never consult mutable neighbor blocks, release
+the candidates after filling, or read another chunk's in-progress accepted list. A bound on
+**geometry reach + competition reach + fit-probe reach** must fit the ready terrain halo;
+an assertion enforces it when a rule is used. Opting a much wider structure into this mode
+may require expanding that dependency halo, not just increasing its spacing values.
+
+The owner additionally records accepted structures for export. `getStructures()` combines
+those with ordinary grid structures by value; exports retain their existing format and do
+not serialize transient candidates or pointers into biome configuration. Imported final
+blocks and accepted structures retain the existing import behavior.
+
 ## Cross-Chunk Filling
 
 Structures can extend beyond their origin chunk (e.g. palm trees with ±12 block bounds). The `structureNeighbors` system solves this:
@@ -31,11 +79,28 @@ Structures can extend beyond their origin chunk (e.g. palm trees with ±12 block
 
 ## `tryPlaceStructureBlock`
 
-Only writes if the target is AIR/WATER/WATER_TOP. This means structures can't carve into each other or the terrain — first-placed wins. Since all chunks fill from the same deterministic structure list, ordering doesn't matter.
+Only writes if the target is AIR/WATER/WATER_TOP. Structures cannot carve into each other or
+terrain: first-placed wins. Keep overlapping structures in consistent world order in every
+destination chunk; worker scheduling is independent of that per-chunk fill order.
 
 ## Helper Functions
 
 `structure_helpers.h` provides `fillLine` (3D Bresenham), `buildSpline` (de Casteljau Bezier), `placeLeafCap` (radial disc with tapering radius), and `placeLeafBlob` (y-squashed sphere). These handle chunk-bounds clipping internally so structure generators don't need to.
+
+Tianzi's taller pine variant has short trunks and separate, shallow foliage whorls with
+visible trunk between them. Those gaps are intentional: the user's later pine/spruce
+references supersede the earlier request to cover every log in the canopy. A continuous
+per-Y taper made solid cones, and widening that taper's tip produced boxy crowns. Instead,
+vary the spacing and outline of the boughs, taper their widths gently, and use a single small
+asymmetric cap over the trunk end. Sparse outer drooping leaves add thickness without filling
+the gaps around the trunk. Draw fringe randomness before chunk clipping. The blobby shrub
+retains its separate shape. Keep the tall variant's required headroom synchronized with its
+highest leaf layer when changing its height range.
+
+Pine trunks may replace pine foliage. Trees rooted at different elevations on cliff steps
+can have overlapping crowns even with anchor spacing; first-write-wins for leaves otherwise
+left gaps in a later trunk. Logs win over pine leaves regardless of fill order, while terrain
+and other solid blocks remain protected. The trunk fill draws no RNG and clips per voxel.
 
 **Local-ground scanning:** fill functions get no heightfield, but `blocks` already contains
 generated terrain, so a fill function can scan a column downward to seat sub-features on local

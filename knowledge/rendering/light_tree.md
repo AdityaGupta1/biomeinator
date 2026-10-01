@@ -1,8 +1,8 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-23_
 
 # Light Tree Build
 
-Stages 1–3 of the Real-Time Stochastic Lightcuts plan (`plans/plan.md`). Builds
+Stages 1–3 of the Real-Time Stochastic Lightcuts (RTSL) implementation. Builds
 a GPU perfect-binary tree over emissive triangles, rebuilt on every area-light
 topology change. Stage 4 (path-tracer sampler) is what consumes it; this entry
 covers everything up to but not including that consumer.

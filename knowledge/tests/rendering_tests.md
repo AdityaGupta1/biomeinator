@@ -46,6 +46,18 @@ ctest --test-dir build -C RelWithDebInfo -L unit --output-on-failure
 ctest --test-dir build -C RelWithDebInfo -L rendering --output-on-failure
 ```
 
+## Procedural entries
+
+A test entry has a `scene` (glTF), a `world` (saved export), or neither: a procedurally generated
+voxel world configured entirely by its args (`--voxelMode`, `--worldSeed`, `--renderDistance`,
+`--cameraX/Y/Z`, `--cameraYaw/Pitch` in degrees, as a world export stores its camera). Headless
+capture waits for the complete geometry ring before accumulating. Use procedural entries for
+features that should track current generation, like `grass_biome_blend`'s real biome edge: an
+imported world keeps its saved blocks but still takes grass tint from the current biome noise,
+so it would test neither the old nor the new biomes cleanly. Procedural goldens need
+regenerating whenever world generation changes; keep their render distance small to bound
+generation time.
+
 ## Reference images
 
 Each glTF test folder holds a `.blend` (the source of truth), the exported `.gltf`/`.bin`
