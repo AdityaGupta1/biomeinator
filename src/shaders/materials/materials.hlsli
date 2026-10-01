@@ -153,10 +153,12 @@ static const float scatteringDiffuseTransmission = 0.85f;
 // Turns the hit's material into a surface standing in for a scattering medium (ice), for faces
 // flagged FACE_FLAG_IS_SCATTERING: light that gets past the untinted glossy reflection scatters
 // inside and leaves through either side, approximated by a diffuse lobe that transmits part of it.
-// Roughness comes from the packed aux b channel, as for glass.
+// Roughness comes from the packed aux b channel, as for glass. Fresnel is per microfacet: the
+// near index-matched ice-water face total-internally-reflects within a few degrees of grazing, which
+// a shading-normal Fresnel would turn into a hard mirror line across the ice underside.
 void applyScatteringMaterial(inout Material material, const float2 uv, const TexSampleCtx texCtx)
 {
-    material.flags |= MATERIAL_FLAG_GLOSSY_REFLECTION;
+    material.flags |= MATERIAL_FLAG_GLOSSY_REFLECTION | MATERIAL_FLAG_MICROFACET_FRESNEL;
     material.glossyReflectionTint = float3(1.f, 1.f, 1.f);
     material.roughness = getPackedAuxRoughness(material, uv, texCtx);
     material.diffuseTransmission = scatteringDiffuseTransmission;
@@ -189,9 +191,12 @@ float3 calculateDlssSpecularAlbedo(const float3 glossyReflectionTint, const floa
     return mad(glossyReflectionTint, max(0, scale), max(0, bias));
 }
 
-// Probability of choosing the glossy reflection lobe in sampleBsdf; also the Fresnel weight applied
-// to that lobe, so it cancels out of the sampling weight. sampleBsdf and evaluateBsdf must use the exact
-// same value or MIS breaks silently.
+// Probability of choosing the glossy reflection lobe in sampleBsdf, and the share of light the diffuse
+// lobe beneath it doesn't get. With shading-normal Fresnel it is also the Fresnel weight applied to the
+// glossy lobe, so it cancels out of the sampling weight. With microfacet Fresnel the glossy lobe instead
+// carries F at its half vector and this is that F's average over the visible microfacets, tabulated, so
+// sampleBsdf's per-microfacet choice picks diffuse with (up to table error) one minus this probability.
+// sampleBsdf and evaluateBsdf must use the exact same value or MIS breaks silently.
 float glossyReflectionProbability(const Material material, const float3 wo_WS, const float3 surfShadingNor_WS)
 {
     if (!material.hasGlossyReflection())
@@ -202,7 +207,18 @@ float glossyReflectionProbability(const Material material, const float3 wo_WS, c
     {
         return 1.f;
     }
-    return walterFresnel(material.ior, cosTheta(wo_WS, surfShadingNor_WS));
+    const float cosThetaWo = cosTheta(wo_WS, surfShadingNor_WS);
+    if (material.hasMicrofacetFresnel() && material.roughness > 0.f)
+    {
+        return ggxFresnelAlbedo(material.roughness, saturate(cosThetaWo), material.ior);
+    }
+    return walterFresnel(material.ior, cosThetaWo);
+}
+
+// Fresnel weight of the rough glossy reflection lobe for the microfacet h_WS
+float glossyReflectionFresnel(const Material material, const float3 wo_WS, const float3 h_WS, const float fresnelReflectance)
+{
+    return material.hasMicrofacetFresnel() ? walterFresnel(material.ior, dot(wo_WS, h_WS)) : fresnelReflectance;
 }
 
 // Terms shared by the value and pdf of the dielectric lobe (glossy reflection + glossy transmission, i.e. glass).
@@ -377,10 +393,11 @@ BsdfEval evaluateBsdf(const Material material,
             // fresnelReflectance, mirroring the Blender node group's Fresnel-node mix.
             const float3 multipleScatteringCompensation =
                 ggxEnergyCompensation(material.roughness, cosThetaWo, material.glossyReflectionTint);
-            result.value += material.glossyReflectionTint * fresnelReflectance * multipleScatteringCompensation * d * g2 /
+            const float lobeFresnel = glossyReflectionFresnel(material, wo_WS, h_WS, fresnelReflectance);
+            result.value += material.glossyReflectionTint * lobeFresnel * multipleScatteringCompensation * d * g2 /
                             (4.f * cosThetaWo * cosThetaWi);
             // VNDF density of the half vector, mapped to wi through the reflection Jacobian
-            result.pdf += fresnelReflectance * ggxSmithG1(alpha, cosThetaWo) * d / (4.f * cosThetaWo);
+            result.pdf += lobeFresnel * ggxSmithG1(alpha, cosThetaWo) * d / (4.f * cosThetaWo);
         }
     }
 
@@ -516,14 +533,32 @@ BsdfSample sampleBsdf(const Material material,
     }
 
     const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfShadingNor_WS);
-    const bool chooseReflect = rng.nextFloat() < fresnelReflectance; // nextFloat() is in [0, 1), so F = 0 and F = 1 are exact
+    const float alpha = material.roughness * material.roughness;
+    // Microfacet Fresnel picks the lobe per sampled microfacet, as the dielectric does
+    const bool sampleMicrofacetFirst = material.hasMicrofacetFresnel() && material.roughness > 0.f;
+    // A mapped normal can face away from wo even when its mirror reflection is
+    // above the geometric surface. GGX has no visible microfacets from that side;
+    // evaluating such a sample would give value = pdf = 0 and poison accumulation.
+    const bool woFacesAway = cosTheta(wo_WS, surfShadingNor_WS) <= 0.f;
+    float3 h_WS = surfShadingNor_WS;
+    bool chooseReflect;
+    if (sampleMicrofacetFirst)
+    {
+        if (woFacesAway)
+        {
+            return deadBsdfSample(surfShadingNor_WS);
+        }
+        h_WS = sampleGgxVndf(wo_WS, surfShadingNor_WS, alpha, rng);
+        chooseReflect = rng.nextFloat() < walterFresnel(material.ior, dot(wo_WS, h_WS));
+    }
+    else
+    {
+        chooseReflect = rng.nextFloat() < fresnelReflectance; // nextFloat() is in [0, 1), so F = 0 and F = 1 are exact
+    }
 
     if (chooseReflect)
     {
-        // A mapped normal can face away from wo even when its mirror reflection is
-        // above the geometric surface. GGX has no visible microfacets from that side;
-        // evaluating such a sample would give value = pdf = 0 and poison accumulation.
-        if (cosTheta(wo_WS, surfShadingNor_WS) <= 0.f)
+        if (woFacesAway)
         {
             return deadBsdfSample(surfShadingNor_WS);
         }
@@ -538,8 +573,10 @@ BsdfSample sampleBsdf(const Material material,
             return result;
         }
 
-        const float alpha = material.roughness * material.roughness;
-        const float3 h_WS = sampleGgxVndf(wo_WS, surfShadingNor_WS, alpha, rng);
+        if (!sampleMicrofacetFirst)
+        {
+            h_WS = sampleGgxVndf(wo_WS, surfShadingNor_WS, alpha, rng);
+        }
         result.wi_WS = normalize(reflect(-wo_WS, h_WS));
         if (cosTheta(result.wi_WS, surfShadingNor_WS) <= 0.f) // sample fell below the horizon
         {
