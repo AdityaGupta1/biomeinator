@@ -65,12 +65,32 @@ struct DiscWobble
     uint32_t detailSeed{ 0 };
 };
 
+// Continues a structure block at pos_CS for up to rootDepth blocks along rootStepY through air and
+// water, seating it on local ground instead of leaving it floating where the surface drops away
+inline void placeStructureRoot(std::vector<Block>& blocks, glm::ivec3 pos_CS, Block block, int rootStepY, int rootDepth)
+{
+    for (int depth = 1; depth <= rootDepth; ++depth)
+    {
+        const glm::ivec3 rootPos_CS(pos_CS.x, pos_CS.y + rootStepY * depth, pos_CS.z);
+        if (!Chunk::isInChunk(rootPos_CS))
+        {
+            break;
+        }
+        const uint32_t rootBlockIdx = Chunk::blockPosToIdx(glm::uvec3(rootPos_CS));
+        const Block rootBlock = blocks[rootBlockIdx];
+        if (rootBlock != Block::AIR && rootBlock != Block::WATER && rootBlock != Block::WATER_TOP)
+        {
+            break;
+        }
+        blocks[rootBlockIdx] = block;
+    }
+}
+
 // One horizontal disc of `block` centered on centerPos_CS, its radius perturbed per column so the
 // silhouette isn't a clean circle. The perturbation is hashed from world position rather than drawn
 // from a structure's RNG, which is what lets each chunk fill only the columns it owns without
 // desynchronising the stream (see knowledge/terrain/structure_system.md). Cells that land in the
-// disc are rooted rootDepth blocks along rootStepY, seating a shape on local ground instead of
-// leaving its rim floating where the surface drops away; pass rootDepth 0 to skip that.
+// disc are rooted (see placeStructureRoot); pass rootDepth 0 to skip that.
 inline void placeWobbledDisc(std::vector<Block>& blocks,
                              glm::ivec3 centerPos_CS,
                              glm::ivec2 chunkPosXZ_WS,
@@ -112,22 +132,7 @@ inline void placeWobbledDisc(std::vector<Block>& blocks,
             }
 
             tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block);
-
-            for (int depth = 1; depth <= rootDepth; ++depth)
-            {
-                const glm::ivec3 rootPos_CS(pos_CS.x, pos_CS.y + rootStepY * depth, pos_CS.z);
-                if (!Chunk::isInChunk(rootPos_CS))
-                {
-                    break;
-                }
-                const uint32_t rootBlockIdx = Chunk::blockPosToIdx(glm::uvec3(rootPos_CS));
-                const Block rootBlock = blocks[rootBlockIdx];
-                if (rootBlock != Block::AIR && rootBlock != Block::WATER && rootBlock != Block::WATER_TOP)
-                {
-                    break;
-                }
-                blocks[rootBlockIdx] = block;
-            }
+            placeStructureRoot(blocks, pos_CS, block, rootStepY, rootDepth);
         }
     }
 }

@@ -20,6 +20,9 @@ using namespace StructureHelpers;
     static void fillStructureBlocks_##structureName(                                                                   \
         const Structure& structure, ivec3 structurePos_CS, std::vector<Block>& blocks, RandomNumberGenerator& rng)
 
+// How far a tree's base may continue down to reach ground below a slope or ledge
+inline constexpr int maxTreeRootDepth = 10;
+
 // Bounds of a per-tree random draw; an int range's max is exclusive
 template <typename T>
 struct RandomRange
@@ -187,10 +190,12 @@ static void fillLargeOakTree(ivec3 structurePos_CS, std::vector<Block>& blocks, 
 {
     const int trunkHeight = shape.trunkHeight.sample(rng);
 
-    // 2x2 trunk with structurePos at its low corner, sunk two blocks so it seats on slopes.
-    // Occasionally one of the four blocks is carved out of a mid-trunk level for texture.
+    // 2x2 trunk with structurePos at its low corner, sunk two blocks and rooted down to local
+    // ground so it seats on slopes. Occasionally one of the four blocks is carved out of a
+    // mid-trunk level for texture.
+    constexpr int trunkBottomY = -2;
     constexpr float trunkCarveChance = 0.3f;
-    for (int y = -2; y <= trunkHeight; ++y)
+    for (int y = trunkBottomY; y <= trunkHeight; ++y)
     {
         const bool carve = rng.chance(trunkCarveChance);
         const int carvedCornerIdx = rng.nextInt(4);
@@ -202,7 +207,12 @@ static void fillLargeOakTree(ivec3 structurePos_CS, std::vector<Block>& blocks, 
             {
                 continue;
             }
-            tryPlaceStructureBlock(blocks, structurePos_CS + ivec3(cornerIdx & 1, y, cornerIdx >> 1), Block::OAK_LOG);
+            const ivec3 trunkPos_CS = structurePos_CS + ivec3(cornerIdx & 1, y, cornerIdx >> 1);
+            tryPlaceStructureBlock(blocks, trunkPos_CS, Block::OAK_LOG);
+            if (y == trunkBottomY)
+            {
+                placeStructureRoot(blocks, trunkPos_CS, Block::OAK_LOG, -1 /*rootStepY*/, maxTreeRootDepth);
+            }
         }
     }
 
@@ -227,14 +237,16 @@ static void fillLargeOakTree(ivec3 structurePos_CS, std::vector<Block>& blocks, 
             continue;
         }
 
-        const ivec3 rootBasePos_CS = structurePos_CS + ivec3(rootOffset.posXZ.x, -2, rootOffset.posXZ.y /*z*/);
+        const ivec3 rootBasePos_CS = structurePos_CS + ivec3(rootOffset.posXZ.x, trunkBottomY, rootOffset.posXZ.y /*z*/);
         fillLine(blocks, rootBasePos_CS, rootBasePos_CS + ivec3(0, 2 + rootTopY, 0), Block::OAK_LOG);
+        placeStructureRoot(blocks, rootBasePos_CS, Block::OAK_LOG, -1 /*rootStepY*/, maxTreeRootDepth);
 
         // Spread one block further out at the very bottom of the root
         if (hasSpread)
         {
             const ivec3 spreadBasePos_CS = rootBasePos_CS + ivec3(rootOffset.outwardXZ.x, 0, rootOffset.outwardXZ.y /*z*/);
             fillLine(blocks, spreadBasePos_CS, spreadBasePos_CS + ivec3(0, 2, 0), Block::OAK_LOG);
+            placeStructureRoot(blocks, spreadBasePos_CS, Block::OAK_LOG, -1 /*rootStepY*/, maxTreeRootDepth);
         }
     }
 
@@ -546,7 +558,6 @@ fillStructureBlocksHeader(CYPRESS_TREE)
     // Trunk radius flares into a wide buttress at the base (sunk two blocks and rooted down to
     // local ground so it seats on slopes) and tapers quickly above it; noise wobble, faded out
     // above the lower trunk, makes the buttress fluted instead of round
-    constexpr int maxRootDepth = 10;
     for (int y = -2; y <= trunkTopY; ++y)
     {
         const float trunkRatio = (y + 2.f) / (trunkHeight + 2.f);
@@ -560,7 +571,7 @@ fillStructureBlocksHeader(CYPRESS_TREE)
 
         // Only the bottom layer roots, seating the buttress rim on local ground
         placeWobbledDisc(blocks, structurePos_CS + ivec3(0, y, 0), chunkPosXZ_WS, baseRadius, wobble,
-                         Block::CYPRESS_LOG, -1 /*rootStepY*/, (y == -2) ? maxRootDepth : 0);
+                         Block::CYPRESS_LOG, -1 /*rootStepY*/, (y == -2) ? maxTreeRootDepth : 0);
     }
 
     // Knees: short log stubs ringing the trunk, seated on local ground found by scanning the
@@ -983,10 +994,11 @@ fillStructureBlocksHeader(REDWOOD_TREE)
         maxRootHeight = max(maxRootHeight, roots.back().height);
     }
 
-    // Round trunk tapering to one block wide, flaring over its bottom few blocks, sunk so the
-    // flare seats on slopes
+    // Round trunk tapering to one block wide, flaring over its bottom few blocks, sunk and rooted
+    // down to local ground so the flare seats on slopes
     constexpr int maxRootReach = 2;
-    for (int y = -3; y < height; ++y)
+    constexpr int trunkBottomY = -3;
+    for (int y = trunkBottomY; y < height; ++y)
     {
         const float t = static_cast<float>(max(y, 0)) / height;
         const float flare = max(1.f - max(y, 0) / 5.f, 0.f);
@@ -1014,7 +1026,12 @@ fillStructureBlocksHeader(REDWOOD_TREE)
                 }
                 if (distance <= columnRadius)
                 {
-                    tryPlaceStructureBlock(blocks, structurePos_CS + ivec3(dx, y, dz), Block::REDWOOD_LOG);
+                    const ivec3 trunkPos_CS = structurePos_CS + ivec3(dx, y, dz);
+                    tryPlaceStructureBlock(blocks, trunkPos_CS, Block::REDWOOD_LOG);
+                    if (y == trunkBottomY)
+                    {
+                        placeStructureRoot(blocks, trunkPos_CS, Block::REDWOOD_LOG, -1 /*rootStepY*/, maxTreeRootDepth);
+                    }
                 }
             }
         }
