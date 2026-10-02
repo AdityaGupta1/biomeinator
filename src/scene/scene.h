@@ -307,6 +307,8 @@ public:
         size_t perFaceDatasBytes{ 0 };
         size_t tangentsBytes{ 0 };
         size_t areaLightsBytes{ 0 };
+        // CPU-side copies (the host_ vectors), by capacity
+        size_t hostBytes{ 0 };
     };
     // Sums the buffer sections held by every instance (in the TLAS or not) of one kind
     InstanceGpuMemory getInstanceGpuMemory(bool deformable) const;

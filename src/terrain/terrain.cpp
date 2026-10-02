@@ -1343,11 +1343,21 @@ void shutdown()
 
 ResidencyStats getResidencyStats()
 {
-    ResidencyStats stats{ .numRegions = static_cast<uint32_t>(regions.size()), .numChunks = 0 };
+    ResidencyStats stats{
+        .numRegions = static_cast<uint32_t>(regions.size()),
+        .numChunks = 0,
+        .pooledChunkBufferBytes = Chunk::getPooledBufferBytes(),
+    };
     for (const auto& [regionPos, region] : regions)
     {
-        stats.numChunks += static_cast<uint32_t>(
-            std::count_if(region->chunks.begin(), region->chunks.end(), [](const auto& chunk) { return chunk != nullptr; }));
+        for (const std::unique_ptr<Chunk>& chunk : region->chunks)
+        {
+            if (chunk != nullptr)
+            {
+                ++stats.numChunks;
+                stats.chunkMemory += chunk->getMemory();
+            }
+        }
     }
     return stats;
 }

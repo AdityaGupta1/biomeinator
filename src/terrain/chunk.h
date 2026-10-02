@@ -8,6 +8,7 @@
 #include "cave_biome.h"
 #include "cave_biome_noise.h"
 #include "chunk_dimensions.h"
+#include "terrain.h"
 #include "scene/scene.h"
 #include "serialized_chunk.h"
 #include "structure/cave_structure.h"
@@ -326,6 +327,10 @@ public:
     // Only valid once the chunk has all its blocks
     SerializedChunkView getSerializedView() const;
     uint64_t hashFinalBlocks() const;
+
+    ChunkMemory getMemory() const;
+    // Held for reuse after their chunks were destroyed
+    static uint64_t getPooledBufferBytes();
 
     void loadSerializedData(SerializedChunkData&& data);
 

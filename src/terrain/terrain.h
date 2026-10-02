@@ -12,6 +12,19 @@ class Scene;
 class ToFreeList;
 enum class Biome : uint8_t;
 
+// Heap bytes held by chunks, by what they are for; see Chunk::getMemory
+struct ChunkMemory
+{
+    uint64_t blocks{ 0 };
+    uint64_t terrainMasks{ 0 };
+    // Only needed until the structure pass, so mostly held by chunks at the edge of the work zone
+    uint64_t generationScratch{ 0 };
+    uint64_t structures{ 0 };
+    uint64_t misc{ 0 };
+
+    ChunkMemory& operator+=(const ChunkMemory& other);
+};
+
 namespace Terrain
 {
 
@@ -47,6 +60,8 @@ struct ResidencyStats
 {
     uint32_t numRegions;
     uint32_t numChunks;
+    ChunkMemory chunkMemory;
+    uint64_t pooledChunkBufferBytes;
 };
 ResidencyStats getResidencyStats();
 

@@ -73,7 +73,58 @@ void poolBuffer(std::vector<std::vector<T>>& pool, std::vector<T>& buffer, size_
         pool.push_back(std::move(buffer));
     }
 }
+template<typename T>
+uint64_t capacityBytes(const std::vector<T>& vector)
+{
+    return vector.capacity() * sizeof(T);
+}
 } // namespace
+
+ChunkMemory& ChunkMemory::operator+=(const ChunkMemory& other)
+{
+    blocks += other.blocks;
+    terrainMasks += other.terrainMasks;
+    generationScratch += other.generationScratch;
+    structures += other.structures;
+    misc += other.misc;
+    return *this;
+}
+
+// Capacities are read without synchronization; only for diagnostics
+ChunkMemory Chunk::getMemory() const
+{
+    // Approximates each node and bucket of the MSVC unordered_map
+    const uint64_t blockStatesBytes =
+        this->blockStates.size() * (sizeof(std::pair<const uint32_t, uint8_t>) + 2 * sizeof(void*)) +
+        this->blockStates.bucket_count() * 2 * sizeof(void*);
+    return {
+        .blocks = capacityBytes(this->blocks),
+        .terrainMasks = capacityBytes(this->terrainAirMask) + capacityBytes(this->terrainSolidCubeMask),
+        .generationScratch = capacityBytes(this->caveDecoration.airMask) + capacityBytes(this->caveDecoration.noise) +
+                             capacityBytes(this->caveDecoration.surfaceBias) + capacityBytes(this->snow.lineY) +
+                             capacityBytes(this->snow.coldCover) + capacityBytes(this->snow.patch) +
+                             capacityBytes(this->snow.capped) + capacityBytes(this->snow.exposedRock),
+        .structures = capacityBytes(this->structures) + capacityBytes(this->surfaceStructureCandidates) +
+                      capacityBytes(this->caveStructures),
+        .misc = sizeof(Chunk) + capacityBytes(this->biomes) + capacityBytes(this->terrainTopY) +
+                  capacityBytes(this->terrainSurfaceHeight) + capacityBytes(this->segmentsToGenerate) + blockStatesBytes,
+    };
+}
+
+uint64_t Chunk::getPooledBufferBytes()
+{
+    std::scoped_lock<std::mutex> lock(bufferPoolMutex);
+    uint64_t bytes = 0;
+    for (const std::vector<Block>& buffer : pooledBlocks)
+    {
+        bytes += capacityBytes(buffer);
+    }
+    for (const std::vector<uint64_t>& buffer : pooledTerrainMasks)
+    {
+        bytes += capacityBytes(buffer);
+    }
+    return bytes;
+}
 
 Chunk::Chunk(ivec2 chunkPos, Region* region)
     : chunkPos(chunkPos), region(region)

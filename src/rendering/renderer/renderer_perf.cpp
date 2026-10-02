@@ -399,6 +399,78 @@ static nlohmann::json instanceMemoryJson(const Scene::InstanceGpuMemory& memory)
         { "perFaceDatasBytes", memory.perFaceDatasBytes },
         { "tangentsBytes", memory.tangentsBytes },
         { "areaLightsBytes", memory.areaLightsBytes },
+        { "hostBytes", memory.hostBytes },
+    };
+}
+
+// Where the process's committed private memory is: inside the heaps (in use, or free but still
+// committed) or outside them (VirtualAlloc'd directly, e.g. by drivers), and what terrain holds
+static nlohmann::json cpuMemoryJson()
+{
+    uint64_t privateCommittedBytes = 0;
+    MEMORY_BASIC_INFORMATION region{};
+    for (const char* address = nullptr;
+         VirtualQuery(address, &region, sizeof(region)) == sizeof(region);
+         address = static_cast<const char*>(region.BaseAddress) + region.RegionSize)
+    {
+        if (region.State == MEM_COMMIT && region.Type == MEM_PRIVATE)
+        {
+            privateCommittedBytes += region.RegionSize;
+        }
+    }
+
+    // Large allocations are reported as busy entries but live outside the heap's own regions
+    uint64_t heapRegionCommittedBytes = 0;
+    uint64_t heapBusyBytes = 0;
+    uint64_t heapLargeBusyBytes = 0;
+    uint64_t heapFreeBytes = 0;
+    std::vector<HANDLE> heaps(GetProcessHeaps(0, nullptr));
+    heaps.resize(GetProcessHeaps(static_cast<DWORD>(heaps.size()), heaps.data()));
+    for (HANDLE heap : heaps)
+    {
+        if (!HeapLock(heap))
+        {
+            continue;
+        }
+        PROCESS_HEAP_ENTRY entry{};
+        while (HeapWalk(heap, &entry))
+        {
+            if (entry.wFlags & PROCESS_HEAP_REGION)
+            {
+                heapRegionCommittedBytes += entry.Region.dwCommittedSize;
+            }
+            else if (entry.wFlags & PROCESS_HEAP_ENTRY_BUSY)
+            {
+                (entry.iRegionIndex == 0 && entry.cbData >= 512 * 1024 ? heapLargeBusyBytes : heapBusyBytes) +=
+                    entry.cbData + entry.cbOverhead;
+            }
+            else if (!(entry.wFlags & PROCESS_HEAP_UNCOMMITTED_RANGE))
+            {
+                heapFreeBytes += entry.cbData + entry.cbOverhead;
+            }
+        }
+        HeapUnlock(heap);
+    }
+
+    const Terrain::ResidencyStats residency = Terrain::getResidencyStats();
+    const ChunkMemory& chunks = residency.chunkMemory;
+    return {
+        { "privateCommittedBytes", privateCommittedBytes },
+        { "heaps", heaps.size() },
+        { "heapRegionCommittedBytes", heapRegionCommittedBytes },
+        { "heapBusyBytes", heapBusyBytes },
+        { "heapLargeBusyBytes", heapLargeBusyBytes },
+        { "heapFreeBytes", heapFreeBytes },
+        { "terrainRegions", residency.numRegions },
+        { "terrainChunks", residency.numChunks },
+        { "chunkBytes", {
+            { "blocks", chunks.blocks },
+            { "terrainMasks", chunks.terrainMasks },
+            { "generationScratch", chunks.generationScratch },
+            { "structures", chunks.structures },
+            { "misc", chunks.misc },
+            { "pooled", residency.pooledChunkBufferBytes },
+        } },
     };
 }
 
@@ -426,15 +498,13 @@ static nlohmann::json memoryJson()
     PROCESS_MEMORY_COUNTERS_EX processMemory{};
     GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&processMemory),
                          sizeof(processMemory));
-    const Terrain::ResidencyStats residency = Terrain::getResidencyStats();
 
     return {
         { "budgetBytes", videoMemoryInfo.Budget },
         { "usageBytes", videoMemoryInfo.CurrentUsage },
         { "processPrivateBytes", processMemory.PrivateUsage },
         { "processPeakPrivateBytes", processMemory.PeakPagefileUsage },
-        { "terrainRegions", residency.numRegions },
-        { "terrainChunks", residency.numChunks },
+        { "cpu", cpuMemoryJson() },
         { "buffers", buffers },
         { "staticInstances", instanceMemoryJson(renderState.scene.getInstanceGpuMemory(false)) },
         { "deformableInstances", instanceMemoryJson(renderState.scene.getInstanceGpuMemory(true)) },

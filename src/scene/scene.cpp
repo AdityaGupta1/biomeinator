@@ -292,6 +292,13 @@ Scene::InstanceGpuMemory Scene::getInstanceGpuMemory(const bool deformable) cons
         memory.perFaceDatasBytes += instance->perFaceDatasBufferSection.sizeBytes;
         memory.tangentsBytes += instance->tangentsBufferSection.sizeBytes;
         memory.areaLightsBytes += instance->areaLightsBufferSection.sizeBytes;
+        memory.hostBytes += instance->host_verts.capacity() * sizeof(Vertex) +
+                            instance->host_packedTerrainVerts.capacity() * sizeof(PackedTerrainVertex) +
+                            instance->host_tangents.capacity() * sizeof(VertexTangent) +
+                            instance->host_idxs.capacity() * sizeof(uint32_t) +
+                            instance->host_perFaceDatas.capacity() * sizeof(PerFaceData) +
+                            instance->host_ommIdxs.capacity() * sizeof(uint16_t) +
+                            instance->host_areaLights.capacity() * sizeof(AreaLight);
     }
     return memory;
 }
