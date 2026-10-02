@@ -48,6 +48,7 @@
 #define DEBUG_SINGLE_THREAD 0
 
 
+
 namespace Terrain
 {
 
@@ -323,6 +324,10 @@ static glm::ivec3 voxelRenderBoundsMin_WS{ 0, 0, 0 };
 static glm::ivec3 voxelRenderBoundsMax_WS{ 0, 0, 0 };
 
 inline constexpr uint32_t maxTasksPerFrame = 512;
+// Instances hold CPU geometry from meshing until upload, and the scene keeps those buffers for
+// reuse rather than freeing them, so this also bounds that pool. BLAS builds take at most 48 a
+// frame, so meshing further ahead would only queue geometry behind them.
+inline constexpr uint32_t maxInstancesHoldingHostGeometry = 512;
 inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 96;
 
 struct ChunkScanDistances
@@ -756,7 +761,8 @@ void update(ToFreeList& toFreeList)
     CpuProfiler::beginScope("enqueue");
     // Geometry goes in ahead of new terrain: the pool is FIFO, so with a deep queue the heavy
     // generateTerrain tasks would otherwise starve the chunks that are one step from visible
-    while (!createInstancesTasks.empty())
+    while (!createInstancesTasks.empty() &&
+           scene->getNumInstancesHoldingHostGeometry() + 2 <= maxInstancesHoldingHostGeometry)
     {
         const Task task = createInstancesTasks.front();
         createInstancesTasks.pop_front();
@@ -1247,6 +1253,7 @@ static void resetTerrainState()
     scratchToFree.freeAll();
 
     regions.clear();
+    Chunk::clearBufferPool();
 
     generateTerrainTasks.clear();
     createInstancesTasks.clear();

@@ -331,6 +331,8 @@ public:
     ChunkMemory getMemory() const;
     // Held for reuse after their chunks were destroyed
     static uint64_t getPooledBufferBytes();
+    // For replacing the world, which does not generate into the pooled buffers
+    static void clearBufferPool();
 
     void loadSerializedData(SerializedChunkData&& data);
 

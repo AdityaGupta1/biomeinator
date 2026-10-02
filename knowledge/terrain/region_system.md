@@ -59,7 +59,12 @@ still stalled `present` for 30 ms a few frames later, even from that thread and 
 16 chunks per millisecond. Keeping the regions instead of freeing them removed the stalls. So
 destroyed chunks return those buffers to a pool in `chunk.cpp` that new chunks generate into.
 The heap was not returning that memory to the OS anyway, so process memory is not affected.
-The pool is capped, so a reimport that destroys a whole world does not hold it all.
+A chunk's blocks and both masks are pooled as one set, so a chunk always takes and returns all of
+them together. Separate pools drifted apart, since a chunk takes two masks but one block array.
+The pool is uncapped: a capped pool freed its overflow after long flights, which brought the stalls
+back as evictions finished. It stays bounded because chunks take from it before allocating, so
+pooled and resident sets together never exceed the most chunks ever resident at once.
+Reimport empties it, since an imported world does not generate into it.
 
 ### Validating
 

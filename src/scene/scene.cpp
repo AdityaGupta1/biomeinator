@@ -47,6 +47,12 @@ void Instance::takeHostGeometry(HostGeometry&& geometry)
 
 void Instance::releaseHostGeometry()
 {
+    if (!this->holdsHostGeometry)
+    {
+        return;
+    }
+    this->holdsHostGeometry = false;
+    --this->scene->numInstancesHoldingHostGeometry;
     this->scene->recycleHostGeometry({
         .verts = std::move(this->host_verts),
         .packedTerrainVerts = std::move(this->host_packedTerrainVerts),
@@ -392,6 +398,8 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
     Instance* newInstancePtr = newInstance.get();
     this->instances.emplace(id, std::move(newInstance));
 
+    newInstancePtr->holdsHostGeometry = true;
+    ++this->numInstancesHoldingHostGeometry;
     if (!this->hostGeometryPool.empty())
     {
         newInstancePtr->takeHostGeometry(std::move(this->hostGeometryPool.back()));
@@ -438,16 +446,9 @@ void Scene::recycleHostGeometry(HostGeometry&& geometry)
     this->hostGeometryPool.push_back(std::move(geometry));
 }
 
-// A load puts far more geometry in flight than streaming does. The excess beyond what streaming
-// reuses is freed a few sets per frame, because freeing it all at once stalls the frame.
-void Scene::trimHostGeometryPool()
+uint32_t Scene::getNumInstancesHoldingHostGeometry() const
 {
-    constexpr size_t maxPooledHostGeometries = 256;
-    constexpr size_t maxHostGeometriesFreedPerFrame = 4;
-    for (size_t i = 0; i < maxHostGeometriesFreedPerFrame && this->hostGeometryPool.size() > maxPooledHostGeometries; ++i)
-    {
-        this->hostGeometryPool.pop_back();
-    }
+    return this->numInstancesHoldingHostGeometry;
 }
 
 size_t Scene::getHostGeometryPoolBytes() const
@@ -537,7 +538,6 @@ bool Scene::update(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
         GPU_PROFILE_SCOPE(cmdList, "blas build");
         CPU_PROFILE_SCOPE("blas builds");
         this->makeQueuedBlases(cmdList, toFreeList);
-        this->trimHostGeometryPool();
     }
 
     {

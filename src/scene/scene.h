@@ -86,6 +86,8 @@ private:
     glm::ivec3 transformOffset{ 0, 0, 0 };
 
     bool isGeometryFinalized{ false };
+    // From creation until its geometry is uploaded or it is destroyed
+    bool holdsHostGeometry{ false };
     glm::vec3 boundsMin_OS{ 0.f, 0.f, 0.f }; // of host_verts, set by finalizeGeometry
     glm::vec3 boundsMax_OS{ 0.f, 0.f, 0.f };
     uint32_t tlasEntryIdx{ UINT32_MAX }; // index into Scene::tlasInstanceEntries while in the TLAS
@@ -213,7 +215,10 @@ private:
     bool waveFrustumSet{ false };
     float waveFrustumHeightBand{ FLT_MAX };
 
+    // Never freed while running: freeing these buffers stalled frames by up to 40 ms. It stays
+    // bounded because callers limit how many instances hold geometry at once.
     std::vector<HostGeometry> hostGeometryPool{};
+    uint32_t numInstancesHoldingHostGeometry{ 0 };
 
     // not sure if combining multiple structs into one buffer will lead to alignment problems, but it works for now
     CommittedManagedBuffer sharedBlasUploadBuffer{
@@ -290,7 +295,6 @@ private:
 
     void freeInstance(Instance* instance);
     void recycleHostGeometry(HostGeometry&& geometry);
-    void trimHostGeometryPool();
 
     // returns true if TLAS is now dirty
     void makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
@@ -331,6 +335,8 @@ public:
     // Sums the buffer sections held by every instance (in the TLAS or not) of one kind
     InstanceGpuMemory getInstanceGpuMemory(bool deformable) const;
     size_t getHostGeometryPoolBytes() const;
+    // Instances between creation and upload; the pool never holds more sets than the peak of this
+    uint32_t getNumInstancesHoldingHostGeometry() const;
 
     // Deformable instances outside animRadius of the center or outside the padded frustum are
     // left static; the shaders fade the waves to rest height towards both limits so the two
