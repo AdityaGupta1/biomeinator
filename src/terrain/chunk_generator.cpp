@@ -37,13 +37,23 @@ static FN::SmartNode<FN::Generator> fnTerrainDetail;
 // Sample the shape fields on a world-aligned lattice, then reconstruct the voxel grids.
 // Cave noise needs finer spacing to retain narrow passages and the surface gradients.
 inline constexpr int terrainNoiseDownsample = 4;
-// Per-column offset on climate cell lookups, which rags cell borders like the climate jitter does
-// for tier and regime borders
-inline constexpr float climateCellJitterBlocks = 3.5f;
 inline constexpr int terrainDetailDownsampleXZ = 2;
 // The detail field is stretched vertically (see its DomainAxisScale), so it tolerates coarser Y.
 inline constexpr int terrainDetailDownsampleY = 4;
 inline constexpr int caveShapeNoiseDownsample = 2;
+
+// Per-column offset on climate cell lookups, which rags cell borders like the climate jitter does
+// for tier and regime borders
+inline constexpr float climateCellJitterBlocks = 3.5f;
+
+static vec2 climateCellLookupPos(ivec2 blockPosXZ_WS, uint32_t worldSeed)
+{
+    RandomNumberGenerator rng = initRng(worldSeed ^ hash(551023987),
+        static_cast<uint>(blockPosXZ_WS.x), static_cast<uint>(blockPosXZ_WS.y /*z*/));
+    const float jitterX = rng.nextFloatAbs(climateCellJitterBlocks);
+    const float jitterZ = rng.nextFloatAbs(climateCellJitterBlocks);
+    return vec2(blockPosXZ_WS) + vec2(jitterX, jitterZ);
+}
 
 inline constexpr float caveWorleyBoundFraction = 0.4f;
 inline constexpr float caveSimplexBoundFraction = 0.6f;
@@ -613,14 +623,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const BiomeNoise biomeNoise = BiomeNoiseFields::noiseAt(biomeNoiseGrids, columnIdx);
             const BiomeNoise jitteredBiomeNoise = BiomeNoise::randomOffset(biomeNoise, rng);
             const auto oasis = OasisShaping::sample(vec2(blockPosXZ_WS), oasisContext);
-            // Hashed rather than drawn from rng, so it leaves the chunk's rng stream untouched
-            RandomNumberGenerator cellJitterRng = initRng(worldSeed ^ hash(551023987),
-                static_cast<uint>(blockPosXZ_WS.x), static_cast<uint>(blockPosXZ_WS.y /*z*/));
-            const float cellJitterX = cellJitterRng.nextFloatAbs(climateCellJitterBlocks);
-            const float cellJitterZ = cellJitterRng.nextFloatAbs(climateCellJitterBlocks);
-            const vec2 cellLookupPosXZ_WS = vec2(blockPosXZ_WS) + vec2(cellJitterX, cellJitterZ);
-            const Biome biome = oasis.vegetation ? Biome::OASIS
-                                                 : BiomeNoiseFields::biomeFromNoise(jitteredBiomeNoise, climateCellContext, cellLookupPosXZ_WS);
+            const Biome biome = oasis.vegetation
+                ? Biome::OASIS
+                : BiomeNoiseFields::biomeFromNoise(
+                      jitteredBiomeNoise, &climateCellContext, climateCellLookupPos(blockPosXZ_WS, worldSeed));
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
 

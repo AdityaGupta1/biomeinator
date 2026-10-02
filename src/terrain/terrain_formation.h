@@ -12,18 +12,25 @@
 namespace TerrainFormations
 {
 
+inline float valueNoiseCorner(glm::ivec2 corner, uint32_t seed)
+{
+    RandomNumberGenerator rng = initRng(seed, corner.x, corner.y);
+    return rng.nextFloat(-1.f, 1.f);
+}
+
+// Smoothstep-interpolates a cell's four corner values at fractional position f within it
+inline float valueNoiseBlend(glm::vec2 f, float v00, float v10, float v01, float v11)
+{
+    const glm::vec2 t = f * f * (3.f - 2.f * f);
+    return glm::mix(glm::mix(v00, v10, t.x), glm::mix(v01, v11, t.x), t.y);
+}
+
 inline float valueNoise(glm::vec2 pos, uint32_t seed)
 {
     using namespace glm;
     const ivec2 cell = ivec2(floor(pos));
-    const vec2 f = fract(pos);
-    const vec2 t = f * f * (3.f - 2.f * f);
-    const auto at = [&](int x, int z)
-    {
-        RandomNumberGenerator rng = initRng(seed, cell.x + x, cell.y + z);
-        return rng.nextFloat(-1.f, 1.f);
-    };
-    return mix(mix(at(0, 0), at(1, 0), t.x), mix(at(0, 1), at(1, 1), t.x), t.y);
+    return valueNoiseBlend(fract(pos), valueNoiseCorner(cell, seed), valueNoiseCorner(cell + ivec2(1, 0), seed),
+                           valueNoiseCorner(cell + ivec2(0, 1), seed), valueNoiseCorner(cell + ivec2(1, 1), seed));
 }
 
 // smoothstep with its [edge0, edge1] window stretched about the midpoint by widen (1 = unchanged).

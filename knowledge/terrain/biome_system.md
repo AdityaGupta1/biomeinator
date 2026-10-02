@@ -1,4 +1,4 @@
-_Last edited: 2026-10-01_
+_Last edited: 2026-10-02_
 
 # Biome System
 
@@ -117,9 +117,9 @@ check, because their dry, flat climate usually borders Mesa or red desert.
 
 The climate a column is matched on comes from its **climate cell**, not the column itself: a
 weighted Voronoi (power diagram) of ~384-block cells, each sampling temperature and humidity once
-at its site. With per-column climate, a target sitting between two others in climate space showed
-up as a thin ribbon along every border between them, and fast climate gradients gave slivers.
-A cell can't do either, so slivers only remain where something per-column cuts through a cell.
+at its site. Per-column climate turns a target sitting between two others in climate space into a
+thin ribbon along every border between them, and fast climate gradients into slivers. A cell
+can't do either, so slivers only remain where something per-column cuts through a cell.
 
 Only the climate target choice uses cells. Tiers (ocean, beach, highland, lowland), beach type and
 terrain regimes still decide per column, since they must agree with terrain, so one cell can hold
@@ -137,9 +137,9 @@ no invalidation, and any context gives the same answer for the same position, wh
 neighboring chunks and the tint map consistent. The context must cover the column positions plus
 the lookup jitter; a lookup outside it reads past its tables.
 
-Each cell's sampled climate also gets a random offset (up to ±0.1 per axis). Without it, a broad
-climate zone (cold and humid, say) became one huge region of a single biome; with it, the zone
-becomes a mosaic of that biome and its climate neighbors. Whole cells switch, so it adds no slivers.
+Each cell's sampled climate also gets a random offset (up to ±0.1 per axis), which turns a broad
+climate zone (cold and humid, say) from one huge region of a single biome into a mosaic of that
+biome and its climate neighbors. Whole cells switch, so it adds no slivers.
 
 ## Per-Column Jitter
 
@@ -167,6 +167,7 @@ snowy grass, which would leave no transition.
 
 `TopBlocks::patches` breaks a dry grass top into noise-driven patches (podzol, coarse dirt), the way
 vanilla's old-growth taiga does. All biomes share one ground noise, so patches in neighboring
-biomes line up across the border instead of restarting at the label. Patches replace only grass that the underwater and shore rules left alone, and run before
-the snow cap. Decorators read the patched block as their support, so a biome with patches has to
-list podzol or coarse dirt in its decorator supports, or those patches stay bare.
+biomes line up across the border instead of restarting at the label. Patches replace only grass
+that the underwater and shore rules left alone, and run before the snow cap. Decorators read the
+patched block as their support, so a biome with patches has to list podzol or coarse dirt in its
+decorator supports, or those patches stay bare.

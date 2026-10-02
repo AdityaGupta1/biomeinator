@@ -38,8 +38,6 @@ inline constexpr float reliefNoiseScale = baseNoiseScale * 1.f;
 static int noiseFieldSeed;
 static ivec2 noiseOffsetXZ;
 
-static bool climateCellsEnabled = true;
-
 void init(uint32_t worldSeed)
 {
     noiseFieldSeed = static_cast<int>(worldSeed ^ hash(719023919));
@@ -487,11 +485,6 @@ bool isClaimedByRegime(const BiomeNoise& n)
     return findClaimingRegime(n) != nullptr;
 }
 
-void setClimateCellsEnabled(bool enabled)
-{
-    climateCellsEnabled = enabled;
-}
-
 // Cells are a jittered grid of sites with random weights (a power diagram), so neighboring cells
 // differ in size. Lookups are warped by noise at two scales, so borders curve and fray instead of
 // following straight polygon edges.
@@ -508,10 +501,16 @@ struct WarpOctave
     float amplitude;
 };
 inline constexpr std::array<WarpOctave, 2> climateCellWarpOctaves{{ { 120.f, 55.f }, { 18.f, 7.f } }};
-inline constexpr float climateCellMaxWarp = 62.f;
-// Each cell's sampled climate is shifted by up to this much on each axis, so a broad climate zone
-// becomes a mosaic of its climate neighbors instead of one huge region. Whole cells switch, so
-// this adds no slivers.
+inline constexpr float climateCellMaxWarp = []
+{
+    float maxWarp = 0.f;
+    for (const WarpOctave& octave : climateCellWarpOctaves)
+    {
+        maxWarp += octave.amplitude;
+    }
+    return maxWarp;
+}();
+// Each cell's sampled climate is shifted by up to this much on each axis
 inline constexpr float climateCellClimateOffset = 0.1f;
 
 static uint32_t climateCellSeed()
@@ -519,21 +518,19 @@ static uint32_t climateCellSeed()
     return static_cast<uint32_t>(noiseFieldSeed) ^ hash(402913377);
 }
 
-// A value noise lattice: the same corner values and smoothstep interpolation as
-// TerrainFormations::valueNoise, with the corners hashed once per region instead of per sample
+// TerrainFormations::valueNoise with the corners hashed once per region instead of per sample
 ClimateCellContext::Lattice::Lattice(vec2 minPos, vec2 maxPos, uint32_t seed)
     : minCorner(ivec2(glm::floor(minPos)))
 {
     const ivec2 maxCorner = ivec2(glm::floor(maxPos)) + 1;
     width = maxCorner.x - minCorner.x + 1;
-    const int height = maxCorner.y - minCorner.y + 1;
+    height = maxCorner.y - minCorner.y + 1;
     values.resize(static_cast<size_t>(width) * height);
     for (int z = 0; z < height; ++z)
     {
         for (int x = 0; x < width; ++x)
         {
-            RandomNumberGenerator rng = initRng(seed, minCorner.x + x, minCorner.y + z);
-            values[x + z * width] = rng.nextFloat(-1.f, 1.f);
+            values[x + z * width] = TerrainFormations::valueNoiseCorner(minCorner + ivec2(x, z), seed);
         }
     }
 }
@@ -541,29 +538,31 @@ ClimateCellContext::Lattice::Lattice(vec2 minPos, vec2 maxPos, uint32_t seed)
 float ClimateCellContext::Lattice::sample(vec2 pos) const
 {
     const ivec2 cell = ivec2(glm::floor(pos));
-    const vec2 f = pos - vec2(cell);
-    const vec2 t = f * f * (3.f - 2.f * f);
-    const int idx = (cell.x - minCorner.x) + (cell.y - minCorner.y) * width;
-    return mix(mix(values[idx], values[idx + 1], t.x), mix(values[idx + width], values[idx + width + 1], t.x), t.y);
+    const ivec2 local = cell - minCorner;
+    ASSERT(local.x >= 0 && local.y >= 0 && local.x + 1 < width && local.y + 1 < height);
+    const int idx = local.x + local.y * width;
+    return TerrainFormations::valueNoiseBlend(
+        pos - vec2(cell), values[idx], values[idx + 1], values[idx + width], values[idx + width + 1]);
 }
 
 ClimateCellContext::ClimateCellContext(vec2 minXZ_WS, vec2 maxXZ_WS)
+    : warpLattices(
+          [&]
+          {
+              const uint32_t seed = climateCellSeed();
+              const auto make = [&](uint32_t octaveIdx, uint32_t axis)
+              {
+                  const float scale = climateCellWarpOctaves[octaveIdx].scale;
+                  return Lattice(minXZ_WS / scale, maxXZ_WS / scale, seed ^ hash(octaveIdx * 2 + axis + 1));
+              };
+              return std::array<Lattice, 4>{ make(0, 0), make(0, 1), make(1, 0), make(1, 1) };
+          }())
 {
     const uint32_t seed = climateCellSeed();
-    // One lattice per octave and axis, in octave order with x before z
-    for (uint32_t octaveIdx = 0; octaveIdx < climateCellWarpOctaves.size(); ++octaveIdx)
-    {
-        const float scale = climateCellWarpOctaves[octaveIdx].scale;
-        for (uint32_t axis = 0; axis < 2; ++axis)
-        {
-            warpLattices.emplace_back(minXZ_WS / scale, maxXZ_WS / scale, seed ^ hash(octaveIdx * 2 + axis + 1));
-        }
-    }
-
     minCell = ivec2(glm::floor((minXZ_WS - climateCellMaxWarp) / climateCellSize)) - climateCellSearchRadius;
     const ivec2 maxCell = ivec2(glm::floor((maxXZ_WS + climateCellMaxWarp) / climateCellSize)) + climateCellSearchRadius;
     numCellsX = maxCell.x - minCell.x + 1;
-    const int numCellsZ = maxCell.y - minCell.y + 1;
+    numCellsZ = maxCell.y - minCell.y + 1;
     sites.reserve(static_cast<size_t>(numCellsX) * numCellsZ);
     for (int z = minCell.y; z <= maxCell.y; ++z)
     {
@@ -606,6 +605,7 @@ const ClimateCellContext::Site& ClimateCellContext::findSite(vec2 lookupPosXZ_WS
             }
             const ivec2 cell = homeCell + ivec2(dx, dz);
             const ivec2 local = cell - minCell;
+            ASSERT(local.x >= 0 && local.y >= 0 && local.x < numCellsX && local.y < numCellsZ);
             const Site& site = sites[local.x + local.y * numCellsX];
             const vec2 offset = warpedPos - site.posXZ_WS;
             const float powerDistance = dot(offset, offset) - site.weight;
@@ -646,15 +646,15 @@ uint32_t ClimateCellContext::cellHashAt(vec2 lookupPosXZ_WS) const
     return hash(static_cast<uint32_t>(cellId.x) ^ hash(static_cast<uint32_t>(cellId.y)));
 }
 
-Biome biomeFromNoise(const BiomeNoise& biomeNoise, const ClimateCellContext& cellContext, vec2 cellLookupPosXZ_WS)
+Biome biomeFromNoise(const BiomeNoise& biomeNoise, const ClimateCellContext* cellContext, vec2 cellLookupPosXZ_WS)
 {
     const TerrainRegimeData* regime = findClaimingRegime(biomeNoise);
     if (regime)
     {
         return regime->biome;
     }
-    const ClimateTarget climate = climateCellsEnabled
-        ? cellContext.climateAt(cellLookupPosXZ_WS)
+    const ClimateTarget climate = cellContext
+        ? cellContext->climateAt(cellLookupPosXZ_WS)
         : ClimateTarget{ .temperature = biomeNoise.temperature, .humidity = biomeNoise.humidity };
     return Biomes::getClosestBiome(biomeNoise, climate);
 }
@@ -679,7 +679,8 @@ static void forEachRectTile(glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels, 
     }
 }
 
-void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels, uint32_t texelSizeBlocks)
+void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels, uint32_t texelSizeBlocks,
+                   bool climateCells)
 {
     const uint32_t numSamples = numTexels.x * numTexels.y;
     std::vector<float> noise(BiomeNoiseGrids::numFields * numSamples);
@@ -700,7 +701,7 @@ void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 nu
                 const vec2 pos = texelCentersStartXZ + vec2(x, z) * static_cast<float>(texelSizeBlocks);
                 outBiomes[idx] = OasisShaping::sample(pos, oases).vegetation
                     ? Biome::OASIS
-                    : biomeFromNoise(noiseAt(grids, idx), cellContext, pos);
+                    : biomeFromNoise(noiseAt(grids, idx), climateCells ? &cellContext : nullptr, pos);
             }
         }
     });

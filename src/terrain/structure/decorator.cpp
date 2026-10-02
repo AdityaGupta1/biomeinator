@@ -3,9 +3,9 @@
 
 #include "decorator.h"
 
+#include "../terrain_formation.h"
 #include "debug.h"
-
-#include <algorithm>
+#include "util/rng.h"
 
 namespace
 {
@@ -13,6 +13,18 @@ namespace
 uint32_t surfaceBlockKey(uint8_t surface, Block block)
 {
     return (static_cast<uint32_t>(surface) << 16) | static_cast<uint32_t>(block);
+}
+
+// One uniform value per patch of ground about 20 blocks across, which picks that patch's drift
+// species. Noise-warped cell borders keep the patches from reading as a grid.
+float driftSample(glm::ivec2 posXZ_WS, uint32_t worldSeed)
+{
+    const uint32_t seed = worldSeed ^ hash(640921733);
+    const glm::vec2 pos = glm::vec2(posXZ_WS);
+    const glm::vec2 warpedPos =
+        pos + 10.f * TerrainFormations::valueNoise2(pos / 24.f, seed ^ 0x51Du, seed ^ 0x2A7u);
+    const glm::ivec2 cell = glm::ivec2(glm::floor(warpedPos / 20.f));
+    return initRng(seed, static_cast<uint32_t>(cell.x), static_cast<uint32_t>(cell.y)).nextFloat();
 }
 
 } // namespace
@@ -51,10 +63,11 @@ void Decorator::addDriftEntry(Block block, float weight, std::initializer_list<B
 {
     this->addEntry(block, weight, supportBlocks);
     this->entries.back().isDrift = true;
-    this->driftBlocks.push_back(block);
+    this->driftTotalWeight += weight;
 }
 
-Block Decorator::getBlock(float rndSample, float driftSample, Block supportBlock, uint8_t surface) const
+Block Decorator::getBlock(
+    float rndSample, glm::ivec2 posXZ_WS, uint32_t worldSeed, Block supportBlock, uint8_t surface) const
 {
     if (this->isEmpty())
     {
@@ -85,8 +98,22 @@ Block Decorator::getBlock(float rndSample, float driftSample, Block supportBlock
     }
     if (entry.isDrift)
     {
-        const size_t driftIdx = static_cast<size_t>(driftSample * this->driftBlocks.size());
-        return this->driftBlocks[std::min(driftIdx, this->driftBlocks.size() - 1)];
+        float driftWeightSample = driftSample(posXZ_WS, worldSeed) * this->driftTotalWeight;
+        Block driftBlock = Block::AIR;
+        for (const DecoratorEntry& driftEntry : this->entries)
+        {
+            if (!driftEntry.isDrift)
+            {
+                continue;
+            }
+            driftBlock = driftEntry.block;
+            driftWeightSample -= driftEntry.weight;
+            if (driftWeightSample < 0.f)
+            {
+                break;
+            }
+        }
+        return driftBlock;
     }
     return entry.block;
 }

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-02_
 
 # Decorator System
 
@@ -10,8 +10,8 @@ Each biome has a `Decorator` — a weighted list of blocks. Surface-biome decora
 
 A block with an `upperHalf` (see [block_system.md](block_system.md)) also fills the cell above.
 If that cell isn't air, nothing is placed, but the draw has already consumed its RNG, so a
-blocked two-tall plant doesn't shift later placements. Both passes go through
-`Chunk::tryPlaceDecorator`, so cave floors can use two-tall plants too.
+blocked two-tall plant doesn't shift later placements. The upper half always goes on +Y, so
+two-tall entries must be floor-only (checked in `validateDecorators`).
 
 Support-block filtering lets entries restrict placement to particular blocks. A surface mask independently permits floors, walls, or ceilings; it defaults to floors so ordinary vegetation remains upright. Eligible surface/support pairs are indexed when entries are registered, so probing six neighboring faces does not repeatedly scan the weighted pool. If several eligible faces border one cave-air voxel, a position hash chooses one before the weighted draw, preventing corner density from multiplying.
 
@@ -45,8 +45,8 @@ determines the position-hashed face choice.
 ## Drifts
 
 Drift entries pool their weight like ordinary entries, but the species drawn comes from a
-per-patch value (`driftSample` in `chunk.cpp`, about 20-block cells with warped borders) rather
-than the column's RNG. A patch of meadow therefore grows only one flower, which reads much calmer
+per-patch value (`driftSample` in `decorator.cpp`, about 20-block cells with warped borders) rather
+than the column's RNG; each species' weight sets its share of patches. A patch of meadow therefore grows only one flower, which reads much calmer
 than an even mix of every species. Density stays per-column, so only the species choice is
 clustered. Drift members must share support blocks, since the support test runs on the rolled
 entry before the species is swapped.

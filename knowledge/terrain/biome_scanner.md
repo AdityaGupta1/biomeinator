@@ -1,4 +1,4 @@
-_Last edited: 2026-10-01_
+_Last edited: 2026-10-02_
 
 # BiomeScanner
 
@@ -29,8 +29,8 @@ and patch sizes, summed over a range of seeds. It is the measurement that biome 
 - Patch widths are quantized to the step, so the median is dominated by one- and two-texel
   fringe patches along jagged borders. The area-weighted width, the size of the patch a random
   point lies in, is the better measure of how big a biome feels.
-- Like the map, it reads the macro field without per-column jitter.
-- `--cells=0` measures per-column climate instead of climate cells, for comparison.
+- `--cells=0` (and `cells=0` on the map APIs) matches per-column climate instead of climate
+  cells, for comparison. `/api/cells` returns each texel's cell id hash for drawing cell borders.
 
 ## Gotchas
 

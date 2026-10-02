@@ -44,16 +44,6 @@ constexpr uint8_t surfaceForFace(BlockFace face)
     }
 }
 
-// One uniform value per patch of ground about 20 blocks across, which decorators use to pick that
-// patch's drift species. Noise-warped cell borders keep the patches from reading as a grid.
-float driftSample(ivec2 posXZ_WS, uint32_t worldSeed)
-{
-    const uint32_t seed = worldSeed ^ hash(640921733);
-    const vec2 pos = vec2(posXZ_WS);
-    const vec2 warpedPos = pos + 10.f * TerrainFormations::valueNoise2(pos / 24.f, seed ^ 0x51Du, seed ^ 0x2A7u);
-    const ivec2 cell = ivec2(floor(warpedPos / 20.f));
-    return initRng(seed, static_cast<uint32_t>(cell.x), static_cast<uint32_t>(cell.y)).nextFloat();
-}
 } // namespace
 
 Chunk::Chunk(ivec2 chunkPos, Region* region)
@@ -461,7 +451,6 @@ void Chunk::runStructuresAndDecoratorPass()
             const uint baseBlockIdx = chunkSizeY * columnIdx;
             const uint terrainTopY = this->terrainTopY[columnIdx];
             const ivec2 columnPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ) + ivec2(blockX, blockZ);
-            const float columnDriftSample = driftSample(columnPos_WS, worldSeed);
             // Lower cells cannot place surface decorators or consume their RNG. Keep
             // scanning above the terrain top because structures can supply higher supports.
             Block bottomBlock = this->blocks[baseBlockIdx + terrainTopY];
@@ -479,7 +468,7 @@ void Chunk::runStructuresAndDecoratorPass()
                     if (!this->caveDecoration.isCaveAir(columnIdx, blockY))
                     {
                         decoratorBlock = decorator.getBlock(
-                            decoratorRng.nextFloat(), columnDriftSample, bottomBlock, DECORATOR_SURFACE_FLOOR);
+                            decoratorRng.nextFloat(), columnPos_WS, worldSeed, bottomBlock, DECORATOR_SURFACE_FLOOR);
                     }
                     if (decoratorBlock != Block::AIR)
                     {
@@ -600,8 +589,7 @@ void Chunk::runStructuresAndDecoratorPass()
                     const Block supportBlock = getBlock(blockPos_CS - blockFaceBasis(face).normal);
                     auto blockRng = initRng(worldSeed ^ hash(771093284), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
                     const Block decoratorBlock = caveDecorator.getBlock(blockRng.nextFloat(),
-                        driftSample(ivec2(blockPos_WS.x, blockPos_WS.z), worldSeed), supportBlock,
-                        surfaceForFace(face));
+                        ivec2(blockPos_WS.x, blockPos_WS.z), worldSeed, supportBlock, surfaceForFace(face));
                     if (decoratorBlock == Block::AIR || !this->tryPlaceDecorator(baseBlockIdx, blockY, decoratorBlock))
                     {
                         continue;

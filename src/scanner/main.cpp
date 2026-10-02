@@ -221,7 +221,6 @@ int runCoverage(const CoverageOptions& options)
         return 1;
     }
 
-    BiomeNoiseFields::setClimateCellsEnabled(options.climateCells != 0);
     std::vector<BiomeCoverage> coverage(static_cast<size_t>(Biome::COUNT));
     std::vector<Biome> biomes(texelsPerSide * texelsPerSide);
     for (int64_t seed = options.seedStart; seed < options.seedStart + options.seedCount; ++seed)
@@ -230,7 +229,8 @@ int runCoverage(const CoverageOptions& options)
         BiomeNoiseFields::fillBiomeRect(biomes.data(),
                                        glm::ivec2(-halfSizeBlocks),
                                        glm::uvec2(texelsPerSide),
-                                       static_cast<uint32_t>(options.step));
+                                       static_cast<uint32_t>(options.step),
+                                       options.climateCells != 0);
         for (const Biome biome : biomes)
         {
             ++coverage[static_cast<size_t>(biome)].numTexels;
@@ -388,11 +388,11 @@ int main(int argc, char** argv)
         {
             std::scoped_lock<std::mutex> lock(noiseMutex);
             ensureSeed(static_cast<uint32_t>(seed));
-            BiomeNoiseFields::setClimateCellsEnabled(climateCells != 0);
             BiomeNoiseFields::fillBiomeRect(biomes.data(),
                                            glm::ivec2(x0, z0),
                                            glm::uvec2(numTexelsX, numTexelsZ),
-                                           static_cast<uint32_t>(texelSizeBlocks));
+                                           static_cast<uint32_t>(texelSizeBlocks),
+                                           climateCells != 0);
         }
 
         res.set_content(reinterpret_cast<const char*>(biomes.data()), biomes.size(), "application/octet-stream");
@@ -467,14 +467,14 @@ int main(int argc, char** argv)
         nlohmann::json out = nlohmann::json::array();
         {
             std::scoped_lock<std::mutex> lock(noiseMutex);
-            BiomeNoiseFields::setClimateCellsEnabled(climateCells != 0);
             for (int64_t seed = seedStart; seed < seedStart + seedCount; ++seed)
             {
                 ensureSeed(static_cast<uint32_t>(seed));
                 BiomeNoiseFields::fillBiomeRect(biomes.data(),
                                                glm::ivec2(-radiusBlocks),
                                                glm::uvec2(texelsPerSide),
-                                               static_cast<uint32_t>(texelSizeBlocks));
+                                               static_cast<uint32_t>(texelSizeBlocks),
+                                               climateCells != 0);
 
                 size_t matchCount = 0;
                 for (const Biome biome : biomes)
