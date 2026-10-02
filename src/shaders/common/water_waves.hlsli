@@ -190,7 +190,8 @@ float2 waveNormalPerturbation(float2 posXZ_WS, float waveTime, float noiseTime)
 // boundary shows no change in shading, only in silhouette
 float3 waveShadingNormal(float2 posXZ_WS, float waveTime, float noiseTime, bool backfaceHit)
 {
-    const float2 grad = waveHeightAndGradient(posXZ_WS, waveTime).yz + waveNormalPerturbation(posXZ_WS, waveTime, noiseTime);
+    const float2 grad = waveHeightAndGradient(posXZ_WS, waveTime).yz
+                      + waveNormalPerturbation(posXZ_WS, waveTime, noiseTime);
     const float flip = backfaceHit ? -1.f : 1.f;
     return flip * normalize(float3(-grad.x, 1.f, -grad.y));
 }

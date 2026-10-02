@@ -144,20 +144,16 @@ glossy lobe, bends the shading normal with Cycles' `ensure_valid_specular_reflec
 (`util/shading_normal.hlsli`) so reflections never point into the surface. Water tops start from
 the wave normal and get the same correction; diffuse-only materials retain the interpolated normal
 after geometric backface orientation, even when that shading normal faces away from the ray (see
-#371). The
-bent normal is shared by all of a material's lobes, so a diffuse lobe under a glossy one sees it
-too, whereas Cycles bends only the specular closures' normal. This can also change fine
+#371). The bent normal is shared by all of a material's lobes, so a diffuse lobe under a glossy one
+sees it too, whereas Cycles bends only the specular closures' normal. This can also change fine
 normal-mapped creases, not just mesh silhouettes.
 
-The correction must be measured against the triangle actually hit. Water once instead clamped its
-reflections to a margin above the analytic (unperturbed) wave normal, which neither matches the
-triangles nor the distance-faded geometry: with path splitting the reflection half is
-reflection-only, so the path loop's below-the-geometric-surface rejection killed reflections the
-analytic clamp let through (black flicker at grazing views), and a margin large enough to hide that
-also stopped a sun within a few degrees of the horizon from ever reflecting. A clamp that rebuilds
-the normal as the view/reflection half vector is also ill-conditioned at grazing incidence, where
-the two vectors are nearly parallel, and produced near-horizontal normals that reflected the sun
-from far off its azimuth.
+The correction must be measured against the triangle actually hit, not an analytic or
+distance-faded surface such as water's unperturbed wave normal: path splitting makes the reflection
+half reflection-only, so any reflection below the triangle is killed by the path loop's
+geometric-surface rejection. Clamps that rebuild the normal as the view/reflection half vector are
+also unsuitable, since the two vectors are nearly parallel at grazing incidence and the rebuilt
+normal can point almost anywhere.
 
 Closest-hit orients the base surface before applying a normal map. It maps the linear tangent-space
 sample through interpolated authored glTF tangents from a separate buffer, or a
