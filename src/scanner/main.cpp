@@ -422,12 +422,10 @@ int main(int argc, char** argv)
         {
             std::scoped_lock<std::mutex> lock(noiseMutex);
             ensureSeed(static_cast<uint32_t>(seed));
-            for (int64_t idx = 0; idx < static_cast<int64_t>(cellHashes.size()); ++idx)
-            {
-                const glm::vec2 pos = glm::vec2(x0, z0) +
-                    (glm::vec2(idx % numTexelsX, idx / numTexelsX) + 0.5f) * static_cast<float>(texelSizeBlocks);
-                cellHashes[idx] = BiomeNoiseFields::climateCellHashAt(pos);
-            }
+            BiomeNoiseFields::fillClimateCellHashRect(cellHashes.data(),
+                                                     glm::ivec2(x0, z0),
+                                                     glm::uvec2(numTexelsX, numTexelsZ),
+                                                     static_cast<uint32_t>(texelSizeBlocks));
         }
 
         res.set_content(reinterpret_cast<const char*>(cellHashes.data()), cellHashes.size() * sizeof(uint32_t),
@@ -461,11 +459,15 @@ int main(int argc, char** argv)
             return;
         }
 
+        int64_t climateCells = 1;
+        tryGetIntParam(req, "cells", climateCells);
+
         const Biome targetBiome = static_cast<Biome>(biomeId);
         std::vector<Biome> biomes(texelsPerSide * texelsPerSide);
         nlohmann::json out = nlohmann::json::array();
         {
             std::scoped_lock<std::mutex> lock(noiseMutex);
+            BiomeNoiseFields::setClimateCellsEnabled(climateCells != 0);
             for (int64_t seed = seedStart; seed < seedStart + seedCount; ++seed)
             {
                 ensureSeed(static_cast<uint32_t>(seed));

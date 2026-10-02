@@ -128,7 +128,14 @@ edges.
 
 Cell lookups are warped by noise at two scales so borders curve and fray. Neighboring cells with the
 same biome merge, so biome regions are clusters of cells; the climate noise scale is what sets
-cluster size. Cell climates are cached per thread and the cache is dropped on reseed.
+cluster size.
+
+Lookups go through a `ClimateCellContext` built per chunk (or per map tile). A cell spans dozens of
+chunks, so nearly everything a lookup needs (candidate sites, the warp noise lattice corners, site
+climates) is shared by every column in the chunk. Contexts hold no global state, so reseeding needs
+no invalidation, and any context gives the same answer for the same position, which is what keeps
+neighboring chunks and the tint map consistent. The context must cover the column positions plus
+the lookup jitter; a lookup outside it reads past its tables.
 
 ## Per-Column Jitter
 
