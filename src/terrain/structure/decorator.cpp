@@ -61,8 +61,16 @@ void Decorator::addEntry(Block block, float weight, std::initializer_list<Block>
 
 void Decorator::addDriftEntry(Block block, float weight, std::initializer_list<Block> supportBlocks)
 {
-    this->addEntry(block, weight, supportBlocks);
-    this->entries.back().isDrift = true;
+    this->addDriftEntry({ block }, weight, supportBlocks);
+}
+
+void Decorator::addDriftEntry(std::initializer_list<Block> blocks, float weight, std::initializer_list<Block> supportBlocks)
+{
+    ASSERT(blocks.size() > 0);
+    this->addEntry(*blocks.begin(), weight, supportBlocks);
+    DecoratorEntry& entry = this->entries.back();
+    entry.isDrift = true;
+    entry.driftBlocks = blocks;
     this->driftTotalWeight += weight;
 }
 
@@ -99,21 +107,28 @@ Block Decorator::getBlock(
     if (entry.isDrift)
     {
         float driftWeightSample = driftSample(posXZ_WS, worldSeed) * this->driftTotalWeight;
-        Block driftBlock = Block::AIR;
-        for (const DecoratorEntry& driftEntry : this->entries)
+        const DecoratorEntry* driftEntry = nullptr;
+        for (const DecoratorEntry& candidate : this->entries)
         {
-            if (!driftEntry.isDrift)
+            if (!candidate.isDrift)
             {
                 continue;
             }
-            driftBlock = driftEntry.block;
-            driftWeightSample -= driftEntry.weight;
+            driftEntry = &candidate;
+            driftWeightSample -= candidate.weight;
             if (driftWeightSample < 0.f)
             {
                 break;
             }
         }
-        return driftBlock;
+        const std::vector<Block>& driftBlocks = driftEntry->driftBlocks;
+        if (driftBlocks.size() == 1)
+        {
+            return driftBlocks[0];
+        }
+        RandomNumberGenerator variantRng = initRng(worldSeed ^ hash(214733061),
+            static_cast<uint32_t>(posXZ_WS.x), static_cast<uint32_t>(posXZ_WS.y /*z*/));
+        return driftBlocks[variantRng.nextUint() % driftBlocks.size()];
     }
     return entry.block;
 }

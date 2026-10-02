@@ -24,6 +24,8 @@ struct DecoratorEntry
     std::unordered_set<Block> supportBlocks{};
     uint8_t surfaces{ DECORATOR_SURFACE_FLOOR };
     bool isDrift{ false };
+    // A drift species' blocks, which each column in its patches picks between evenly
+    std::vector<Block> driftBlocks{};
 };
 
 class Decorator
@@ -42,6 +44,8 @@ public:
     // picked by weight, so e.g. meadow flowers come in single-species drifts. Floor only, and all
     // drift entries must share the same support blocks.
     void addDriftEntry(Block block, float weight, std::initializer_list<Block> supportBlocks = {});
+    // One drift species made of several blocks mixed evenly within its patches, e.g. flower variants
+    void addDriftEntry(std::initializer_list<Block> blocks, float weight, std::initializer_list<Block> supportBlocks = {});
 
     Block getBlock(float rndSample, glm::ivec2 posXZ_WS, uint32_t worldSeed, Block supportBlock, uint8_t surface) const;
 

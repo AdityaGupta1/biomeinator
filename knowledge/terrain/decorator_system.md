@@ -46,7 +46,8 @@ determines the position-hashed face choice.
 
 Drift entries pool their weight like ordinary entries, but the species drawn comes from a
 per-patch value (`driftSample` in `decorator.cpp`, about 20-block cells with warped borders) rather
-than the column's RNG; each species' weight sets its share of patches. A patch of meadow therefore grows only one flower, which reads much calmer
+than the column's RNG; each species' weight sets its share of patches. A species can list several
+blocks (flower variants), which each column in its patches picks between evenly. A patch of meadow therefore grows only one flower, which reads much calmer
 than an even mix of every species. Density stays per-column, so only the species choice is
 clustered. Drift members must share support blocks, since the support test runs on the rolled
 entry before the species is swapped.

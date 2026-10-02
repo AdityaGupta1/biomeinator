@@ -251,8 +251,7 @@ void init()
         data.decorator.addDriftEntry(Block::LUPINE_BOTTOM, 2.5f, { Block::GRASS_BLOCK });
         data.decorator.addDriftEntry(Block::POPPY, 2.5f, { Block::GRASS_BLOCK });
         data.decorator.addDriftEntry(Block::CORNFLOWER, 2.5f, { Block::GRASS_BLOCK });
-        data.decorator.addDriftEntry(Block::OXEYE_DAISY_1, 1.25f, { Block::GRASS_BLOCK });
-        data.decorator.addDriftEntry(Block::OXEYE_DAISY_2, 1.25f, { Block::GRASS_BLOCK });
+        data.decorator.addDriftEntry({ Block::OXEYE_DAISY_1, Block::OXEYE_DAISY_2 }, 2.5f, { Block::GRASS_BLOCK });
         data.decorator.addEntry(Block::AIR, 12.f);
     }
 
