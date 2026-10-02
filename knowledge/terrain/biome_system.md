@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-02_
 
 # Biome System
 
@@ -113,9 +113,41 @@ water containment. Testing the label rather than coverage is enough, since landf
 inside their labels. The footprint check makes oases about three times rarer than a center-only
 check, because their dry, flat climate usually borders Mesa or red desert.
 
+## Climate Cells
+
+The climate a column is matched on comes from its **climate cell**, not the column itself: a
+weighted Voronoi (power diagram) of ~384-block cells, each sampling temperature and humidity once
+at its site. Per-column climate turns a target sitting between two others in climate space into a
+thin ribbon along every border between them, and fast climate gradients into slivers. A cell
+can't do either, so slivers only remain where something per-column cuts through a cell.
+
+Only the climate target choice uses cells. Tiers (ocean, beach, highland, lowland), beach type and
+terrain regimes still decide per column, since they must agree with terrain, so one cell can hold
+several biomes. Terrain itself never reads cells: piecewise-constant climate would step at cell
+edges.
+
+Cell lookups are warped by noise at two scales so borders curve and fray. Neighboring cells with the
+same biome merge, so biome regions are clusters of cells; the climate noise scale is what sets
+cluster size.
+
+Lookups go through a `ClimateCellContext` built per chunk (or per map tile). A cell spans dozens of
+chunks, so nearly everything a lookup needs (candidate sites, the warp noise lattice corners, site
+climates) is shared by every column in the chunk. Contexts hold no global state, so reseeding needs
+no invalidation, and any context gives the same answer for the same position, which is what keeps
+neighboring chunks and the tint map consistent. The context must cover the column positions plus
+the lookup jitter; a lookup outside it reads past its tables.
+
+Each cell's sampled climate also gets a random offset (up to ±0.1 per axis), which turns a broad
+climate zone (cold and humid, say) from one huge region of a single biome into a mosaic of that
+biome and its climate neighbors. Whole cells switch, so it adds no slivers.
+
 ## Per-Column Jitter
 
-`BiomeNoise::randomOffset` adds tiny random offsets before selection. This softens biome boundaries — columns near an edge occasionally flip, creating a natural ragged border instead of a sharp line following an isosurface.
+`BiomeNoise::randomOffset` adds tiny random offsets before selection. This softens tier and regime
+boundaries — columns near an edge occasionally flip, creating a natural ragged border instead of a
+sharp line following an isosurface. It must not perturb the cell climate: a whole cell near a target
+boundary would turn to speckle. Cell borders get the same raggedness from a hashed offset of a few
+blocks on the cell lookup position instead (the scanner map skips it, like the climate jitter).
 
 ## BiomeData Role
 
@@ -132,3 +164,10 @@ Both follow climate rather than labels, with no landform exceptions; a landform 
 never snow needs a climate reason in the line, not a `BiomeData` flag. A cold
 biome should therefore use a plain grass top and let layers whiten it, rather than hardcoding
 snowy grass, which would leave no transition.
+
+`TopBlocks::patches` breaks a dry grass top into noise-driven patches (podzol, coarse dirt), the way
+vanilla's old-growth taiga does. All biomes share one ground noise, so patches in neighboring
+biomes line up across the border instead of restarting at the label. Patches replace only grass
+that the underwater and shore rules left alone, and run before the snow cap. Decorators read the
+patched block as their support, so a biome with patches has to list podzol or coarse dirt in its
+decorator supports, or those patches stay bare.

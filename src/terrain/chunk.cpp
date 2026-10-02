@@ -10,6 +10,7 @@
 #include "cave_biome_noise.h"
 #include "terrain.h"
 #include "terrain_materials.h"
+#include "terrain_formation.h"
 #include "terrain_omm.h"
 #include "multithreading/thread_memory_allocator.h"
 #include "rendering/buffer/to_free_list.h"
@@ -42,6 +43,7 @@ constexpr uint8_t surfaceForFace(BlockFace face)
         default: ASSERT(false); return 0;
     }
 }
+
 } // namespace
 
 Chunk::Chunk(ivec2 chunkPos, Region* region)
@@ -394,6 +396,21 @@ void Chunk::placeSnowLayers()
     }
 }
 
+bool Chunk::tryPlaceDecorator(uint32_t baseBlockIdx, uint32_t blockY, Block block)
+{
+    const Block upperHalf = Blocks::getBlockData(block).upperHalf;
+    if (upperHalf != Block::AIR)
+    {
+        if (blockY + 1 >= chunkSizeY || this->blocks[baseBlockIdx + blockY + 1] != Block::AIR)
+        {
+            return false;
+        }
+        this->blocks[baseBlockIdx + blockY + 1] = upperHalf;
+    }
+    this->blocks[baseBlockIdx + blockY] = block;
+    return true;
+}
+
 void Chunk::runStructuresAndDecoratorPass()
 {
     for (const Chunk* structureNeighbor : this->structureNeighbors)
@@ -433,6 +450,7 @@ void Chunk::runStructuresAndDecoratorPass()
 
             const uint baseBlockIdx = chunkSizeY * columnIdx;
             const uint terrainTopY = this->terrainTopY[columnIdx];
+            const ivec2 columnPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ) + ivec2(blockX, blockZ);
             // Lower cells cannot place surface decorators or consume their RNG. Keep
             // scanning above the terrain top because structures can supply higher supports.
             Block bottomBlock = this->blocks[baseBlockIdx + terrainTopY];
@@ -450,11 +468,11 @@ void Chunk::runStructuresAndDecoratorPass()
                     if (!this->caveDecoration.isCaveAir(columnIdx, blockY))
                     {
                         decoratorBlock = decorator.getBlock(
-                            decoratorRng.nextFloat(), bottomBlock, DECORATOR_SURFACE_FLOOR);
+                            decoratorRng.nextFloat(), columnPos_WS, worldSeed, bottomBlock, DECORATOR_SURFACE_FLOOR);
                     }
                     if (decoratorBlock != Block::AIR)
                     {
-                        thisBlock = decoratorBlock;
+                        this->tryPlaceDecorator(baseBlockIdx, blockY, decoratorBlock);
                     }
                 }
 
@@ -570,11 +588,13 @@ void Chunk::runStructuresAndDecoratorPass()
                     const BlockFace face = static_cast<BlockFace>(faceIdx);
                     const Block supportBlock = getBlock(blockPos_CS - blockFaceBasis(face).normal);
                     auto blockRng = initRng(worldSeed ^ hash(771093284), blockPos_WS.x, blockPos_WS.y, blockPos_WS.z);
-                    const Block decoratorBlock = caveDecorator.getBlock(
-                        blockRng.nextFloat(), supportBlock, surfaceForFace(face));
-                    if (decoratorBlock == Block::AIR) continue;
+                    const Block decoratorBlock = caveDecorator.getBlock(blockRng.nextFloat(),
+                        ivec2(blockPos_WS.x, blockPos_WS.z), worldSeed, supportBlock, surfaceForFace(face));
+                    if (decoratorBlock == Block::AIR || !this->tryPlaceDecorator(baseBlockIdx, blockY, decoratorBlock))
+                    {
+                        continue;
+                    }
 
-                    this->blocks[blockIdx] = decoratorBlock;
                     if (Blocks::getBlockData(decoratorBlock).stateKind == BlockStateKind::SURFACE_MOUNT)
                     {
                         this->blockStates.insert_or_assign(blockIdx, faceIdx);

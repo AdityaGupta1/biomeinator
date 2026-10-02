@@ -162,6 +162,15 @@ BlockData readBlockJson(const std::filesystem::path& jsonPath)
         data.translucent = blockJson.value("translucent", false);
         data.proceduralColor = blockJson.value("proceduralColor", false);
         data.randomJitter = blockJson.value("randomJitter", false);
+        if (blockJson.contains("upperHalf"))
+        {
+            const std::string upperHalfId = blockJson["upperHalf"].get<std::string>();
+            data.upperHalf = fromId(upperHalfId);
+            if (data.upperHalf == Block::COUNT)
+            {
+                throw std::runtime_error("unknown upperHalf block '" + upperHalfId + "'");
+            }
+        }
         if (blockJson.contains("blockState"))
         {
             data.stateKind = parseNamedValue(blockStateKindsByName, blockJson["blockState"], "blockState");
@@ -221,9 +230,13 @@ void init()
     textureNames.clear();
     sliceByTextureName.clear();
     blocksById.reserve(blockIdNames.size());
+    // All ids first: a JSON may reference a block that sorts after it (upperHalf)
     for (size_t i = 0; i < blockIdNames.size(); ++i)
     {
         blocksById.emplace(blockIdNames[i], static_cast<Block>(i));
+    }
+    for (size_t i = 0; i < blockIdNames.size(); ++i)
+    {
         const fs::path jsonPath = blocksDir / (std::string(blockIdNames[i]) + ".json");
         blockDatas[i] = readBlockJson(jsonPath);
     }

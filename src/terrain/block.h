@@ -94,6 +94,8 @@ struct BlockData
     uint32_t modelIdx{ ~0u };
     std::array<uint8_t, 4> rotationY{ 0, 0, 0, 0 }; // quarter turns
     uint8_t numRotationsY{ 1 };
+    // Two-tall plants: the block decorators place directly above this one
+    Block upperHalf{ Block::AIR };
 };
 
 // These shapes never hide a neighboring solid, cutout, or glass cube face.

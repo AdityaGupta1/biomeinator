@@ -19,9 +19,9 @@ StructureGen::StructureGen(std::vector<StructureGenVariant> variants,
       flags(flags)
 {}
 
-StructureType StructureGen::pickVariant(RandomNumberGenerator& rng) const
+std::optional<StructureType> StructureGen::pickVariant(RandomNumberGenerator& rng) const
 {
-    float totalWeight = 0.f;
+    float totalWeight = emptyWeight;
     for (const StructureGenVariant& variant : variants)
     {
         totalWeight += variant.weight;
@@ -36,7 +36,7 @@ StructureType StructureGen::pickVariant(RandomNumberGenerator& rng) const
             return variant.type;
         }
     }
-    return variants.back().type;
+    return roll < emptyWeight ? std::nullopt : std::optional(variants.back().type);
 }
 
 uint32_t StructureGen::gridSalt() const
