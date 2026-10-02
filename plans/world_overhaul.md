@@ -91,6 +91,8 @@ after the terrain shape work, preferring target placement over large biases.
   redwood forest.
 - **After facing:** giant ferns and fallen logs (redwood/old-growth floors), vines, then leaf litter
   and petal carpets (flat custom-model quads, as in vanilla).
+- **Unplaced blocks:** peony and rose bush are registered but no biome places them yet (flower
+  meadow fits), and nothing places cattails, so `CATTAIL_BOTTOM`'s `upperHalf` is unused.
 - **Snow on labels:** cold-climate snow cover starts at temperature -0.25; keep cool forest targets
   (birch forest at -0.3) in mind when moving targets, or they read as snowy forests.
 
