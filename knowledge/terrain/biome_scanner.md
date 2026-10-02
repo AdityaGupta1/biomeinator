@@ -30,15 +30,7 @@ and patch sizes, summed over a range of seeds. It is the measurement that biome 
   fringe patches along jagged borders. The area-weighted width, the size of the patch a random
   point lies in, is the better measure of how big a biome feels.
 - Like the map, it reads the macro field without per-column jitter.
-
-## Calibrate mode
-
-`BiomeScanner --calibrate` adjusts the per-biome climate biases (see
-[biome_system.md](biome_system.md#climate-calibration)) and writes `src/terrain/biome_calibration.h`
-in the source tree. It starts from the biases currently compiled in, so rebuild the scanner between
-runs to continue from the last result. A biome at the edge of climate space (ice fields) responds
-weakly to its bias and is usually the last to converge. Coverage and calibrate both accept
-`--cells=0` to compare against per-column climate.
+- `--cells=0` measures per-column climate instead of climate cells, for comparison.
 
 ## Gotchas
 

@@ -128,11 +128,4 @@ const BiomeData& getBiomeData(Biome biome);
 // may be sampled elsewhere (a biome cell's center) than the column itself.
 Biome getClosestBiome(const BiomeNoise& biomeNoise, const ClimateTarget& climate);
 
-const std::vector<Biome>& getTierCandidates(BiomeTier tier);
-
-// Subtracted from a target's squared climate distance, so a larger bias wins more ground. Loaded from
-// biome_calibration.h; tools adjust them while calibrating.
-float getClimateBias(Biome biome);
-void setClimateBias(Biome biome, float bias);
-
 } // namespace Biomes
