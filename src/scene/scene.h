@@ -45,6 +45,15 @@ struct HostGeometry
     size_t capacityBytes() const;
 };
 
+// Pooled sets keep their capacity, so instances with small meshes (e.g. water) use their own pool
+// rather than tying up sets grown by large ones
+enum class HostGeometrySize : uint8_t
+{
+    LARGE,
+    SMALL,
+    COUNT,
+};
+
 class Instance
 {
     friend class ::Scene;
@@ -88,6 +97,7 @@ private:
     bool isGeometryFinalized{ false };
     // From creation until its geometry is uploaded or it is destroyed
     bool holdsHostGeometry{ false };
+    HostGeometrySize hostGeometrySize{ HostGeometrySize::LARGE };
     glm::vec3 boundsMin_OS{ 0.f, 0.f, 0.f }; // of host_verts, set by finalizeGeometry
     glm::vec3 boundsMax_OS{ 0.f, 0.f, 0.f };
     uint32_t tlasEntryIdx{ UINT32_MAX }; // index into Scene::tlasInstanceEntries while in the TLAS
@@ -217,8 +227,8 @@ private:
 
     // Never freed while running: freeing these buffers stalled frames by up to 40 ms. It stays
     // bounded because callers limit how many instances hold geometry at once.
-    std::vector<HostGeometry> hostGeometryPool{};
-    uint32_t numInstancesHoldingHostGeometry{ 0 };
+    std::array<std::vector<HostGeometry>, static_cast<size_t>(HostGeometrySize::COUNT)> hostGeometryPools{};
+    std::array<uint32_t, static_cast<size_t>(HostGeometrySize::COUNT)> numInstancesHoldingHostGeometry{};
 
     // not sure if combining multiple structs into one buffer will lead to alignment problems, but it works for now
     CommittedManagedBuffer sharedBlasUploadBuffer{
@@ -294,7 +304,7 @@ private:
     MappedArray<uint32_t> areaLightSamplingStructure;
 
     void freeInstance(Instance* instance);
-    void recycleHostGeometry(HostGeometry&& geometry);
+    void recycleHostGeometry(HostGeometrySize size, HostGeometry&& geometry);
 
     // returns true if TLAS is now dirty
     void makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
@@ -335,8 +345,8 @@ public:
     // Sums the buffer sections held by every instance (in the TLAS or not) of one kind
     InstanceGpuMemory getInstanceGpuMemory(bool deformable) const;
     size_t getHostGeometryPoolBytes() const;
-    // Instances between creation and upload; the pool never holds more sets than the peak of this
-    uint32_t getNumInstancesHoldingHostGeometry() const;
+    // Instances between creation and upload; a pool never holds more sets than the peak of this
+    uint32_t getNumInstancesHoldingHostGeometry(HostGeometrySize size) const;
 
     // Deformable instances outside animRadius of the center or outside the padded frustum are
     // left static; the shaders fade the waves to rest height towards both limits so the two
@@ -349,7 +359,7 @@ public:
         return this->waveFade;
     }
 
-    Instance* requestNewInstance(ToFreeList& toFreeList);
+    Instance* requestNewInstance(ToFreeList& toFreeList, HostGeometrySize hostGeometrySize = HostGeometrySize::LARGE);
     void markInstanceReadyForBlasBuild(Instance* instance);
 
     uint32_t addMaterial(ToFreeList& toFreeList, const ::Material* material);

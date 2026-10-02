@@ -31,11 +31,15 @@ reuse kept theirs, about 2.8 MB per visible chunk. At render distance 30 that wa
 The pool never frees anything while running, which is why it must stay bounded by other means.
 Freeing these buffers stalled frames: trimming four sets from the pool took 20–40 ms on the main
 thread, and up to 26 ms even with generation idle (see also [terrain → region_system.md](../terrain/region_system.md#freeing-without-stutter)).
-Instead, Terrain only meshes a chunk while fewer than `maxInstancesHoldingHostGeometry` (512)
-instances hold geometry, so the pool can never hold more sets than that. Streaming stays far
-below the cap; only loads reach it, and there it adds about 1 s to a render distance 30 load,
-which 1,024 removed at the cost of a pool twice as large. Water instances take full-size sets
-from the pool despite holding little, so at present half the cap is spent on them.
+Instead, Terrain only meshes a chunk while fewer than `maxTerrainInstancesHoldingHostGeometry`
+(512) terrain instances hold geometry, so the large pool can never hold more sets than that.
+Streaming stays far below the cap; only loads reach it. At render distance 30 the pool tops out
+around 880 MB and the load takes 3.5 s, against 3.0 s uncapped; a cap of 256 halves the pool but
+takes 5 s.
+
+Pooled sets keep their capacity, so there are two pools (`HostGeometrySize`). Water meshes are
+tiny, and drawing them from the same pool tied up terrain-sized sets and half the cap; water uses
+the small pool and is not capped.
 
 Freed instances are destroyed in `freeInstance`, so it removes the instance from every list that
 holds a raw pointer, `pendingTlasEntryAdds` included, before erasing it.

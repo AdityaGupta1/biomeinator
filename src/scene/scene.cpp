@@ -52,8 +52,8 @@ void Instance::releaseHostGeometry()
         return;
     }
     this->holdsHostGeometry = false;
-    --this->scene->numInstancesHoldingHostGeometry;
-    this->scene->recycleHostGeometry({
+    --this->scene->numInstancesHoldingHostGeometry[static_cast<size_t>(this->hostGeometrySize)];
+    this->scene->recycleHostGeometry(this->hostGeometrySize, {
         .verts = std::move(this->host_verts),
         .packedTerrainVerts = std::move(this->host_packedTerrainVerts),
         .tangents = std::move(this->host_tangents),
@@ -371,7 +371,7 @@ void Scene::reset()
     this->areaLightSamplingStructure.reset();
 }
 
-Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
+Instance* Scene::requestNewInstance(ToFreeList& toFreeList, const HostGeometrySize hostGeometrySize)
 {
     if (this->availableInstanceIds.empty())
     {
@@ -399,11 +399,13 @@ Instance* Scene::requestNewInstance(ToFreeList& toFreeList)
     this->instances.emplace(id, std::move(newInstance));
 
     newInstancePtr->holdsHostGeometry = true;
-    ++this->numInstancesHoldingHostGeometry;
-    if (!this->hostGeometryPool.empty())
+    newInstancePtr->hostGeometrySize = hostGeometrySize;
+    ++this->numInstancesHoldingHostGeometry[static_cast<size_t>(hostGeometrySize)];
+    std::vector<HostGeometry>& pool = this->hostGeometryPools[static_cast<size_t>(hostGeometrySize)];
+    if (!pool.empty())
     {
-        newInstancePtr->takeHostGeometry(std::move(this->hostGeometryPool.back()));
-        this->hostGeometryPool.pop_back();
+        newInstancePtr->takeHostGeometry(std::move(pool.back()));
+        pool.pop_back();
     }
 
     return newInstancePtr;
@@ -430,7 +432,7 @@ void Scene::freeInstance(Instance* instance)
     ASSERT(numErased == 1);
 }
 
-void Scene::recycleHostGeometry(HostGeometry&& geometry)
+void Scene::recycleHostGeometry(const HostGeometrySize size, HostGeometry&& geometry)
 {
     if (geometry.capacityBytes() == 0)
     {
@@ -443,20 +445,23 @@ void Scene::recycleHostGeometry(HostGeometry&& geometry)
     geometry.perFaceDatas.clear();
     geometry.ommIdxs.clear();
     geometry.areaLights.clear();
-    this->hostGeometryPool.push_back(std::move(geometry));
+    this->hostGeometryPools[static_cast<size_t>(size)].push_back(std::move(geometry));
 }
 
-uint32_t Scene::getNumInstancesHoldingHostGeometry() const
+uint32_t Scene::getNumInstancesHoldingHostGeometry(const HostGeometrySize size) const
 {
-    return this->numInstancesHoldingHostGeometry;
+    return this->numInstancesHoldingHostGeometry[static_cast<size_t>(size)];
 }
 
 size_t Scene::getHostGeometryPoolBytes() const
 {
     size_t bytes = 0;
-    for (const HostGeometry& geometry : this->hostGeometryPool)
+    for (const std::vector<HostGeometry>& pool : this->hostGeometryPools)
     {
-        bytes += geometry.capacityBytes();
+        for (const HostGeometry& geometry : pool)
+        {
+            bytes += geometry.capacityBytes();
+        }
     }
     return bytes;
 }

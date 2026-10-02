@@ -324,10 +324,11 @@ static glm::ivec3 voxelRenderBoundsMin_WS{ 0, 0, 0 };
 static glm::ivec3 voxelRenderBoundsMax_WS{ 0, 0, 0 };
 
 inline constexpr uint32_t maxTasksPerFrame = 512;
-// Instances hold CPU geometry from meshing until upload, and the scene keeps those buffers for
-// reuse rather than freeing them, so this also bounds that pool. BLAS builds take at most 48 a
-// frame, so meshing further ahead would only queue geometry behind them.
-inline constexpr uint32_t maxInstancesHoldingHostGeometry = 512;
+// Terrain instances hold CPU geometry from meshing until upload, and the scene keeps those buffers
+// for reuse rather than freeing them, so this also bounds that pool. Water instances use the small
+// pool and are not limited. BLAS builds take at most 48 a frame, so meshing further ahead would
+// only queue geometry behind them.
+inline constexpr uint32_t maxTerrainInstancesHoldingHostGeometry = 512;
 inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 96;
 
 struct ChunkScanDistances
@@ -762,13 +763,13 @@ void update(ToFreeList& toFreeList)
     // Geometry goes in ahead of new terrain: the pool is FIFO, so with a deep queue the heavy
     // generateTerrain tasks would otherwise starve the chunks that are one step from visible
     while (!createInstancesTasks.empty() &&
-           scene->getNumInstancesHoldingHostGeometry() + 2 <= maxInstancesHoldingHostGeometry)
+           scene->getNumInstancesHoldingHostGeometry(HostGeometrySize::LARGE) < maxTerrainInstancesHoldingHostGeometry)
     {
         const Task task = createInstancesTasks.front();
         createInstancesTasks.pop_front();
 
-        Instance* terrainInstance = scene->requestNewInstance(toFreeList);
-        Instance* waterInstance = scene->requestNewInstance(toFreeList);
+        Instance* terrainInstance = scene->requestNewInstance(toFreeList, HostGeometrySize::LARGE);
+        Instance* waterInstance = scene->requestNewInstance(toFreeList, HostGeometrySize::SMALL);
         task.chunkPtr->setInstances(terrainInstance, waterInstance);
         tasksToEnqueue.push_back(task);
     }
