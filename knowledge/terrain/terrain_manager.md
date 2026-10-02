@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-10-02_
 
 # Terrain Manager
 
@@ -20,6 +20,8 @@ The extra padding exists so chunks have time to progress through the state machi
 The `+ structureMaxChunkRadius` term inside `fillStructuresDistance` (not the obvious `+ 1`) is the non-obvious one. For a chunk at `D = createBlasDistance` to reach `HAS_GEOMETRY`, its 4 cardinal neighbors (at `D±1`) must each reach `HAS_ALL_BLOCKS`, which requires every chunk in each cardinal's 5×5 structure footprint (chunks at `D±1±structureMaxChunkRadius`) to have run `checkStructureNeighbors`. That task is enqueued only when a chunk advances `HAS_TERRAIN → AWAITING_STRUCTURE_NEIGHBORS`, which is gated at `fillStructuresDistance`. Dropping the term leaves the `D = renderDistance` ring stuck at `HAS_ALL_BLOCKS` under a locked camera. Moving cameras hide the bug because outer rings keep promoting.
 
 `generateTerrainDistance = fillStructuresDistance + structureMaxChunkRadius` similarly guarantees that the 5×5 footprint of every `fillStructuresDistance` chunk has materialised `Chunk*` objects (`checkStructureNeighbors` walks neighbor pointers and asserts non-null).
+
+Two further distances, measured to whole regions, decide when regions are evicted; see [region_system.md](region_system.md#distances).
 
 ## Destruction Uses Union of Old + New Bounds
 

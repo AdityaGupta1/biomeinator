@@ -224,12 +224,17 @@ private:
     std::vector<Structure> structures{};
     std::vector<SurfaceStructureCandidate> surfaceStructureCandidates{};
     std::vector<CaveStructure> caveStructures{};
+    // Only populated while this chunk fills its structures
     std::vector<const Chunk*> structureNeighbors{};
-    std::atomic<uint32_t> numReadyStructureNeighbors{ 0 };
+    // Bit per structure neighbor (see structureNeighborBit) that has terrain and has announced it.
+    // Bits are set idempotently and cleared when a neighbor is removed, so neighbors may leave and
+    // return; see knowledge/terrain/chunk_state_machine.md.
+    std::atomic<uint32_t> readyStructureNeighborsMask{ 0 };
 
     std::array<Chunk*, 4> neighbors{};
     uint32_t numNeighborsSet{ 0 };
-    std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
+    // Bit per NeighborDirection whose chunk has all its blocks
+    std::atomic<uint32_t> neighborsWithBlocksMask{ 0 };
 
     bool hasSerializedData{ false };
 
@@ -239,6 +244,14 @@ private:
 
     Instance* terrainInstance{ nullptr };
     Instance* waterInstance{ nullptr };
+
+    static constexpr uint32_t numStructureNeighbors = (2 * structureMaxChunkRadius + 1) * (2 * structureMaxChunkRadius + 1);
+    static_assert(numStructureNeighbors < 32, "readyStructureNeighborsMask needs a bit per structure neighbor");
+    using StructureNeighborhood = std::array<Chunk*, numStructureNeighbors>;
+    StructureNeighborhood collectStructureNeighbors();
+    static uint32_t structureNeighborBit(glm::ivec2 offset);
+    void markStructureNeighborsReady(uint32_t neighborBits);
+    void markNeighborsWithBlocks(uint32_t neighborBits);
 
     void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
     void buildTerrainAirMask();
@@ -269,8 +282,15 @@ private:
 
 public:
     Chunk(glm::ivec2 chunkPos, Region* region);
+    ~Chunk();
 
     void setNeighbors(bool createNeighbors);
+
+    // Main thread only, while no task can touch this chunk or the removed one. Each undoes the
+    // removed chunk's contribution to this chunk's readiness, stepping the state back to the
+    // last stage that did not depend on it.
+    void onNeighborRemoved(NeighborDirection dir);
+    void onStructureNeighborRemoved(glm::ivec2 offset);
 
     void generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc);
     void checkStructureNeighbors();
@@ -294,14 +314,18 @@ public:
     void setInstancesVisible(bool visible);
 
     glm::ivec2 getChunkPos() const;
+    Region* getRegion() const;
 
+    Chunk* getNeighbor(NeighborDirection dir) const;
     uint32_t getNumNeighborsSet() const;
+    bool getHasSerializedData() const;
 
     bool tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const;
 
     const std::vector<Biome>& getBiomes() const;
     // Only valid once the chunk has all its blocks
     SerializedChunkView getSerializedView() const;
+    uint64_t hashFinalBlocks() const;
 
     void loadSerializedData(SerializedChunkData&& data);
 
@@ -338,6 +362,8 @@ class Region
 private:
     std::array<Region*, 4> neighbors{};
     uint32_t numNeighborsSet{ 0 };
+    // Queued or running tasks that may touch this region's chunks; it is only removed at zero
+    std::atomic<uint32_t> numPins{ 0 };
 
 public:
     const glm::ivec2 regionPos;
@@ -353,7 +379,15 @@ public:
 
     Region* getNeighbor(NeighborDirection dir) const;
     void setNeighbor(NeighborDirection dir, Region* neighborRegion);
+    void clearNeighbor(NeighborDirection dir);
     uint32_t getNumNeighborsSet() const;
+
+    void pin();
+    void unpin();
+    bool isPinned() const;
+
+    // Far enough from the camera to be removed once unpinned; no new work is scheduled for it
+    bool isStaged{ false };
 
     static uint32_t chunkPosToIdx(glm::ivec2 regionChunkPos);
 };

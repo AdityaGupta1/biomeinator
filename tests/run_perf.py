@@ -79,6 +79,10 @@ def mib(num_bytes):
 
 def print_memory(memory):
     print(f"  vram: {mib(memory['usageBytes']):.0f} MiB in use of a {mib(memory['budgetBytes']):.0f} MiB budget")
+    if "processPrivateBytes" in memory:
+        print(f"  process: {mib(memory['processPrivateBytes']):.0f} MiB private, "
+              f"{mib(memory['processPeakPrivateBytes']):.0f} MiB peak; "
+              f"{memory['terrainChunks']} chunks in {memory['terrainRegions']} regions")
     print(f"  {'buffer':<44}{'alloc MiB':>10}{'used MiB':>10}")
     for entry in memory["buffers"]:
         print(f"  {entry['name']:<44}{mib(entry['allocatedBytes']):>10.1f}{mib(entry['usedBytes']):>10.1f}")

@@ -65,6 +65,13 @@ lifecycle, or asynchronous cache I/O.
 - Discard unfinished chunks after outstanding work and references drain.
 - Exercise removal/recreation beside surviving chunks before adding disk I/O.
 
+Status (2026-10-02): implemented. Eviction is on by default and regenerates evicted
+regions from the seed. See knowledge/terrain/region_system.md for the design: tasks pin regions
+instead of using coordinate handles, readiness masks push and pull, and survivors step back on
+removal. `--validateEviction` hashes evicted chunks and compares them after regeneration.
+For Part 3: write completed chunks in `removeRegion` before dropping them, reserve loading regions
+against the scan, and load through `loadSerializedData`, which already rejoins the pipeline.
+
 ## Part 3: Temporary disk cache and distance policy
 
 - Create unique session directories and hold the in-use lock for their lifetime.

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-02_
 
 # Perf Runs
 
@@ -187,6 +187,11 @@ enumerate themselves through `GpuMemoryReporter`, so a new buffer type shows up 
 it rather than by being plumbed into the report; `usedBytes` is allocated minus free-list space,
 so the gap between the two is fragmentation plus growth headroom. The instance sums cover every
 live instance, not just the ones in the TLAS. `show` prints the block.
+
+The block also has the process's private and peak private bytes and the resident terrain regions
+and chunks, which is how CPU memory staying flat under region eviction is checked. Seed 100 at
+render distance 8, 3,000 frames flying straight at 200 blocks/s (2026-10-02): 3.6 GB private with
+1,699 resident chunks evicting, 7.8 GB with 17,651 chunks under `--evictRegions=false`.
 
 Seed 100 at render distance 30, fullscreen 1440p, 2026-09-20, before BLAS compaction: 5.9 GB
 in use. Static instances (terrain) held 1.94 GB of BLAS, 1.2 GB of verts, 400 MB of

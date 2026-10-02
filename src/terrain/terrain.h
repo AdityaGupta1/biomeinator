@@ -26,6 +26,11 @@ void addChunkToRevisit(Chunk* chunk);
 // Forces a full scan of every chunk in range on the next update
 void setDirty();
 
+// With --validateEviction, chunks regenerated after their region was evicted are compared against
+// what they held before; see knowledge/terrain/region_system.md
+bool isValidatingEviction();
+void validateRegeneratedChunk(const Chunk* chunk);
+
 void update(ToFreeList& toFreeList);
 
 // For perf runs measuring world streaming; see knowledge/tests/perf_runs.md
@@ -37,6 +42,13 @@ struct StreamingStats
     uint32_t tasksPending; // in the pool, queued or executing
 };
 StreamingStats getStreamingStats();
+
+struct ResidencyStats
+{
+    uint32_t numRegions;
+    uint32_t numChunks;
+};
+ResidencyStats getResidencyStats();
 
 bool isCameraUnderwater();
 

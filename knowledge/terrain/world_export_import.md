@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-02_
 
 # World Export / Import
 
@@ -81,6 +81,8 @@ Export gates per chunk on `state >= HAS_ALL_BLOCKS`. Anything below that — inc
 
 - Past `HAS_ALL_BLOCKS`, no task ever mutates a chunk's `blocks` / `biomes` / `structures` again, so the export reads stable data without any lock. A `HAS_TERRAIN` chunk could transition to `FILLING_STRUCTURES` mid-export and produce a torn read.
 - Saving only completed blocks means restored chunks can skip generation without retaining an intermediate generation stage.
+
+Export only covers resident regions: with eviction on, regions the camera left far behind are gone and are not exported (see [region_system.md](region_system.md#lifetime)).
 
 ## Early-return is correctness, not optimization
 

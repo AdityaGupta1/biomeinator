@@ -10,6 +10,7 @@
 #include "util/rng.h"
 
 #include <json.hpp>
+#include <psapi.h>
 
 #include <algorithm>
 #include <filesystem>
@@ -422,9 +423,18 @@ static nlohmann::json memoryJson()
         });
     }
 
+    PROCESS_MEMORY_COUNTERS_EX processMemory{};
+    GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&processMemory),
+                         sizeof(processMemory));
+    const Terrain::ResidencyStats residency = Terrain::getResidencyStats();
+
     return {
         { "budgetBytes", videoMemoryInfo.Budget },
         { "usageBytes", videoMemoryInfo.CurrentUsage },
+        { "processPrivateBytes", processMemory.PrivateUsage },
+        { "processPeakPrivateBytes", processMemory.PeakPagefileUsage },
+        { "terrainRegions", residency.numRegions },
+        { "terrainChunks", residency.numChunks },
         { "buffers", buffers },
         { "staticInstances", instanceMemoryJson(renderState.scene.getInstanceGpuMemory(false)) },
         { "deformableInstances", instanceMemoryJson(renderState.scene.getInstanceGpuMemory(true)) },

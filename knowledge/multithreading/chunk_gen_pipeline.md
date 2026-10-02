@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-10-02_
 
 # Chunk Generation Pipeline
 
@@ -19,6 +19,11 @@ No explicit barriers or dependency graphs exist. Ordering is emergent from the s
 ## Why Main-Thread Gating Matters
 
 `createInstances` needs `Instance*` pointers allocated from the scene (which is not thread-safe). The terrain manager allocates these on the main thread before enqueuing the geometry task. This is why there's a separate `chunksToGenerateGeometry` deque — those chunks need main-thread setup before becoming tasks.
+
+## Region Pins
+
+Each task pins the regions around its chunk while it is queued or running, so the main thread
+never evicts a region a task can touch. See [terrain → region_system.md](../terrain/region_system.md#pins-and-why-removal-is-safe).
 
 ## Completion Callbacks
 
