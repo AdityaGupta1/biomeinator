@@ -146,8 +146,18 @@ bool isHighland(const BiomeNoise& noise);
 // reach the ocean.
 float computeFloodFactor(const BiomeNoise& biomeNoise);
 
-// The first terrain regime that claims the column, otherwise the closest climate candidate.
-Biome biomeFromNoise(const BiomeNoise& biomeNoise);
+// The first terrain regime that claims the column, otherwise the closest climate candidate. With
+// climate cells on, the candidate is matched on the climate of the biome cell containing
+// cellLookupPosXZ_WS rather than the column's own; pass the column position, plus any per-column
+// jitter that should rag cell borders.
+Biome biomeFromNoise(const BiomeNoise& biomeNoise, glm::vec2 cellLookupPosXZ_WS);
+
+// Climate cells assign each land biome cell one climate, sampled at its center, so no biome can
+// form a patch smaller than a cell or a ribbon between two others. On by default; tools turn it
+// off to compare against per-column climate.
+void setClimateCellsEnabled(bool enabled);
+// A hash of the climate cell containing posXZ_WS, for tools that visualize the cells themselves
+uint32_t climateCellHashAt(glm::vec2 posXZ_WS);
 
 // Batch-evaluates the surface biome noise on a uniform XZ grid (one sample per texel center,
 // texelSizeBlocks blocks apart) and writes the closest biome per texel, x-innermost. Skips the

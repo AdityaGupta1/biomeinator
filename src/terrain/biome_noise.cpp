@@ -11,7 +11,9 @@
 
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 
 #include <FastNoise/FastNoise.h>
@@ -30,18 +32,23 @@ static FN::SmartNode<FN::Generator> fnErosion;
 inline constexpr float baseNoiseScale = 1000.f;
 // Climate (temperature, humidity) and relief (peak, inland, erosion) can scale independently:
 // enlarging climate regions alone doesn't move coastlines or mountains.
-inline constexpr float climateNoiseScale = baseNoiseScale * 1.5f;
+inline constexpr float climateNoiseScale = baseNoiseScale * 3.f;
 inline constexpr float reliefNoiseScale = baseNoiseScale * 1.f;
 
 // Shared by fillGrids and sampleAt so single-point samples match the grids
 static int noiseFieldSeed;
 static ivec2 noiseOffsetXZ;
 
+static bool climateCellsEnabled = true;
+// Bumped by init so per-thread cell climate caches from a previous seed are discarded
+static uint32_t cellCacheGeneration = 0;
+
 void init(uint32_t worldSeed)
 {
     noiseFieldSeed = static_cast<int>(worldSeed ^ hash(719023919));
     RandomNumberGenerator rng = initRng(worldSeed ^ hash(8810091029));
     noiseOffsetXZ = ivec2(rng.nextInt(-4096, 4096), rng.nextInt(-4096, 4096));
+    ++cellCacheGeneration;
 
     {
         auto source = FN::New<FN::Simplex>();
@@ -484,10 +491,99 @@ bool isClaimedByRegime(const BiomeNoise& n)
     return findClaimingRegime(n) != nullptr;
 }
 
-Biome biomeFromNoise(const BiomeNoise& biomeNoise)
+void setClimateCellsEnabled(bool enabled)
+{
+    climateCellsEnabled = enabled;
+}
+
+// Cells are a jittered grid of sites with random weights (a power diagram), so neighboring cells
+// differ in size. Lookups are warped by noise at two scales, so borders curve and fray instead of
+// following straight polygon edges.
+inline constexpr float climateCellSize = 384.f;
+inline constexpr float climateCellMaxWeightRadius = 0.45f * climateCellSize;
+// Heavy sites can claim ground past their immediate neighbors
+inline constexpr int climateCellSearchRadius = 2;
+
+struct ClimateCell
+{
+    ivec2 id;
+    vec2 sitePosXZ_WS;
+};
+
+static ClimateCell findClimateCell(vec2 posXZ_WS)
+{
+    const uint32_t seed = static_cast<uint32_t>(noiseFieldSeed) ^ hash(402913377);
+    const vec2 warpedPos = posXZ_WS +
+        55.f * TerrainFormations::valueNoise2(posXZ_WS / 120.f, seed ^ 0x3A1u, seed ^ 0x7C5u) +
+        7.f * TerrainFormations::valueNoise2(posXZ_WS / 18.f, seed ^ 0x1D9u, seed ^ 0x52Bu);
+
+    const ivec2 homeCell = ivec2(glm::floor(warpedPos / climateCellSize));
+    ClimateCell best{};
+    float bestPowerDistance = std::numeric_limits<float>::max();
+    for (int dz = -climateCellSearchRadius; dz <= climateCellSearchRadius; ++dz)
+    {
+        for (int dx = -climateCellSearchRadius; dx <= climateCellSearchRadius; ++dx)
+        {
+            const ivec2 cell = homeCell + ivec2(dx, dz);
+            RandomNumberGenerator rng = initRng(seed, static_cast<uint32_t>(cell.x), static_cast<uint32_t>(cell.y));
+            const vec2 site = (vec2(cell) + vec2(rng.nextFloat(0.15f, 0.85f), rng.nextFloat(0.15f, 0.85f))) * climateCellSize;
+            const float weight = rng.nextFloat(-1.f, 1.f) * climateCellMaxWeightRadius * climateCellMaxWeightRadius;
+            const vec2 offset = warpedPos - site;
+            const float powerDistance = dot(offset, offset) - weight;
+            if (powerDistance < bestPowerDistance)
+            {
+                bestPowerDistance = powerDistance;
+                best = { cell, site };
+            }
+        }
+    }
+    return best;
+}
+
+uint32_t climateCellHashAt(vec2 posXZ_WS)
+{
+    const ivec2 id = findClimateCell(posXZ_WS).id;
+    return hash(static_cast<uint32_t>(id.x) ^ hash(static_cast<uint32_t>(id.y)));
+}
+
+static ClimateTarget climateCellClimate(vec2 posXZ_WS)
+{
+    struct Cache
+    {
+        uint32_t generation = ~0u;
+        std::unordered_map<uint64_t, ClimateTarget> climates;
+    };
+    thread_local Cache cache;
+    if (cache.generation != cellCacheGeneration || cache.climates.size() > 65536)
+    {
+        cache.climates.clear();
+        cache.generation = cellCacheGeneration;
+    }
+
+    const ClimateCell cell = findClimateCell(posXZ_WS);
+    const uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(cell.id.x)) << 32) | static_cast<uint32_t>(cell.id.y);
+    const auto it = cache.climates.find(key);
+    if (it != cache.climates.end())
+    {
+        return it->second;
+    }
+    const BiomeNoise siteNoise = sampleAt(cell.sitePosXZ_WS);
+    const ClimateTarget climate{ .temperature = siteNoise.temperature, .humidity = siteNoise.humidity };
+    cache.climates.emplace(key, climate);
+    return climate;
+}
+
+Biome biomeFromNoise(const BiomeNoise& biomeNoise, vec2 cellLookupPosXZ_WS)
 {
     const TerrainRegimeData* regime = findClaimingRegime(biomeNoise);
-    return regime ? regime->biome : Biomes::getClosestBiome(biomeNoise);
+    if (regime)
+    {
+        return regime->biome;
+    }
+    const ClimateTarget climate = climateCellsEnabled
+        ? climateCellClimate(cellLookupPosXZ_WS)
+        : ClimateTarget{ .temperature = biomeNoise.temperature, .humidity = biomeNoise.humidity };
+    return Biomes::getClosestBiome(biomeNoise, climate);
 }
 
 void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels, uint32_t texelSizeBlocks)
@@ -503,7 +599,7 @@ void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 nu
     for (uint32_t idx = 0; idx < numSamples; ++idx)
     {
         const vec2 pos = texelCentersStartXZ + vec2(idx % numTexels.x, idx / numTexels.x) * static_cast<float>(texelSizeBlocks);
-        outBiomes[idx] = OasisShaping::sample(pos, oases).vegetation ? Biome::OASIS : biomeFromNoise(noiseAt(grids, idx));
+        outBiomes[idx] = OasisShaping::sample(pos, oases).vegetation ? Biome::OASIS : biomeFromNoise(noiseAt(grids, idx), pos);
     }
 }
 

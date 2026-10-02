@@ -114,16 +114,18 @@ struct CoverageOptions
     int64_t step{ 32 };
     // Patches narrower than this (as the side of a square of equal area) count as slivers
     int64_t sliverWidthBlocks{ 128 };
+    int64_t climateCells{ 1 };
 };
 
 bool parseCoverageOptions(int argc, char** argv, CoverageOptions& outOptions)
 {
-    const std::array<std::pair<const char*, int64_t*>, 5> optionFields{{
+    const std::array<std::pair<const char*, int64_t*>, 6> optionFields{{
         { "--seedStart=", &outOptions.seedStart },
         { "--seedCount=", &outOptions.seedCount },
         { "--size=", &outOptions.sizeBlocks },
         { "--step=", &outOptions.step },
         { "--sliverWidth=", &outOptions.sliverWidthBlocks },
+        { "--cells=", &outOptions.climateCells },
     }};
     for (int argIdx = 2; argIdx < argc; ++argIdx)
     {
@@ -219,6 +221,7 @@ int runCoverage(const CoverageOptions& options)
         return 1;
     }
 
+    BiomeNoiseFields::setClimateCellsEnabled(options.climateCells != 0);
     std::vector<BiomeCoverage> coverage(static_cast<size_t>(Biome::COUNT));
     std::vector<Biome> biomes(texelsPerSide * texelsPerSide);
     for (int64_t seed = options.seedStart; seed < options.seedStart + options.seedCount; ++seed)
@@ -318,7 +321,7 @@ int main(int argc, char** argv)
         if (!parseCoverageOptions(argc, argv, options))
         {
             fprintf(stderr, "usage: BiomeScanner --coverage [--seedStart=N] [--seedCount=N] [--size=blocks] "
-                            "[--step=blocks] [--sliverWidth=blocks]\n");
+                            "[--step=blocks] [--sliverWidth=blocks] [--cells=0|1]\n");
             return 1;
         }
         return runCoverage(options);
@@ -378,10 +381,14 @@ int main(int argc, char** argv)
             return;
         }
 
+        int64_t climateCells = 1;
+        tryGetIntParam(req, "cells", climateCells);
+
         std::vector<Biome> biomes(numTexelsX * numTexelsZ);
         {
             std::scoped_lock<std::mutex> lock(noiseMutex);
             ensureSeed(static_cast<uint32_t>(seed));
+            BiomeNoiseFields::setClimateCellsEnabled(climateCells != 0);
             BiomeNoiseFields::fillBiomeRect(biomes.data(),
                                            glm::ivec2(x0, z0),
                                            glm::uvec2(numTexelsX, numTexelsZ),
@@ -389,6 +396,42 @@ int main(int argc, char** argv)
         }
 
         res.set_content(reinterpret_cast<const char*>(biomes.data()), biomes.size(), "application/octet-stream");
+    });
+
+    // Returns one uint32 per texel: a hash of the climate cell at the texel center, x-innermost
+    server.Get("/api/cells", [](const httplib::Request& req, httplib::Response& res)
+    {
+        int64_t seed, x0, z0, numTexelsX, numTexelsZ, texelSizeBlocks;
+        if (!tryGetIntParam(req, "seed", seed) || !tryGetIntParam(req, "x0", x0) ||
+            !tryGetIntParam(req, "z0", z0) || !tryGetIntParam(req, "w", numTexelsX) ||
+            !tryGetIntParam(req, "h", numTexelsZ) || !tryGetIntParam(req, "step", texelSizeBlocks))
+        {
+            setBadRequest(res, "required params: seed, x0, z0, w, h, step");
+            return;
+        }
+        if (numTexelsX <= 0 || numTexelsZ <= 0 || numTexelsX > maxTexelsPerRequest ||
+            numTexelsZ > maxTexelsPerRequest || numTexelsX * numTexelsZ > maxTexelsPerRequest || texelSizeBlocks <= 0 ||
+            texelSizeBlocks > maxCoveredBlocksPerAxis ||
+            !isCoveredRectValid(x0, z0, numTexelsX * texelSizeBlocks, numTexelsZ * texelSizeBlocks))
+        {
+            setBadRequest(res, "invalid dimensions");
+            return;
+        }
+
+        std::vector<uint32_t> cellHashes(numTexelsX * numTexelsZ);
+        {
+            std::scoped_lock<std::mutex> lock(noiseMutex);
+            ensureSeed(static_cast<uint32_t>(seed));
+            for (int64_t idx = 0; idx < static_cast<int64_t>(cellHashes.size()); ++idx)
+            {
+                const glm::vec2 pos = glm::vec2(x0, z0) +
+                    (glm::vec2(idx % numTexelsX, idx / numTexelsX) + 0.5f) * static_cast<float>(texelSizeBlocks);
+                cellHashes[idx] = BiomeNoiseFields::climateCellHashAt(pos);
+            }
+        }
+
+        res.set_content(reinterpret_cast<const char*>(cellHashes.data()), cellHashes.size() * sizeof(uint32_t),
+                        "application/octet-stream");
     });
 
     // Scans [seedStart, seedStart + seedCount) and reports, per seed, the fraction of texels

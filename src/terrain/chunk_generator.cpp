@@ -607,7 +607,14 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const BiomeNoise biomeNoise = BiomeNoiseFields::noiseAt(biomeNoiseGrids, columnIdx);
             const BiomeNoise jitteredBiomeNoise = BiomeNoise::randomOffset(biomeNoise, rng);
             const auto oasis = OasisShaping::sample(vec2(blockPosXZ_WS), oasisContext);
-            const Biome biome = oasis.vegetation ? Biome::OASIS : BiomeNoiseFields::biomeFromNoise(jitteredBiomeNoise);
+            // Hashed rather than drawn from rng, so it leaves the chunk's rng stream untouched
+            RandomNumberGenerator cellJitterRng = initRng(worldSeed ^ hash(551023987),
+                static_cast<uint>(blockPosXZ_WS.x), static_cast<uint>(blockPosXZ_WS.y /*z*/));
+            const float cellJitterX = cellJitterRng.nextFloatAbs(3.5f);
+            const float cellJitterZ = cellJitterRng.nextFloatAbs(3.5f);
+            const vec2 cellLookupPosXZ_WS = vec2(blockPosXZ_WS) + vec2(cellJitterX, cellJitterZ);
+            const Biome biome = oasis.vegetation ? Biome::OASIS
+                                                 : BiomeNoiseFields::biomeFromNoise(jitteredBiomeNoise, cellLookupPosXZ_WS);
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
 

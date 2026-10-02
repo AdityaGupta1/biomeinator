@@ -471,7 +471,7 @@ const BiomeData& getBiomeData(Biome biome)
     return BIOME_DATA(biome);
 }
 
-Biome getClosestBiome(const BiomeNoise& biomeNoise)
+Biome getClosestBiome(const BiomeNoise& biomeNoise, const ClimateTarget& climate)
 {
 #ifdef DEBUG_BIOME_OVERRIDE
     if (true)
@@ -506,8 +506,8 @@ Biome getClosestBiome(const BiomeNoise& biomeNoise)
     for (const Biome biome : candidatesByTier[static_cast<size_t>(tier)])
     {
         const ClimateTarget& target = BIOME_DATA(biome).climate;
-        const float dTemperature = biomeNoise.temperature - target.temperature;
-        const float dHumidity = biomeNoise.humidity - target.humidity;
+        const float dTemperature = climate.temperature - target.temperature;
+        const float dHumidity = climate.humidity - target.humidity;
         const float dist2 = dTemperature * dTemperature + dHumidity * dHumidity;
 
         if (dist2 < closestDist2)

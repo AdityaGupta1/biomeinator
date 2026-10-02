@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-01_
 
 # Biome System
 
@@ -113,9 +113,30 @@ water containment. Testing the label rather than coverage is enough, since landf
 inside their labels. The footprint check makes oases about three times rarer than a center-only
 check, because their dry, flat climate usually borders Mesa or red desert.
 
+## Climate Cells
+
+The climate a column is matched on comes from its **climate cell**, not the column itself: a
+weighted Voronoi (power diagram) of ~384-block cells, each sampling temperature and humidity once
+at its site. With per-column climate, a target sitting between two others in climate space showed
+up as a thin ribbon along every border between them, and fast climate gradients gave slivers.
+A cell can't do either, so slivers only remain where something per-column cuts through a cell.
+
+Only the climate target choice uses cells. Tiers (ocean, beach, highland, lowland), beach type and
+terrain regimes still decide per column, since they must agree with terrain, so one cell can hold
+several biomes. Terrain itself never reads cells: piecewise-constant climate would step at cell
+edges.
+
+Cell lookups are warped by noise at two scales so borders curve and fray. Neighboring cells with the
+same biome merge, so biome regions are clusters of cells; the climate noise scale is what sets
+cluster size. Cell climates are cached per thread and the cache is dropped on reseed.
+
 ## Per-Column Jitter
 
-`BiomeNoise::randomOffset` adds tiny random offsets before selection. This softens biome boundaries — columns near an edge occasionally flip, creating a natural ragged border instead of a sharp line following an isosurface.
+`BiomeNoise::randomOffset` adds tiny random offsets before selection. This softens tier and regime
+boundaries — columns near an edge occasionally flip, creating a natural ragged border instead of a
+sharp line following an isosurface. It must not perturb the cell climate: a whole cell near a target
+boundary would turn to speckle. Cell borders get the same raggedness from a hashed offset of a few
+blocks on the cell lookup position instead (the scanner map skips it, like the climate jitter).
 
 ## BiomeData Role
 
