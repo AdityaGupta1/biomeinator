@@ -882,6 +882,183 @@ fillStructureBlocksHeader(FIR_TREE)
     }
 }
 
+// A round leaf layer with an irregular outline: stretched and shifted a little off the trunk, its
+// rim thinned out, and a few sprigs poking out past it. Every leaf must touch the layer's solid
+// core through a face, so thinning never strands a sprig in midair. All draws depend only on the
+// layer's shape, never on chunk clipping, so every chunk produces the same layer.
+static void placeRaggedLeafLayer(std::vector<Block>& blocks, ivec3 centerPos_CS, float radius,
+                                 RandomNumberGenerator& rng, Block leafBlock)
+{
+    const vec2 stretch(rng.nextFloat(0.85f, 1.15f), rng.nextFloat(0.85f, 1.15f));
+    const vec2 offset(rng.nextFloatAbs(0.4f), rng.nextFloatAbs(0.4f));
+    const int reach = static_cast<int>(glm::ceil(radius * 1.15f + 1.5f));
+    const int side = 2 * reach + 1;
+
+    enum class Cell : uint8_t
+    {
+        EMPTY,
+        CORE,
+        RIM,
+        SPRIG,
+    };
+    std::vector<Cell> cells(side * side, Cell::EMPTY);
+    const auto cellAt = [&](int dx, int dz) -> Cell&
+    {
+        return cells[(dx + reach) + (dz + reach) * side];
+    };
+    for (int dz = -reach; dz <= reach; ++dz)
+    {
+        for (int dx = -reach; dx <= reach; ++dx)
+        {
+            const float distance = length((vec2(dx, dz) - offset) / stretch);
+            const float roll = rng.nextFloat();
+            if (distance <= radius - 1.f || (dx == 0 && dz == 0))
+            {
+                cellAt(dx, dz) = Cell::CORE;
+            }
+            else if (distance <= radius)
+            {
+                cellAt(dx, dz) = roll < 0.25f ? Cell::EMPTY : Cell::RIM;
+            }
+            else if (distance <= radius + 1.f && roll < 0.12f)
+            {
+                cellAt(dx, dz) = Cell::SPRIG;
+            }
+        }
+    }
+
+    // Rim cells hang off the core and sprigs off a rim cell, each through a face
+    const auto hasNeighbor = [&](int dx, int dz, Cell neighbor)
+    {
+        const std::array<ivec2, 4> faceOffsets{{ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }};
+        for (const ivec2 faceOffset : faceOffsets)
+        {
+            const int nx = dx + faceOffset.x;
+            const int nz = dz + faceOffset.y;
+            if (glm::abs(nx) <= reach && glm::abs(nz) <= reach && cellAt(nx, nz) == neighbor)
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+    // Rim cells off the core are dropped before sprigs look for a rim cell to hang from
+    for (const Cell attachedCell : { Cell::RIM, Cell::SPRIG })
+    {
+        const Cell anchor = attachedCell == Cell::RIM ? Cell::CORE : Cell::RIM;
+        for (int dz = -reach; dz <= reach; ++dz)
+        {
+            for (int dx = -reach; dx <= reach; ++dx)
+            {
+                if (cellAt(dx, dz) == attachedCell && !hasNeighbor(dx, dz, anchor))
+                {
+                    cellAt(dx, dz) = Cell::EMPTY;
+                }
+            }
+        }
+    }
+    for (int dz = -reach; dz <= reach; ++dz)
+    {
+        for (int dx = -reach; dx <= reach; ++dx)
+        {
+            if (cellAt(dx, dz) != Cell::EMPTY)
+            {
+                placeTreeLeaf(blocks, centerPos_CS + ivec3(dx, 0, dz), leafBlock);
+            }
+        }
+    }
+}
+
+// A towering narrow cone: a thick trunk with buttress roots, bare for its lower part, under a
+// crown of whorls that widen in a sawtooth down to the crown's base
+fillStructureBlocksHeader(REDWOOD_TREE)
+{
+    const int height = rng.nextInt(39, 56);
+    const int crownBottomY = static_cast<int>(height * rng.nextFloat(0.25f, 0.3f));
+    const float maxCrownRadius = mix(6.f, 7.f, static_cast<float>(height - 39) / 16.f);
+
+    const auto placeLog = [&](ivec3 offset)
+    {
+        const ivec3 pos_CS = structurePos_CS + offset;
+        if (Chunk::isInChunk(pos_CS))
+        {
+            tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(uvec3(pos_CS)), Block::REDWOOD_LOG);
+        }
+    };
+
+    // Buttress roots: lobes on the flare that are widest at the ground and taper smoothly back
+    // into the trunk as they rise, so they never stand apart from it
+    struct Root
+    {
+        vec2 dir;
+        float reach;
+        int height;
+    };
+    const int numRoots = rng.nextInt(4, 7);
+    const float firstRootAngle = rng.nextFloat(glm::two_pi<float>());
+    std::vector<Root> roots;
+    roots.reserve(numRoots);
+    for (int i = 0; i < numRoots; ++i)
+    {
+        const float angle = firstRootAngle + (i / static_cast<float>(numRoots)) * glm::two_pi<float>() +
+                            rng.nextFloatAbs(0.3f);
+        roots.push_back({ vec2(glm::cos(angle), glm::sin(angle)), rng.nextFloat(1.2f, 2.f), rng.nextInt(4, 9) });
+    }
+
+    // Round trunk tapering to one block wide, flaring over its bottom few blocks, sunk so the
+    // flare seats on slopes
+    constexpr int maxRootReach = 2;
+    for (int y = -3; y < height; ++y)
+    {
+        const float t = static_cast<float>(max(y, 0)) / height;
+        const float flare = max(1.f - max(y, 0) / 5.f, 0.f);
+        const float radius = mix(1.5f, 0.6f, t) + 1.2f * flare * flare;
+        const int radiusCeil = static_cast<int>(glm::ceil(radius)) + maxRootReach;
+        for (int dz = -radiusCeil; dz <= radiusCeil; ++dz)
+        {
+            for (int dx = -radiusCeil; dx <= radiusCeil; ++dx)
+            {
+                const vec2 offsetXZ(dx, dz);
+                const float distance = length(offsetXZ);
+                float columnRadius = radius;
+                for (const Root& root : roots)
+                {
+                    const float rootFalloff = max(1.f - max(y, 0) / static_cast<float>(root.height), 0.f);
+                    const float alignment = distance > 0.f ? max(dot(offsetXZ / distance, root.dir), 0.f) : 0.f;
+                    columnRadius = max(columnRadius, radius + root.reach * rootFalloff * rootFalloff *
+                                                                  glm::pow(alignment, 6.f));
+                }
+                if (distance <= columnRadius)
+                {
+                    placeLog(ivec3(dx, y, dz));
+                }
+            }
+        }
+    }
+
+    // From the top down: a leaf capping the trunk, a short spire of plus layers with one gap of
+    // bare trunk, then whorls whose sawtooth widens toward the crown's base. Each whorl starts at the
+    // crown's envelope and narrows over the layers above it.
+    placeTreeLeaf(blocks, structurePos_CS + ivec3(0, height, 0), Block::REDWOOD_LEAVES);
+    constexpr int spireLength = 3;
+    placeRoundLeafLayer(blocks, structurePos_CS + ivec3(0, height - 1, 0), 1.2f, Block::REDWOOD_LEAVES);
+    placeRoundLeafLayer(blocks, structurePos_CS + ivec3(0, height - 3, 0), 1.2f, Block::REDWOOD_LEAVES);
+    int whorlTopY = height - spireLength - 1;
+    while (whorlTopY >= crownBottomY)
+    {
+        const int whorlLength = rng.nextInt(2, 4);
+        const int whorlBottomY = max(whorlTopY - whorlLength + 1, crownBottomY);
+        const float t = static_cast<float>(height - spireLength - whorlBottomY) / (height - spireLength - crownBottomY);
+        const float envelope = mix(1.8f, maxCrownRadius, glm::pow(t, 0.85f)) + rng.nextFloatAbs(0.6f);
+        for (int y = whorlBottomY; y <= whorlTopY; ++y)
+        {
+            const float radius = max(envelope - 1.1f * (y - whorlBottomY), 1.2f);
+            placeRaggedLeafLayer(blocks, structurePos_CS + ivec3(0, y, 0), radius, rng, Block::REDWOOD_LEAVES);
+        }
+        whorlTopY = whorlBottomY - 1;
+    }
+}
+
 fillStructureBlocksHeader(CHERRY_TREE)
 {
     const ivec2 chunkPosXZ_WS =
@@ -996,6 +1173,9 @@ void init()
 
     SET_FILL_STRUCTURE_FUNC(GIANT_OAK_TREE);
     STRUCTURE_BOUNDS_BY_NAME(GIANT_OAK_TREE) = 14;
+
+    SET_FILL_STRUCTURE_FUNC(REDWOOD_TREE);
+    STRUCTURE_BOUNDS_BY_NAME(REDWOOD_TREE) = 11;
 
     for (const FillStructureFunc func : fillStructureFuncs)
     {

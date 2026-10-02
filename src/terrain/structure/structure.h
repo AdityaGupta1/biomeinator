@@ -31,6 +31,7 @@ enum class StructureType : uint8_t
     AUTUMN_BIRCH_TREE,
     TALL_AUTUMN_BIRCH_TREE,
     GIANT_OAK_TREE,
+    REDWOOD_TREE,
 
     COUNT
 };
