@@ -30,7 +30,7 @@ void queuePclPing();
 
 void render();
 
-void queueScreenshot(const bool useTestOutputPath = false);
+void queueScreenshot(const bool useRenderingTestOutputPath = false);
 
 void flush();
 

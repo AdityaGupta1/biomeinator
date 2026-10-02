@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-30_
 
 # Cave Structure System
 
@@ -30,9 +30,9 @@ race-free. They report *terrain* state (pre-structure), which is exactly what ma
 consistent: every chunk sees the same answer regardless of how far each has got in
 its own fill. Together they cost `chunkSizeY / 4` bytes per column, 32 KB per chunk.
 
-Imported chunks build the mask from their loaded blocks (which already include
-structures), so a cluster whose footprint reaches into an imported chunk sees its
-structure blocks as solid there. Deterministic per import; accepted.
+v7 imports preserve the original masks. Legacy v5/v6 golden worlds build masks
+from their final loaded blocks instead; the boundary approximation is intentional
+for these fixtures. See [world export/import](world_export_import.md).
 
 The lookup is limited to the 3×3 structure neighbourhood. A footprint radius
 ≤ `chunkSizeXZ / 2` guarantees every chunk a structure touches has all of the
@@ -154,7 +154,9 @@ bottom layer index in gives each pocket an independent grid.
   tighter `chunkSizeXZ / 2` limit above applies only to fills that read the neighbourhood air mask,
   which this one does not.
 - **`availableHeight` users:** `STONE_COLUMN` fills floor→ceiling for `end - start`
-  blocks; `CAVE_VINES` caps strand length at `availableHeight - 1` so a strand never
+  blocks, so it carries `CAVE_STRUCTURE_GEN_FLAG_NEEDS_CEILING`: on a pocket open to the sky,
+  `end` is the old ground level rather than a ceiling, and the column would stand free in
+  the crater; `CAVE_VINES` caps strand length at `availableHeight - 1` so a strand never
   touches the floor. The fixed-height gens ignore it; their high `minLayerHeight`
   guarantees clearance. `tryPlaceStructureBlock` is AIR-only, so a 3×3 pillar
   auto-clips per column to whatever air actually exists.
@@ -171,14 +173,12 @@ bottom layer index in gives each pocket an independent grid.
   is world-position row-major over neighbours then emission order within a chunk —
   first writer wins into AIR and every chunk agrees on who was first.
 
-## Not serialized (parity gap with surface)
+## Exported candidates preserve boundary generation
 
-`caveStructures` is **not** written to the world export, unlike surface
-`structures`. Imported chunks (`wasImported`) skip both passes and load blocks
-with cave structures already baked in, so this only matters for the overhang of a
-cave structure whose origin sits in an imported chunk but spills into a freshly-
-generated neighbor — that overhang is lost. Surface avoids this by serializing its
-list; cave structures accept the gap (decorative, and the case is rare). Voxel-
-mode golden tests load imported worlds, so they do **not** exercise cave-structure
-generation — regenerating those goldens means re-exporting the world dump (Ctrl+U)
-with current code.
+v7 exports retain the ordered cave candidate list, including available height,
+alongside the original terrain masks. Imported chunks skip their own filling but
+fresh neighbors still consume their candidates, so a structure originating in an
+imported chunk keeps its overhang. Neither sorting candidates nor rebuilding masks
+from final blocks is safe. Legacy v5/v6 worlds have no cave candidates; see
+[world export/import](world_export_import.md) for the legacy approximations and how to
+validate changes to this path.

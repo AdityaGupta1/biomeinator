@@ -36,7 +36,7 @@ void init()
         };
         data.baseBlock = Block::STONE;
         data.caveStructureGens = {
-            { .type = CaveStructureType::STONE_COLUMN, .minLayerHeight = 10, .gridCellSideLength = 56, .gridCellPadding = 12 },
+            { .type = CaveStructureType::STONE_COLUMN, .minLayerHeight = 10, .gridCellSideLength = 56, .gridCellPadding = 12, .flags = CAVE_STRUCTURE_GEN_FLAG_NEEDS_CEILING },
         };
     }
 

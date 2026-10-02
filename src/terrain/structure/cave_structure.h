@@ -11,6 +11,7 @@
 
 // Enum order is also fill order across all neighbor chunks (see Chunk::runStructuresAndDecoratorPass),
 // so earlier types claim space before later ones regardless of which chunk emitted them.
+// Serialized by value in world exports: only append new types.
 enum class CaveStructureType : uint8_t
 {
     LAMP_CLUSTER,
@@ -33,6 +34,8 @@ struct CaveStructure
 };
 
 #define CAVE_STRUCTURE_GEN_FLAG_ALLOW_LAVA (1 << 0)
+// Floor gens that span to the ceiling; skipped on pockets open to the sky, whose layer end is not a ceiling
+#define CAVE_STRUCTURE_GEN_FLAG_NEEDS_CEILING (1 << 1)
 
 struct CaveStructureGen
 {

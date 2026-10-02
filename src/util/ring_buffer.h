@@ -7,15 +7,14 @@
 #include <cassert>
 #include <cstddef>
 
-template<typename T, size_t N>
-class RingBuffer
+template<typename T, size_t N> class RingBuffer
 {
     static_assert(N > 0);
 
 private:
     std::array<T, N> buffer{};
-    size_t offset;
-    size_t size;
+    size_t offset{ 0 };
+    size_t size{ 0 };
 
 public:
     void push(const T& value)

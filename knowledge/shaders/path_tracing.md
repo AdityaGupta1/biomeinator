@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-30_
 
 # Path Tracing Shader
 
@@ -73,7 +73,7 @@ width also gates SHaRC queries; see [SHaRC](../rendering/sharc.md).
 
 8. **Trace next ray** — `TraceRay` from the BSDF-sampled direction. Update material, ray cone width, segment absorption.
 
-9. **BSDF-hit emission MIS** — if the BSDF-sampled ray hit an emissive surface, its emission is MIS-weighted against the light sampling pdf (only for non-specular bounces, since specular has zero light sampling probability). Dome light pdf is also factored in if the ray missed (dome light hit via BSDF sampling). Like the NEE and dome-light cases, the weight is applied to the emission contribution only, never to `pathWeight`: a path that continues past the emissive vertex can only have been produced by BSDF sampling (NEE terminates at the light), so its continuation must keep full throughput. This only matters for a surface that both emits and scatters (glTF materials may; voxel emissive texels have zero diffuse and never do).
+9. **BSDF-hit emission MIS** — if the BSDF-sampled ray hit an emissive surface, its emission is MIS-weighted against the light sampling pdf (only for non-specular bounces, since specular has zero light sampling probability). Dome light pdf is also factored in if the ray missed (dome light hit via BSDF sampling), likewise only after non-specular bounces: a delta vertex never samples the dome light, and weighting its miss anyway all but erased the sun seen through water or in mirror reflections, since the sun cap pdf is in the thousands. Like the NEE and dome-light cases, the weight is applied to the emission contribution only, never to `pathWeight`: a path that continues past the emissive vertex can only have been produced by BSDF sampling (NEE terminates at the light), so its continuation must keep full throughput. This only matters for a surface that both emits and scatters (glTF materials may; voxel emissive texels have zero diffuse and never do).
 
 ### Albedo Guide Outputs
 

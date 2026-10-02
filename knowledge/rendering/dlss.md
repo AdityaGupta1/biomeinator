@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-09-30_
 
 # DLSS
 
@@ -86,7 +86,7 @@ once at startup (`initFrameGenSupport`). Streamline reports *why* a feature is u
 GPU, Hardware-accelerated GPU Scheduling off, old driver, old OS), and each calls for a different
 user action, so `slResultToString` translates the code and the GUI shows it in place of the checkbox
 rather than blaming one cause for all of them.
-Golden test runs opt out entirely, since generated frames would corrupt the screenshots. Perf runs
+Rendering test runs opt out entirely, since generated frames would corrupt the screenshots. Perf runs
 keep it (and Reflex) on so they measure what the game actually does; see
 [tests → perf_runs.md](../tests/perf_runs.md#what-frame-generation-costs).
 

@@ -287,9 +287,5 @@ void Chunk::placeSurfaceStructures()
         }
         const Structure structure{ variant.type, source.pos_WS };
         this->fillStructureBlocks(&structure, 1);
-        if (Chunk::isInChunkXZ(local))
-        {
-            this->placedSurfaceStructures.push_back(structure);
-        }
     }
 }

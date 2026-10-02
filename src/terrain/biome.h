@@ -124,6 +124,8 @@ void init();
 
 const BiomeData& getBiomeData(Biome biome);
 
+const SurfaceStructureGens& getSurfaceStructureGens();
+
 // The tier comes from biomeNoise's relief; the target within it is matched on climate, which
 // may be sampled elsewhere (a biome cell's center) than the column itself.
 Biome getClosestBiome(const BiomeNoise& biomeNoise, const ClimateTarget& climate);

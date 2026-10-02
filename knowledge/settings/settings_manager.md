@@ -1,8 +1,14 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-30_
 
 # Settings Manager
 
 `src/settings_manager.h/cpp` — a global, stringly-typed key-value store for all runtime settings. Parsed once from CLI args at startup via `parseArgs()`, then readable and writable from anywhere at any time (including mid-frame from the GUI).
+
+`tryParseArgs()` contains the non-terminating parse/validation path. It builds a candidate map and
+only replaces the live settings after every option and cross-option rule succeeds, which makes a
+failed parse atomic and directly unit-testable. The application-facing `parseArgs()` is a thin
+wrapper that preserves the command-line contract by printing help/errors and exiting when the
+result is not successful.
 
 ## Storage
 
@@ -36,16 +42,17 @@ Settings are not passed to shaders directly. Each frame the renderer reads the r
 All settings and their defaults are defined in `parseArgs()` and are self-describing. A few non-obvious ones:
 
 - **`voxelMode`** (default `false`): The main switch between the two rendering modes. `true` = procedural voxel terrain; `false` = load a glTF scene specified by `--scene`. Voxel terrain is the primary purpose of the project.
+- **`renderDistance`** must be positive. CLI parsing rejects zero and negative values before window or GPU initialization, matching the world import requirement so exports cannot acquire an invalid distance through the CLI.
 - **`antialiasingMode`**: Defaults to `DLSS` in voxel mode, `NONE` otherwise. Anything wanting a
   deterministic mode (e.g. the test runner) must pass `--antialiasingMode` explicitly.
 - **`debugBool0–3` / `debugFloat0–3`**: Passed to shaders every frame. Useful for tweaking shader behaviour on the fly without recompiling — wire them up temporarily to any shader constant while iterating.
-- **`testOutput`**: If set to a `.png` path, the engine accumulates to `maxAccumulatedFrames`, saves a screenshot, and exits. Used by the golden tests.
+- **`renderingTestOutput`**: If set to a `.png` path, the engine accumulates to `maxAccumulatedFrames`, saves a screenshot, and exits. Used by the rendering tests.
 - **Generated-world camera arguments** (`cameraX/Y/Z`, `cameraYaw/Pitch`) make procedural
   terrain screenshots reproducible without exporting a world. Angles use degrees, yaw zero
   points along +Z, and positive pitch looks up. They only initialize voxel mode; an imported
   world's saved camera still takes precedence, and glTF cameras are unaffected.
-- **`perfOutput`**: If set to a `.json` path, the engine warms up, measures `perfFrames` frames, writes GPU timing statistics, and exits. Mutually exclusive with `testOutput`. See [tests → perf_runs.md](../tests/perf_runs.md).
-- **`isHeadless()`** is true for either of the above and is what code should test for "automated run" behaviour (no foreground window, await voxel import); `isTestMode()` and `isPerfMode()` are for the behaviour specific to each. A headless run also defaults `lockCamera`, `showGui`, `animTimePaused` and `useVsync` to a fixed, unanimated, unthrottled viewpoint, but only when they were not passed explicitly. This is the single place those defaults live; the golden runner and `run_perf.py` pass only their output path.
+- **`perfOutput`**: If set to a `.json` path, the engine warms up, measures `perfFrames` frames, writes GPU timing statistics, and exits. Mutually exclusive with `renderingTestOutput`. See [tests → perf_runs.md](../tests/perf_runs.md).
+- **`isHeadless()`** is true for either of the above and is what code should test for "automated run" behaviour (no foreground window, await voxel import); `isRenderingTestMode()` and `isPerfMode()` are for the behaviour specific to each. A headless run also defaults `lockCamera`, `showGui`, `animTimePaused` and `useVsync` to a fixed, unanimated, unthrottled viewpoint, but only when they were not passed explicitly. This is the single place those defaults live; the rendering test runner and `run_perf.py` pass only their output path.
 - **`forEachSetting`** exists so a perf report can embed every setting it ran with; there is no other reason to enumerate the map.
 - **`lockCamera`**: Disables player input; useful for test screenshots to get a reproducible viewpoint.
 - **`animTimePaused`** (default `false`): Freezes only the animation time driving world animation

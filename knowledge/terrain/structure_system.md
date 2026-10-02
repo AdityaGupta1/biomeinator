@@ -1,4 +1,4 @@
-_Last edited: 2026-09-23_
+_Last edited: 2026-09-30_
 
 # Structure System
 
@@ -65,10 +65,13 @@ the candidates after filling, or read another chunk's in-progress accepted list.
 an assertion enforces it when a rule is used. Opting a much wider structure into this mode
 may require expanding that dependency halo, not just increasing its spacing values.
 
-The owner additionally records accepted structures for export. `getStructures()` combines
-those with ordinary grid structures by value; exports retain their existing format and do
-not serialize transient candidates or pointers into biome configuration. Imported final
-blocks and accepted structures retain the existing import behavior.
+Region v7 saves all exposed-surface candidates, including rejected competitors, alongside
+the original terrain masks. Fresh neighbors need those competitors to reproduce spacing
+at an imported boundary. Grid structures remain a separate ordered list to preserve fill
+precedence. Exposed-surface rules carry stable serialization IDs, so their position in biome
+configuration can change freely; `Biomes::init` throws on a missing or duplicate ID, so a
+misconfigured rule fails at startup instead of on the first export. ID rules are in
+[world_export_import.md](world_export_import.md).
 
 ## Cross-Chunk Filling
 

@@ -848,6 +848,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     {
                         continue;
                     }
+                    if (!layer.closed && bool(gen.flags & CAVE_STRUCTURE_GEN_FLAG_NEEDS_CEILING))
+                    {
+                        continue;
+                    }
 
                     const int gridCellSideLength = static_cast<int>(gen.gridCellSideLength);
                     const int innerSide = gridCellSideLength - static_cast<int>(gen.gridCellPadding);
@@ -868,6 +872,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         continue;
                     }
 
+                    ASSERT(Chunk::isInChunkXZ(columnPosXZ_WS - chunkPosBlocksXZ_WS));
+                    ASSERT(anchorY >= 0 && anchorY < static_cast<int>(chunkSizeY));
+                    ASSERT(layerHeight > 0 && layerHeight <= static_cast<int>(chunkSizeY));
                     this->caveStructures.emplace_back(
                         gen.type, ivec3(columnPosXZ_WS.x, anchorY, columnPosXZ_WS.y /*z*/), layerHeight);
                     return; // first passing gen wins for this side (gen-list order = priority)
@@ -1518,6 +1525,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     {
                         continue; // top of this column is a cave, so skip this candidate
                     }
+                    ASSERT(candidateGroundHeight + 1 < chunkSizeY);
 
                     if (!bool(structureGen.flags & STRUCTURE_GEN_FLAG_ALLOW_UNDERWATER))
                     {
@@ -1546,6 +1554,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         initRng(worldSeed ^ hash(1946793319), candidatePosXZ_WS.x, candidatePosXZ_WS.y /*z*/, gridSalt);
                     if (const std::optional<StructureType> type = structureGen.pickVariant(variantRng))
                     {
+                        ASSERT(this->structures.size() < maxGridStructuresPerChunk);
                         this->structures.emplace_back(*type, candidatePos_WS);
                     }
                 }

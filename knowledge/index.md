@@ -1,4 +1,4 @@
-_Last edited: 2026-09-20_
+_Last edited: 2026-09-30_
 
 # Knowledgebase Index
 
@@ -16,5 +16,5 @@ Each subsystem has its own folder with a local `index.md` that describes its ent
 | [util/](util/index.md) | Math helpers, RNG, Halton sequence, ring buffer |
 | [build/](build/index.md) | CMake configurations, third-party dependencies |
 | [debugging/](debugging/index.md) | GPU fault diagnosis: Aftermath crash dumps and reference instrumentation to read and adapt |
-| [tests/](tests/index.md) | Golden image tests, rendering perf runs, and ad hoc CPU terrain experiments |
+| [tests/](tests/index.md) | CPU unit tests, rendering tests, performance runs, and ad hoc CPU terrain experiments |
 | [reference/](reference/index.md) | Vendored upstream docs (DirectX-Specs) for agent reference |

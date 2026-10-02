@@ -7,7 +7,9 @@
 #include "block.h"
 #include "cave_biome.h"
 #include "cave_biome_noise.h"
+#include "chunk_dimensions.h"
 #include "scene/scene.h"
+#include "serialized_chunk.h"
 #include "structure/cave_structure.h"
 #include "structure/structure.h"
 #include "util/math.h"
@@ -70,10 +72,6 @@ enum class ChunkSegment : uint8_t
     MIXED,
 };
 
-inline constexpr uint32_t chunkSizeXZ = 16;
-inline constexpr uint32_t chunkSizeXZSquare = chunkSizeXZ * chunkSizeXZ;
-inline constexpr uint32_t chunkSizeY = 512;
-inline constexpr uint32_t numChunkBlocks = chunkSizeXZSquare * chunkSizeY;
 inline constexpr glm::ivec3 chunkSizeVec = { chunkSizeXZ, chunkSizeY, chunkSizeXZ };
 inline constexpr uint32_t caveMaxY = 320;
 
@@ -225,9 +223,6 @@ private:
     static_assert(chunkSizeY * terrainSurfaceHeightScale <= 65535.f, "surface height must fit 16 bits");
     std::vector<Structure> structures{};
     std::vector<SurfaceStructureCandidate> surfaceStructureCandidates{};
-    // Owner-only accepted list for export. Neighbors read the immutable candidates,
-    // never this list, which is populated during structure filling.
-    std::vector<Structure> placedSurfaceStructures{};
     std::vector<CaveStructure> caveStructures{};
     std::vector<const Chunk*> structureNeighbors{};
     std::atomic<uint32_t> numReadyStructureNeighbors{ 0 };
@@ -236,7 +231,7 @@ private:
     uint32_t numNeighborsSet{ 0 };
     std::atomic<uint32_t> numNeighborsWithBlocks{ 0 };
 
-    bool wasImported{ false };
+    bool hasSerializedData{ false };
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_TERRAIN };
     std::atomic<bool> isMarkedForDestruction{ false };
@@ -298,8 +293,6 @@ public:
     bool getIsMarkedForDestruction() const;
     void setIsMarkedForDestruction(bool marked = true);
 
-    bool getWasImported() const;
-
     void setInstancesVisible(bool visible);
 
     glm::ivec2 getChunkPos() const;
@@ -308,14 +301,11 @@ public:
 
     bool tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const;
 
-    const std::vector<Block>& getBlocks() const;
     const std::vector<Biome>& getBiomes() const;
-    std::vector<Structure> getStructures() const;
-    const std::unordered_map<uint32_t, uint8_t>& getBlockStates() const;
+    // Only valid once the chunk has all its blocks
+    SerializedChunkView getSerializedView() const;
 
-    void loadSerializedData(std::vector<Block>&& blocks, std::vector<Biome>&& biomes,
-                            std::vector<Structure>&& structures,
-                            std::unordered_map<uint32_t, uint8_t>&& blockStates);
+    void loadSerializedData(SerializedChunkData&& data);
 
     static uint32_t blockPosToIdx(glm::uvec3 chunkBlockPos);
     static uint32_t blockPosXZToIdx(glm::uvec2 chunkBlockPos);
@@ -344,8 +334,6 @@ public:
         return isInChunkXZ(pos_CS) && pos_CS.y >= 0 && pos_CS.y < chunkSizeY;
     }
 };
-
-inline constexpr uint32_t regionSideLength = 32;
 
 class Region
 {

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-10-01_
 
 # Material Model and BSDFs
 
@@ -39,7 +39,7 @@ transmission-only material (used for alpha passthrough) must be perfectly specul
   return zero (value and pdf) for those, not just for `wo·h <= 0`; otherwise NEE credits unreachable
   directions and light-sampled renders come out brighter than BSDF-sampled ones. Cycles' eval has
   the same gap (a TODO in `bsdf_microfacet_eval`), which is why its light-sampled rough glass is too
-  bright — see [tests → golden_tests.md](../tests/golden_tests.md) for how the reference avoids it.
+  bright — see [tests → rendering_tests.md](../tests/rendering_tests.md) for how the reference avoids it.
 - A relative IOR within `DIELECTRIC_PASSTHROUGH_IOR_EPSILON` of 1 is sampled as a delta passthrough
   (as Cycles does): refraction then gives `wi = -wo`, for which the half vector degenerates.
 - The refraction Jacobian `ior² |wi·h| / (ior wi·h + wo·h)²` is what Cycles' `sqr(ior * inv_len_H)`
@@ -141,12 +141,19 @@ microfacet; other rough glossy materials simply aren't split yet.
 `ClosestHit_Primary` decides backfacing from the geometric normal (the interpolated normal can face
 away from the ray on grazing hits, which would invert the IOR for them) and, for materials with a
 glossy lobe, bends the shading normal with Cycles' `ensure_valid_specular_reflection`
-(`util/shading_normal.hlsli`) so reflections never point into the surface. Water tops use the wave
-normal instead; diffuse-only materials retain the interpolated normal after geometric backface
-orientation, even when that shading normal faces away from the ray (see #371). The
-bent normal is shared by all of a material's lobes, so a diffuse lobe under a glossy one sees it
-too, whereas Cycles bends only the specular closures' normal. This can also change fine
+(`util/shading_normal.hlsli`) so reflections never point into the surface. Water tops start from
+the wave normal and get the same correction; diffuse-only materials retain the interpolated normal
+after geometric backface orientation, even when that shading normal faces away from the ray (see
+#371). The bent normal is shared by all of a material's lobes, so a diffuse lobe under a glossy one
+sees it too, whereas Cycles bends only the specular closures' normal. This can also change fine
 normal-mapped creases, not just mesh silhouettes.
+
+The correction must be measured against the triangle actually hit, not an analytic or
+distance-faded surface such as water's unperturbed wave normal: path splitting makes the reflection
+half reflection-only, so any reflection below the triangle is killed by the path loop's
+geometric-surface rejection. Clamps that rebuild the normal as the view/reflection half vector are
+also unsuitable, since the two vectors are nearly parallel at grazing incidence and the rebuilt
+normal can point almost anywhere.
 
 Closest-hit orients the base surface before applying a normal map. It maps the linear tangent-space
 sample through interpolated authored glTF tangents from a separate buffer, or a

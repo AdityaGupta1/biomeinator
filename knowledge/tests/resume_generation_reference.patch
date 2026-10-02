@@ -1,0 +1,525 @@
+diff --git a/build/resume_test/CMakeLists.txt b/build/resume_test/CMakeLists.txt
+new file mode 100644
+index 0000000..bbc3388
+--- /dev/null
++++ b/build/resume_test/CMakeLists.txt
+@@ -0,0 +1,56 @@
++cmake_minimum_required(VERSION 3.25)
++project(ResumeHarness CXX)
++set(CMAKE_CXX_STANDARD 20)
++set(CMAKE_CXX_STANDARD_REQUIRED ON)
++
++# SRC_ROOT: the variant's src directory. VARIANT_BRANCH: 1 for the PR branch, 0 for main.
++set(WT "<repo root>")
++set(B "${WT}/build")
++
++file(GLOB_RECURSE TERRAIN_SRC "${SRC_ROOT}/terrain/*.cpp")
++list(FILTER TERRAIN_SRC EXCLUDE REGEX "/terrain\\.cpp$|terrain_materials\\.cpp$|terrain_omm\\.cpp$|block_model\\.cpp$")
++
++add_executable(resume
++    ${TERRAIN_SRC}
++    "${SRC_ROOT}/multithreading/thread_memory_allocator.cpp"
++    "${SRC_ROOT}/logger.cpp"
++    "${SRC_ROOT}/util/file_util.cpp"
++    "${CMAKE_CURRENT_SOURCE_DIR}/harness.cpp"
++    "${CMAKE_CURRENT_SOURCE_DIR}/support.cpp"
++)
++target_include_directories(resume PRIVATE
++    "${SRC_ROOT}"
++    "${B}/generated"
++    "${B}/generated_shaders"
++    "${WT}/external/cxxopts/include"
++    "${WT}/external/DirectX-Headers/include/directx"
++    "${WT}/external/FastNoise2/include"
++    "${WT}/external/json/include"
++    "${WT}/external/nvapi"
++    "${WT}/external/stb/include"
++    "${WT}/external/streamline/include"
++    "${WT}/external/tinygltf/include"
++    "${WT}/external/WinPixEventRuntime/include"
++    "${B}/_deps/glm-src"
++    "${B}/_deps/fastsimd-src/include"
++    "${B}/external/FastNoise2/src/fastsimd/FastSIMD_FastNoise/include"
++    "${WT}/external/lz4/lib"
++)
++target_compile_definitions(resume PRIVATE
++    VARIANT_BRANCH=${VARIANT_BRANCH}
++    CMAKE_SOURCE_DIR="${WT}"
++    CMAKE_BINARY_DIR="${B}"
++    TARGET_FILE_DIR="${B}/RelWithDebInfo"
++    ENABLE_ASSERTS=1
++    FASTNOISE_STATIC_LIB
++    FASTSIMD_STATIC_LIB
++    FASTSIMD_IS_RELAXED=1
++)
++target_compile_options(resume PRIVATE /MP /bigobj)
++target_link_libraries(resume PRIVATE
++    "${B}/external/FastNoise2/src/RelWithDebInfo/FastNoise.lib"
++    "${B}/external/FastNoise2/src/FastSIMD_FastNoise.dir/RelWithDebInfo/FastSIMD_FastNoise.lib"
++    "${B}/_deps/fastsimd-build/FastSIMD.dir/RelWithDebInfo/FastSIMD.lib"
++    "${B}/lz4/RelWithDebInfo/lz4.lib"
++    shell32
++)
+diff --git a/build/resume_test/harness.cpp b/build/resume_test/harness.cpp
+new file mode 100644
+index 0000000..6b7eda1
+--- /dev/null
++++ b/build/resume_test/harness.cpp
+@@ -0,0 +1,380 @@
++// Disposable harness: does fresh generation next to imported chunks match uninterrupted generation?
++#include "terrain/biome.h"
++#include "terrain/block.h"
++#include "terrain/cave_biome.h"
++#include "terrain/chunk.h"
++#include "terrain/chunk_generator.h"
++#include "terrain/structure/cave_structure.h"
++#include "terrain/structure/structure.h"
++#include "multithreading/thread_memory_allocator.h"
++#include "util/glm_util.h"
++#if VARIANT_BRANCH
++#include "terrain/region_file.h"
++#endif
++
++#include <algorithm>
++#include <cstdio>
++#include <filesystem>
++#include <map>
++#include <memory>
++#include <span>
++#include <unordered_map>
++#include <vector>
++
++extern uint32_t harnessSeed;
++
++namespace
++{
++using RegionMap = std::map<std::pair<int, int>, std::unique_ptr<Region>>;
++
++Chunk* getChunk(RegionMap& regions, glm::ivec2 position)
++{
++    const glm::ivec2 regionPos = glmUtil::floorDiv(position, glm::ivec2(regionSideLength));
++    auto& region = regions[{ regionPos.x, regionPos.y }];
++    if (!region)
++    {
++        region = std::make_unique<Region>(regionPos);
++    }
++    return region->getOrCreateChunk(position);
++}
++
++void wire(RegionMap& regions)
++{
++    for (auto& [position, region] : regions)
++    {
++        for (int direction : { 0, 1 })
++        {
++            const auto dir = static_cast<NeighborDirection>(direction);
++            const glm::ivec2 neighbor = region->regionPos + neighborOffset(dir);
++            const auto found = regions.find({ neighbor.x, neighbor.y });
++            if (found != regions.end())
++            {
++                region->setNeighbor(dir, found->second.get());
++            }
++        }
++    }
++    for (auto& [position, region] : regions)
++    {
++        for (auto& chunk : region->chunks)
++        {
++            if (chunk)
++            {
++                chunk->setNeighbors(false);
++            }
++        }
++    }
++}
++
++std::span<const Block> blocksOf(const Chunk* chunk)
++{
++#if VARIANT_BRANCH
++    return chunk->getSerializedView().blocks;
++#else
++    return chunk->getBlocks();
++#endif
++}
++
++const std::unordered_map<uint32_t, uint8_t>& statesOf(const Chunk* chunk)
++{
++#if VARIANT_BRANCH
++    return *chunk->getSerializedView().blockStates;
++#else
++    return chunk->getBlockStates();
++#endif
++}
++
++bool isSnow(Block block)
++{
++    return block == Block::SNOW || block == Block::SNOW_LAYER || block == Block::SNOWY_GRASS_BLOCK;
++}
++
++constexpr int gridRadius = 3; // terrain halo
++constexpr int fillRadius = 2;  // chunks whose 3x3 neighborhoods are fully generated
++
++void generateAll(RegionMap& world, glm::ivec2 center, ThreadMemoryAllocator& scratch)
++{
++    for (int z = -gridRadius; z <= gridRadius; ++z)
++    {
++        for (int x = -gridRadius; x <= gridRadius; ++x)
++        {
++            getChunk(world, center + glm::ivec2(x, z));
++        }
++    }
++    wire(world);
++    for (int z = -gridRadius; z <= gridRadius; ++z)
++    {
++        for (int x = -gridRadius; x <= gridRadius; ++x)
++        {
++            getChunk(world, center + glm::ivec2(x, z))->generateTerrain(scratch);
++            scratch.clear();
++        }
++    }
++    for (int z = -fillRadius; z <= fillRadius; ++z)
++    {
++        for (int x = -fillRadius; x <= fillRadius; ++x)
++        {
++            getChunk(world, center + glm::ivec2(x, z))->checkStructureNeighbors();
++        }
++    }
++}
++
++// The exported (west) half: columns dx in [-2, -1].
++bool isExported(glm::ivec2 offset)
++{
++    return offset.x <= -1 && offset.x >= -fillRadius && std::abs(offset.y) <= fillRadius;
++}
++
++struct Result
++{
++    uint32_t diffBlocks[2]{};    // [0] chunks touching the import seam (dx = 0), [1] control (dx = 1)
++    uint32_t diffStates[2]{};
++    uint32_t snowBlocks[2]{};
++    std::map<std::pair<int, int>, uint32_t> diffKinds; // (original, restored) -> count, seam only
++};
++
++#if VARIANT_BRANCH
++std::vector<BlockStateKind> blockStateKinds;
++#endif
++
++Result runCase(glm::ivec2 center, const std::filesystem::path& directory)
++{
++    ThreadMemoryAllocator scratch;
++    RegionMap original;
++    generateAll(original, center, scratch);
++    for (int z = -fillRadius; z <= fillRadius; ++z)
++    {
++        for (int x = -fillRadius; x <= -1; ++x)
++        {
++            getChunk(original, center + glm::ivec2(x, z))->fillStructuresAndDecorators();
++        }
++    }
++
++    RegionMap restored;
++    for (int z = -gridRadius; z <= gridRadius; ++z)
++    {
++        for (int x = -gridRadius; x <= gridRadius; ++x)
++        {
++            getChunk(restored, center + glm::ivec2(x, z));
++        }
++    }
++
++#if VARIANT_BRANCH
++    // Round-trip the exported chunks through real region files.
++    std::map<std::pair<int, int>, std::vector<SerializedChunkView>> byRegion;
++    for (int z = -fillRadius; z <= fillRadius; ++z)
++    {
++        for (int x = -fillRadius; x <= -1; ++x)
++        {
++            const glm::ivec2 pos = center + glm::ivec2(x, z);
++            const glm::ivec2 regionPos = glmUtil::floorDiv(pos, glm::ivec2(regionSideLength));
++            byRegion[{ regionPos.x, regionPos.y }].push_back(getChunk(original, pos)->getSerializedView());
++        }
++    }
++    const RegionFile::Registry registry{ blockStateKinds, &Biomes::getSurfaceStructureGens() };
++    std::vector<Block> remap(static_cast<size_t>(Block::COUNT));
++    for (size_t i = 0; i < remap.size(); ++i)
++    {
++        remap[i] = static_cast<Block>(i);
++    }
++    for (const auto& [key, views] : byRegion)
++    {
++        const glm::ivec2 regionPos{ key.first, key.second };
++        const auto path = directory / RegionFile::fileName(regionPos);
++        if (!RegionFile::write(path, regionPos, views, registry))
++        {
++            std::printf("EXPORT FAILED\n");
++            std::exit(1);
++        }
++        auto decoded = RegionFile::read(path, regionPos, remap, registry);
++        if (!decoded)
++        {
++            std::printf("IMPORT FAILED\n");
++            std::exit(1);
++        }
++        for (auto& chunk : *decoded)
++        {
++            getChunk(restored, chunk.position)->loadSerializedData(std::move(chunk.data));
++        }
++    }
++#else
++    // Main's export: final blocks, biomes, grid + accepted surface structures, block states.
++    for (int z = -fillRadius; z <= fillRadius; ++z)
++    {
++        for (int x = -fillRadius; x <= -1; ++x)
++        {
++            const glm::ivec2 pos = center + glm::ivec2(x, z);
++            const Chunk* source = getChunk(original, pos);
++            std::vector<Block> blocks = source->getBlocks();
++            std::vector<Biome> biomes = source->getBiomes();
++            std::vector<Structure> structures = source->getStructures();
++            std::unordered_map<uint32_t, uint8_t> states = source->getBlockStates();
++            getChunk(restored, pos)->loadSerializedData(std::move(blocks), std::move(biomes), std::move(structures),
++                                                        std::move(states));
++        }
++    }
++#endif
++
++    generateAll(restored, center, scratch);
++    for (int z = -fillRadius; z <= fillRadius; ++z)
++    {
++        for (int x = -fillRadius; x <= -1; ++x)
++        {
++            getChunk(restored, center + glm::ivec2(x, z))->fillStructuresAndDecorators();
++        }
++    }
++
++    // Finish the fresh side; restored uses the opposite order to also cover order independence.
++    for (int z = -1; z <= 1; ++z)
++    {
++        for (int x = 0; x <= 1; ++x)
++        {
++            getChunk(original, center + glm::ivec2(x, z))->fillStructuresAndDecorators();
++        }
++    }
++    for (int z = 1; z >= -1; --z)
++    {
++        for (int x = 1; x >= 0; --x)
++        {
++            getChunk(restored, center + glm::ivec2(x, z))->fillStructuresAndDecorators();
++        }
++    }
++
++    Result result;
++    for (int z = -1; z <= 1; ++z)
++    {
++        for (int x = 0; x <= 1; ++x)
++        {
++            const glm::ivec2 pos = center + glm::ivec2(x, z);
++            const auto a = blocksOf(getChunk(original, pos));
++            const auto b = blocksOf(getChunk(restored, pos));
++            for (size_t i = 0; i < a.size(); ++i)
++            {
++                if (isSnow(a[i]))
++                {
++                    ++result.snowBlocks[x];
++                }
++                if (a[i] != b[i])
++                {
++                    ++result.diffBlocks[x];
++                    if (x == 0)
++                    {
++                        ++result.diffKinds[{ static_cast<int>(a[i]), static_cast<int>(b[i]) }];
++                    }
++                }
++            }
++            if (statesOf(getChunk(original, pos)) != statesOf(getChunk(restored, pos)))
++            {
++                ++result.diffStates[x];
++            }
++        }
++    }
++    return result;
++}
++
++// Snowy columns in one terrain-only chunk, as a cheap screen for partial snow cover.
++uint32_t snowColumns(glm::ivec2 position)
++{
++    RegionMap world;
++    ThreadMemoryAllocator scratch;
++    Chunk* chunk = getChunk(world, position);
++    chunk->generateTerrain(scratch);
++    const auto blocks = blocksOf(chunk);
++    uint32_t columns = 0;
++    for (uint32_t column = 0; column < chunkSizeXZSquare; ++column)
++    {
++        for (uint32_t y = 0; y < chunkSizeY; ++y)
++        {
++            if (isSnow(blocks[column * chunkSizeY + y]))
++            {
++                ++columns;
++                break;
++            }
++        }
++    }
++    return columns;
++}
++} // namespace
++
++int main()
++{
++    Blocks::init();
++    Biomes::init();
++    CaveBiomes::init();
++    Structures::init();
++    CaveStructures::init();
++#if VARIANT_BRANCH
++    blockStateKinds.resize(static_cast<size_t>(Block::COUNT));
++    for (size_t i = 0; i < blockStateKinds.size(); ++i)
++    {
++        blockStateKinds[i] = Blocks::getBlockData(static_cast<Block>(i)).stateKind;
++    }
++#endif
++    const auto directory = std::filesystem::temp_directory_path() / "biomeinator_resume_test";
++    std::filesystem::create_directories(directory);
++
++    struct Case
++    {
++        uint32_t seed;
++        glm::ivec2 center;
++        uint32_t snow;
++    };
++    std::vector<Case> cases;
++    for (uint32_t seed : { 4u, 96u, 101u, 1738u })
++    {
++        harnessSeed = seed;
++        ChunkGenerator::init();
++        std::vector<Case> snowy;
++        for (int z = -512; z <= 512; z += 16)
++        {
++            for (int x = -512; x <= 512; x += 16)
++            {
++                const uint32_t snow = snowColumns({ x, z });
++                // Partial cover is where slope and hollow tests decide, so prefer it.
++                if (snow >= 32 && snow <= 224)
++                {
++                    snowy.push_back({ seed, { x, z }, snow });
++                }
++            }
++        }
++        std::printf("seed %u: %zu partially snowy screen chunks\n", seed, snowy.size());
++        const size_t numSnowy = std::min<size_t>(snowy.size(), 8);
++        for (size_t i = 0; i < numSnowy; ++i)
++        {
++            cases.push_back(snowy[i * snowy.size() / numSnowy]);
++        }
++        // Non-snow cases spread over the same area
++        for (int i = 0; i < 6; ++i)
++        {
++            cases.push_back({ seed, { -400 + 160 * i, 300 - 120 * i }, 0 });
++        }
++    }
++
++    uint32_t totalSeamDiffs = 0;
++    uint32_t totalControlDiffs = 0;
++    for (const Case& c : cases)
++    {
++        harnessSeed = c.seed;
++        ChunkGenerator::init();
++        const Result r = runCase(c.center, directory);
++        totalSeamDiffs += r.diffBlocks[0] + r.diffStates[0];
++        totalControlDiffs += r.diffBlocks[1] + r.diffStates[1];
++        std::printf("seed %4u center (%4d, %4d): seam diff blocks %6u states %u snow %6u | control diff %u states %u snow %u\n",
++                    c.seed, c.center.x, c.center.y, r.diffBlocks[0], r.diffStates[0], r.snowBlocks[0], r.diffBlocks[1],
++                    r.diffStates[1], r.snowBlocks[1]);
++        std::vector<std::pair<uint32_t, std::pair<int, int>>> kinds;
++        for (const auto& [kind, count] : r.diffKinds)
++        {
++            kinds.push_back({ count, kind });
++        }
++        std::sort(kinds.rbegin(), kinds.rend());
++        for (size_t i = 0; i < kinds.size() && i < 5; ++i)
++        {
++            std::printf("    %6u x %s -> %s\n", kinds[i].first,
++                        Blocks::blockIdNames[kinds[i].second.first],
++                        Blocks::blockIdNames[kinds[i].second.second]);
++        }
++    }
++    std::printf("TOTAL seam diffs %u, control diffs %u over %zu cases\n", totalSeamDiffs, totalControlDiffs,
++                cases.size());
++    return totalSeamDiffs == 0 && totalControlDiffs == 0 ? 0 : 1;
++}
+diff --git a/build/resume_test/support.cpp b/build/resume_test/support.cpp
+new file mode 100644
+index 0000000..a5e8781
+--- /dev/null
++++ b/build/resume_test/support.cpp
+@@ -0,0 +1,71 @@
++// SPDX-License-Identifier: MIT
++// Copyright (c) 2026 Aditya Gupta
++
++#include "terrain/block_model.h"
++#include "terrain/chunk.h"
++#include "terrain/terrain.h"
++#include "terrain/terrain_materials.h"
++#include "terrain/terrain_omm.h"
++#include "rendering/buffer/to_free_list.h"
++#include "settings_manager.h"
++
++#include <stdexcept>
++
++namespace
++{
++[[noreturn]] void unexpectedRendererCall()
++{
++    throw std::logic_error("CPU terrain tests called a rendering path");
++}
++}
++
++// CPU tests use the real block JSON loader and generator. Geometry loading and
++// renderer scheduling are outside these tests; generation only needs block metadata.
++namespace BlockModels
++{
++void clear() {}
++uint32_t load(const std::filesystem::path&, bool) { return 0; }
++const Model& get(uint32_t) { unexpectedRendererCall(); }
++const std::vector<Vertex>& Model::getOrientation(uint8_t, uint8_t) const { unexpectedRendererCall(); }
++}
++
++uint32_t harnessSeed = 96;
++namespace SettingsManager
++{
++uint32_t getWorldSeed() { return harnessSeed; }
++}
++
++namespace Terrain
++{
++void addChunkToRevisit(Chunk*) {}
++void addChunkToCreateBlas(Chunk*) { unexpectedRendererCall(); }
++void addChunkToDestroy(Chunk*) { unexpectedRendererCall(); }
++}
++
++namespace TerrainMaterials
++{
++uint32_t getMaterialIdx(TerrainMaterial) { unexpectedRendererCall(); }
++bool sliceHasBiomeTint(uint32_t) { unexpectedRendererCall(); }
++bool sliceHasNormalMap(uint32_t) { unexpectedRendererCall(); }
++}
++
++namespace TerrainOmm
++{
++bool isBaked() { unexpectedRendererCall(); }
++bool texArraySliceHasCutout(uint32_t) { unexpectedRendererCall(); }
++uint16_t getOmmIdx(uint32_t, uint32_t) { unexpectedRendererCall(); }
++}
++
++PerFaceData::PerFaceData() { unexpectedRendererCall(); }
++void PerFaceData::setFlags(uint32_t) { unexpectedRendererCall(); }
++void PerFaceData::setTexArraySliceIdx(uint32_t) { unexpectedRendererCall(); }
++void ToFreeList::pushInstance(Instance*) { unexpectedRendererCall(); }
++void Instance::setTransformOffset(glm::ivec3) { unexpectedRendererCall(); }
++void Instance::finalizeGeometry() { unexpectedRendererCall(); }
++void Instance::addAreaLights(const std::vector<uint32_t>&) { unexpectedRendererCall(); }
++bool Instance::getIsGeometryFinalized() const { unexpectedRendererCall(); }
++void Instance::setVisible(bool) { unexpectedRendererCall(); }
++void Instance::setMaterialIdx(uint32_t) { unexpectedRendererCall(); }
++void Instance::setIsDeformable(bool) { unexpectedRendererCall(); }
++void Instance::setIsOpaque(bool) { unexpectedRendererCall(); }
++void Instance::setTrisPerFaceLog2(uint32_t) { unexpectedRendererCall(); }
