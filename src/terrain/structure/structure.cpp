@@ -973,9 +973,12 @@ static void placeRaggedLeafLayer(std::vector<Block>& blocks, ivec3 centerPos_CS,
 // crown of whorls that widen in a sawtooth down to the crown's base
 fillStructureBlocksHeader(REDWOOD_TREE)
 {
-    const int height = rng.nextInt(39, 56);
-    const int crownBottomY = static_cast<int>(height * rng.nextFloat(0.25f, 0.3f));
-    const float maxCrownRadius = mix(6.f, 7.f, static_cast<float>(height - 39) / 16.f);
+    const int crownHeight = rng.nextInt(39, 56);
+    const float maxCrownRadius = mix(6.f, 7.f, static_cast<float>(crownHeight - 39) / 16.f);
+    // The crown is sized from crownHeight; the extension only lengthens the bare trunk below it
+    const int bareTrunkExtension = rng.nextInt(4, 6);
+    const int height = crownHeight + bareTrunkExtension;
+    const int crownBottomY = static_cast<int>(crownHeight * rng.nextFloat(0.25f, 0.3f)) + bareTrunkExtension;
 
     const auto placeLog = [&](ivec3 offset)
     {

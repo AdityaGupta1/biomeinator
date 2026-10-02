@@ -359,6 +359,37 @@ void init()
         data.decorator.addEntry(Block::AIR, 14.f);
     }
 
+    // REDWOOD_FOREST
+    {
+        BIOME_INIT(REDWOOD_FOREST, "redwood forest");
+        data.tier = BiomeTier::LOWLAND;
+        data.climate = { .temperature = 0.2f, .humidity = 0.55f };
+        data.grassTint = glmUtil::colorFromHex("#5f9a45");
+        data.topBlocks = {
+            .patches = { {
+                { Block::COARSE_DIRT, 0.7f },
+                { Block::PODZOL, -0.3f },
+            } },
+        };
+        data.structureGens = {
+            {
+                {
+                    { StructureType::REDWOOD_TREE, 80.f },
+                    { StructureType::FIR_TREE, 15.f },
+                },
+                20,
+                7,
+            },
+        };
+        data.structureGens.back().emptyWeight = 5.f;
+        data.decorator.addEntry(Block::FERN, 8.f, { Block::GRASS_BLOCK, Block::PODZOL });
+        data.decorator.addEntry(Block::LARGE_FERN_BOTTOM, 4.f, { Block::GRASS_BLOCK, Block::PODZOL });
+        data.decorator.addEntry(Block::SHORT_GRASS, 4.f, { Block::GRASS_BLOCK });
+        data.decorator.addDriftEntry(Block::LILY_OF_THE_VALLEY, 1.f, { Block::GRASS_BLOCK, Block::PODZOL });
+        data.decorator.addDriftEntry(Block::WOOD_ANEMONE, 1.f, { Block::GRASS_BLOCK, Block::PODZOL });
+        data.decorator.addEntry(Block::AIR, 14.f);
+    }
+
     // ==================================================
     // HIGHLAND
     // ==================================================

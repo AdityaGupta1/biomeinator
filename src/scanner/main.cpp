@@ -46,6 +46,7 @@ constexpr std::array<const char*, static_cast<size_t>(Biome::COUNT)> biomeMapCol
     "#f2a5c8", // CHERRY_GROVE
     "#3b5e45", // TAIGA
     "#d6c25a", // BIRCH_FOREST
+    "#8a3b24", // REDWOOD_FOREST
 };
 
 // BiomeNoiseFields state is global; serialize seed switches and fills across server threads.

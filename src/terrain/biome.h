@@ -53,6 +53,7 @@ enum class Biome : uint8_t
     CHERRY_GROVE,
     TAIGA,
     BIRCH_FOREST,
+    REDWOOD_FOREST,
 
     COUNT
 };

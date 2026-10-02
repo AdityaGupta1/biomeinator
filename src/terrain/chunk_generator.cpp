@@ -1531,7 +1531,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     const ivec3 candidatePos_WS = ivec3(candidatePosXZ_WS.x, candidateGroundHeight + 1, candidatePosXZ_WS.y /*z*/);
                     RandomNumberGenerator variantRng =
                         initRng(worldSeed ^ hash(1946793319), candidatePosXZ_WS.x, candidatePosXZ_WS.y /*z*/, gridSalt);
-                    this->structures.emplace_back(structureGen.pickVariant(variantRng), candidatePos_WS);
+                    if (const std::optional<StructureType> type = structureGen.pickVariant(variantRng))
+                    {
+                        this->structures.emplace_back(*type, candidatePos_WS);
+                    }
                 }
             }
         }
