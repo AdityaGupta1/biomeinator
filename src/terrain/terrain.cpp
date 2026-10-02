@@ -1336,8 +1336,12 @@ bool pollHeadlessTerrain()
 void shutdown()
 {
     threadPool.shutdown();
-    regionDeleter.request_stop();
-    regionDeleter.join();
+    // Not started for glTF scenes, which never initialize terrain
+    if (regionDeleter.joinable())
+    {
+        regionDeleter.request_stop();
+        regionDeleter.join();
+    }
     TerrainOmm::reset();
 }
 
