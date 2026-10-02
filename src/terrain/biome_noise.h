@@ -182,6 +182,7 @@ private:
     {
         glm::vec2 posXZ_WS;
         float weight;
+        ClimateTarget climateOffset;
         mutable std::optional<ClimateTarget> climate;
     };
 

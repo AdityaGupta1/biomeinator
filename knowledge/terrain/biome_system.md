@@ -137,6 +137,21 @@ no invalidation, and any context gives the same answer for the same position, wh
 neighboring chunks and the tint map consistent. The context must cover the column positions plus
 the lookup jitter; a lookup outside it reads past its tables.
 
+Each cell's sampled climate also gets a random offset (up to ±0.1 per axis). Without it, a broad
+climate zone (cold and humid, say) became one huge region of a single biome; with it, the zone
+becomes a mosaic of that biome and its climate neighbors. Whole cells switch, so it adds no slivers.
+
+## Climate Calibration
+
+Each climate target has a bias subtracted from its squared climate distance. The biases come from
+`biome_calibration.h`, which `BiomeScanner --calibrate` generates by iterating until every biome in
+a multi-biome tier covers an equal share of the ground that tier decides by climate. Equal shares
+are not otherwise implied by target placement: noise values cluster near the middle of climate
+space, so targets there won much more ground. The biases are matched to biomes by name at init, and
+a stale entry asserts. Rerun the calibration after changing climate biomes, their targets, the
+climate noise, the climate cells, or anything that moves tier or regime boundaries (which changes
+the ground the climate biomes share).
+
 ## Per-Column Jitter
 
 `BiomeNoise::randomOffset` adds tiny random offsets before selection. This softens tier and regime

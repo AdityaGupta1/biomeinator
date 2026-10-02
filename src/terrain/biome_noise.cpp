@@ -509,6 +509,10 @@ struct WarpOctave
 };
 inline constexpr std::array<WarpOctave, 2> climateCellWarpOctaves{{ { 120.f, 55.f }, { 18.f, 7.f } }};
 inline constexpr float climateCellMaxWarp = 62.f;
+// Each cell's sampled climate is shifted by up to this much on each axis, so a broad climate zone
+// becomes a mosaic of its climate neighbors instead of one huge region. Whole cells switch, so
+// this adds no slivers.
+inline constexpr float climateCellClimateOffset = 0.1f;
 
 static uint32_t climateCellSeed()
 {
@@ -569,7 +573,10 @@ ClimateCellContext::ClimateCellContext(vec2 minXZ_WS, vec2 maxXZ_WS)
             const float siteX = rng.nextFloat(0.15f, 0.85f);
             const float siteZ = rng.nextFloat(0.15f, 0.85f);
             const float weight = rng.nextFloat(-1.f, 1.f) * climateCellMaxWeightRadius * climateCellMaxWeightRadius;
-            sites.push_back({ (vec2(x, z) + vec2(siteX, siteZ)) * climateCellSize, weight, std::nullopt });
+            const float temperatureOffset = rng.nextFloatAbs(climateCellClimateOffset);
+            const float humidityOffset = rng.nextFloatAbs(climateCellClimateOffset);
+            sites.push_back({ (vec2(x, z) + vec2(siteX, siteZ)) * climateCellSize, weight,
+                              ClimateTarget{ .temperature = temperatureOffset, .humidity = humidityOffset }, std::nullopt });
         }
     }
 }
@@ -624,8 +631,10 @@ ClimateTarget ClimateCellContext::climateAt(vec2 lookupPosXZ_WS) const
     {
         const float x = site.posXZ_WS.x + noiseOffsetXZ.x;
         const float z = site.posXZ_WS.y + noiseOffsetXZ.y /*z*/;
-        site.climate = ClimateTarget{ .temperature = fnTemperature->GenSingle2D(x, z, noiseFieldSeed),
-                                      .humidity = fnHumidity->GenSingle2D(x, z, noiseFieldSeed) };
+        site.climate = ClimateTarget{
+            .temperature = fnTemperature->GenSingle2D(x, z, noiseFieldSeed) + site.climateOffset.temperature,
+            .humidity = fnHumidity->GenSingle2D(x, z, noiseFieldSeed) + site.climateOffset.humidity,
+        };
     }
     return *site.climate;
 }

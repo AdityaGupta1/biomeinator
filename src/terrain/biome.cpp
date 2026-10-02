@@ -2,14 +2,17 @@
 // Copyright (c) 2025-2026 Aditya Gupta
 
 #include "biome.h"
+#include "biome_calibration.h"
 #include "biome_noise.h"
 #include "formation_rock.h"
 
 #include "util/glm_util.h"
 #include "util/rng.h"
 
+#include <algorithm>
 #include <array>
 #include <limits>
+#include <string_view>
 
 #include <glm/glm.hpp>
 
@@ -50,6 +53,7 @@ static std::array<BiomeData, static_cast<size_t>(Biome::COUNT)> biomeDatas;
     data.name = displayName
 
 static std::array<std::vector<Biome>, static_cast<size_t>(BiomeTier::COUNT)> candidatesByTier;
+static std::array<float, static_cast<size_t>(Biome::COUNT)> climateBiases;
 
 void init()
 {
@@ -464,6 +468,33 @@ void init()
     {
         candidatesByTier[static_cast<size_t>(biomeDatas[biomeIdx].tier)].push_back(static_cast<Biome>(biomeIdx));
     }
+
+    climateBiases.fill(0.f);
+    for (const auto& [name, bias] : calibratedClimateBiases)
+    {
+        const auto it = std::find_if(biomeDatas.begin(), biomeDatas.end(),
+                                     [&](const BiomeData& data) { return std::string_view(data.name) == name; });
+        ASSERT(it != biomeDatas.end(), "calibrated biome no longer exists; rerun BiomeScanner --calibrate");
+        if (it != biomeDatas.end())
+        {
+            climateBiases[it - biomeDatas.begin()] = bias;
+        }
+    }
+}
+
+const std::vector<Biome>& getTierCandidates(BiomeTier tier)
+{
+    return candidatesByTier[static_cast<size_t>(tier)];
+}
+
+float getClimateBias(Biome biome)
+{
+    return climateBiases[static_cast<size_t>(biome)];
+}
+
+void setClimateBias(Biome biome, float bias)
+{
+    climateBiases[static_cast<size_t>(biome)] = bias;
 }
 
 const BiomeData& getBiomeData(Biome biome)
@@ -508,7 +539,7 @@ Biome getClosestBiome(const BiomeNoise& biomeNoise, const ClimateTarget& climate
         const ClimateTarget& target = BIOME_DATA(biome).climate;
         const float dTemperature = climate.temperature - target.temperature;
         const float dHumidity = climate.humidity - target.humidity;
-        const float dist2 = dTemperature * dTemperature + dHumidity * dHumidity;
+        const float dist2 = dTemperature * dTemperature + dHumidity * dHumidity - climateBiases[static_cast<size_t>(biome)];
 
         if (dist2 < closestDist2)
         {
