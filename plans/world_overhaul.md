@@ -96,9 +96,6 @@ after the terrain shape work, preferring target placement over large biases.
 - **Snow on labels:** cold-climate snow cover starts at temperature -0.25; keep cool forest targets
   (birch forest at -0.3) in mind when moving targets, or they read as snowy forests.
 
-Deferred from earlier: **Monterey cypress coast** belongs on the seaside cliffs below and likely
-needs a darker, denser leaf block than the swamp's bald cypress.
-
 ### Seaside cliffs (Big Sur)
 
 A coastal landform, with the label derived from it:
@@ -107,6 +104,7 @@ A coastal landform, with the label derived from it:
 2. Let relief reach the shore: two terms flatten every coast today — `coastPull` (toward sea level + 8) and `landWeight` (relief ramps in over inland 0–0.35). Scale `coastPull` down and steepen the `landWeight` ramp (e.g. 0–0.03) by `cliffWeight`, so relief stays high to the waterline and drops into the sea within a few blocks.
 3. Loosen the near-coast division of the 3D density amplitude by `cliffWeight` for overhangs and coves. Sea stacks can reuse the formation sampler on the ocean side, like the quartz spires.
 4. The beach band becomes a "sea cliff" biome (bare stone or grass tops, no sand) where `cliffWeight` is high.
+5. Cliff tops grow wind-sculpted **Monterey cypress** (flat, windswept crowns leaning inland), which likely needs a darker, denser leaf block than the swamp's bald cypress.
 
 Watch: the seabed next to cliffs must also drop steeply, or cliffs stand on a shallow shelf. `inlandHeight` is already steep around inland 0; probe it first.
 
