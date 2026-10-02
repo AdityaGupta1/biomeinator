@@ -508,6 +508,7 @@ static nlohmann::json memoryJson()
         { "buffers", buffers },
         { "staticInstances", instanceMemoryJson(renderState.scene.getInstanceGpuMemory(false)) },
         { "deformableInstances", instanceMemoryJson(renderState.scene.getInstanceGpuMemory(true)) },
+        { "hostGeometryPoolBytes", renderState.scene.getHostGeometryPoolBytes() },
     };
 }
 

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-10-02_
 
 # Instance
 
@@ -6,7 +6,7 @@ _Last edited: 2026-09-21_
 
 ## Lifecycle
 
-1. `Scene::requestNewInstance()` allocates on main thread (or reuses a freed instance's vectors).
+1. `Scene::requestNewInstance()` allocates on main thread, taking pooled CPU geometry vectors if any.
 2. Worker thread fills `host_verts`, `host_idxs`, `host_perFaceDatas` directly (public vectors),
    and sets `trisPerFaceLog2` if a `PerFaceData` entry covers more than one triangle. Terrain
    also fills `host_packedTerrainVerts` and decodes `host_verts` back from it, so the BLAS
@@ -15,12 +15,26 @@ _Last edited: 2026-09-21_
    [shaders → common_structs.md](../shaders/common_structs.md).
 3. Worker calls `finalizeGeometry()` to mark data as ready.
 4. Main thread calls `Scene::markInstanceReadyForBlasBuild()`.
-5. `Scene::makeQueuedBlases()` uploads geometry to GPU, builds BLAS, writes `InstanceData`.
+5. `Scene::makeQueuedBlases()` uploads geometry to GPU, builds BLAS, writes `InstanceData`, then
+   returns the `host_` vectors to the scene's pool.
 6. On destruction, `Instance::reset()` frees all buffer sections and returns the ID to the pool.
 
-## Vector Reuse (`instancesToReuse`)
+## CPU Geometry Is Only Kept Until Upload (`hostGeometryPool`)
 
-When an instance is freed, its `unique_ptr` is moved to `instancesToReuse` rather than destroyed. The next `requestNewInstance` steals the (now-empty) vectors via `stealVectors` — this reuses heap allocations from the previous instance's vectors, avoiding repeated large allocations for terrain chunks that create/destroy instances frequently.
+Nothing reads an instance's `host_` vectors after `makeQueuedBlases` copies them into the staging
+buffers: refits, compaction, area lights and the TLAS all use the GPU copies. So an instance
+returns its vectors, emptied but keeping their capacity, right after upload, and new instances
+take them. Before this, every live instance kept its geometry and freed instances queued for
+reuse kept theirs, about 2.8 MB per visible chunk. At render distance 30 that was about 10 GB of the
+20 GB committed; with the pool the total is 10.2 GB.
+
+Reuse rather than freeing matters: freeing chunk-sized buffers in bulk stalled the frame by about
+30 ms (see [terrain → region_system.md](../terrain/region_system.md#freeing-without-stutter)). A load
+puts thousands of meshes in flight at once, far more than streaming does, so the pool keeps 256 sets
+and frees any excess a few per frame.
+
+Freed instances are destroyed in `freeInstance`, so it removes the instance from every list that
+holds a raw pointer, `pendingTlasEntryAdds` included, before erasing it.
 
 ## Visibility
 

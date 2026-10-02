@@ -30,6 +30,21 @@ class ToFreeList;
 
 class Scene;
 
+// An instance's CPU-side geometry vectors. They are only needed until the instance's BLAS inputs
+// are uploaded, so they are then emptied and pooled for a later instance.
+struct HostGeometry
+{
+    std::vector<Vertex> verts;
+    std::vector<PackedTerrainVertex> packedTerrainVerts;
+    std::vector<VertexTangent> tangents;
+    std::vector<uint32_t> idxs;
+    std::vector<PerFaceData> perFaceDatas;
+    std::vector<uint16_t> ommIdxs;
+    std::vector<AreaLight> areaLights;
+
+    size_t capacityBytes() const;
+};
+
 class Instance
 {
     friend class ::Scene;
@@ -58,7 +73,8 @@ private:
 
     Instance(::Scene* scene, uint32_t id);
 
-    void stealVectors(Instance* other);
+    void takeHostGeometry(HostGeometry&& geometry);
+    void releaseHostGeometry();
 
     void reset(bool alsoFreeFromScene = true);
 
@@ -197,7 +213,7 @@ private:
     bool waveFrustumSet{ false };
     float waveFrustumHeightBand{ FLT_MAX };
 
-    std::queue<std::unique_ptr<Instance>> instancesToReuse{};
+    std::vector<HostGeometry> hostGeometryPool{};
 
     // not sure if combining multiple structs into one buffer will lead to alignment problems, but it works for now
     CommittedManagedBuffer sharedBlasUploadBuffer{
@@ -273,6 +289,8 @@ private:
     MappedArray<uint32_t> areaLightSamplingStructure;
 
     void freeInstance(Instance* instance);
+    void recycleHostGeometry(HostGeometry&& geometry);
+    void trimHostGeometryPool();
 
     // returns true if TLAS is now dirty
     void makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList);
@@ -312,6 +330,7 @@ public:
     };
     // Sums the buffer sections held by every instance (in the TLAS or not) of one kind
     InstanceGpuMemory getInstanceGpuMemory(bool deformable) const;
+    size_t getHostGeometryPoolBytes() const;
 
     // Deformable instances outside animRadius of the center or outside the padded frustum are
     // left static; the shaders fade the waves to rest height towards both limits so the two
