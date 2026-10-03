@@ -178,6 +178,7 @@ static void validateDecorators()
             ASSERT(blockData.shape == BlockShape::DECORATOR_CUSTOM &&
                    blockData.stateKind == BlockStateKind::SURFACE_MOUNT,
                    "wall/ceiling decorators require a surface-mounted custom model");
+            ASSERT(blockData.upperHalf == Block::AIR, "two-tall decorators are floor-only");
         }
     };
     for (uint32_t biomeIdx = 0; biomeIdx < static_cast<uint32_t>(Biome::COUNT); ++biomeIdx)

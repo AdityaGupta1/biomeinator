@@ -3,5 +3,6 @@
     "type": "transparent_cutout",
     "shape": "x_shaped",
     "randomJitter": true,
-    "translucent": true
+    "translucent": true,
+    "upperHalf": "lupine_top"
 }

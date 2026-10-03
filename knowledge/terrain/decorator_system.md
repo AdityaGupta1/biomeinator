@@ -1,12 +1,17 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-02_
 
 # Decorator System
 
-`src/terrain/structure/decorator.h/cpp` — weighted random single-block vegetation placement on terrain surfaces.
+`src/terrain/structure/decorator.h/cpp` — weighted random vegetation placement on terrain surfaces.
 
 ## Design
 
 Each biome has a `Decorator` — a weighted list of blocks. Surface-biome decorators are sampled at air-above-solid transitions. Cave decorators are sampled once per cave-air voxel bordering an eligible full-cube terrain support. AIR entries in the weight pool act as "nothing placed" outcomes, controlling density.
+
+A block with an `upperHalf` (see [block_system.md](block_system.md)) also fills the cell above.
+If that cell isn't air, nothing is placed, but the draw has already consumed its RNG, so a
+blocked two-tall plant doesn't shift later placements. The upper half always goes on +Y, so
+two-tall entries must be floor-only (checked in `validateDecorators`).
 
 Support-block filtering lets entries restrict placement to particular blocks. A surface mask independently permits floors, walls, or ceilings; it defaults to floors so ordinary vegetation remains upright. Eligible surface/support pairs are indexed when entries are registered, so probing six neighboring faces does not repeatedly scan the weighted pool. If several eligible faces border one cave-air voxel, a position hash chooses one before the weighted draw, preventing corner density from multiplying.
 
@@ -36,6 +41,16 @@ from the support toward the candidate, so the support lies in the opposite
 direction. Vertical masks include carries from adjacent words, including terrain
 above the cave-height cap. Face enumeration order remains unchanged because it
 determines the position-hashed face choice.
+
+## Drifts
+
+Drift entries pool their weight like ordinary entries, but the species drawn comes from a
+per-patch value (`driftSample` in `decorator.cpp`, about 20-block cells with warped borders) rather
+than the column's RNG; each species' weight sets its share of patches. A species can list several
+blocks (flower variants), which each column in its patches picks between evenly. A patch of meadow therefore grows only one flower, which reads much calmer
+than an even mix of every species. Density stays per-column, so only the species choice is
+clustered. Drift members must share support blocks, since the support test runs on the rolled
+entry before the species is swapped.
 
 ## Ordering Guarantees
 

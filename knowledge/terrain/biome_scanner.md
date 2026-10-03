@@ -1,4 +1,4 @@
-_Last edited: 2026-09-22_
+_Last edited: 2026-10-02_
 
 # BiomeScanner
 
@@ -17,6 +17,20 @@ starts instantly and runs headless.
 `BiomeNoiseFields::init(seed)` also derives the world-wide `noiseOffsetXZ` (it must: the scanner
 has no ChunkGenerator), and `ChunkGenerator::init` reads it back via `getNoiseOffsetXZ()` for the
 terrain/cave/swamp noises.
+
+## Coverage mode
+
+`BiomeScanner --coverage` skips the server and prints each biome's share of land (ocean excluded)
+and patch sizes, summed over a range of seeds. It is the measurement that biome additions and
+`plans/biome_balancing.md` are judged against. Things that would mislead a reader of its output:
+
+- Patches touching the scanned square's edge count toward area share but not patch statistics,
+  since their true size is unknown. Widely spread biomes (ocean) therefore show few, smaller patches.
+- Patch widths are quantized to the step, so the median is dominated by one- and two-texel
+  fringe patches along jagged borders. The area-weighted width, the size of the patch a random
+  point lies in, is the better measure of how big a biome feels.
+- `--cells=0` (and `cells=0` on the map APIs) matches per-column climate instead of climate
+  cells, for comparison. `/api/cells` returns each texel's cell id hash for drawing cell borders.
 
 ## Gotchas
 

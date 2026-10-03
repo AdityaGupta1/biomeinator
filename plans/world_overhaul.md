@@ -22,7 +22,8 @@
 - New tree ~30-60 lines with `fillLine`/`buildSpline`/`placeLeafCap`. Kapok (splayed buttress splines), jacaranda/piuva (acacia-style cap, colored leaves), acai (thin palm), rubber/brazilwood/mahogany (oak variants).
 - `structureMaxChunkRadius = 1` caps canopy ±16 blocks XZ — giant kapok near limit.
 - Forest fix: multiple `StructureGen` per biome already supported — big trees sparse grid + understory dense grid. Decorator: add ferns, multi-block tall grass (loop owns column, easy).
-- Vines: no blockstates. Orientation in Block enum — `VINE_XPOS/XNEG/ZPOS/ZNEG`, 65k free IDs, zero memory. New `BlockShape::WALL_MOUNTED`: third mesher branch, one quad nudged 1/16 off wall, ~40-60 lines.
+- **Facing (next PR, before vines, ferns and fallen logs):** structures can only write block IDs, and cube logs always stand upright. Plan: let structures write the existing sparse per-chunk block states (today only cave decorators set them), add an axis state for logs (mesher remaps end-grain faces and rotates bark UVs), and let custom-model blocks take a chosen face and turn instead of a random one. That one mechanism gives fallen logs, oriented fern fronds and vines; per-direction block IDs were the alternative, but only cover logs/vines and triple every log type.
+- Vines: `BlockShape::WALL_MOUNTED` (one quad nudged 1/16 off the wall) or a surface-mounted custom model, oriented by the facing state above.
 - Place vines from tree generators, NOT decorator (decorator stage neighbor reads = data race). `tryPlaceStructureBlock` skips obstacles without stopping — vine run needs own loop, break at first non-AIR.
 - Same shape covers moss, lichen, trunk orchids later.
 
@@ -39,52 +40,64 @@ Each biome declares a `tier`; highland is chosen where mountain peak relief is s
 | climate | biome | character |
 |---|---|---|
 | warm, very humid | cloud forest | mossy twisted trees, vines, dense undergrowth, heavy fog (fog density plumbing in §2) |
-| cold, humid | taiga / boreal | dense spruce, snow near the top of the range |
+| cold, humid | highland taiga | firs and boreal pines on slopes below the snow line (lowland taiga exists) |
 | cool, moderate | highland moor / alpine meadow | grass, heather, flowers, boulders, sparse conifers |
 | dry (hot or cold) | high desert steppe | sagebrush, junipers, sparse grass; dry relief ground mesa/red desert don't claim |
 | cold, dry / very high | mountains (existing) | bare stone peaks |
 
-Redwood forest is the exception: mild, very humid, **lowland** and coastal (tall thick trunks, ferns, fog), so it's a lowland climate target, ideally one that favors ground near the coast.
+Redwood forest is the exception: mild, very humid, **lowland** (done in the lowland wave below). Favoring ground near the coast is still open.
 
 Cloud forest shares Tianzi's warm/humid climate; they separate by erosion (Tianzi takes preserved relief as a regime, cloud forest the eroded rolling highlands left over).
 
 Climate matching within a tier is 2D (temperature, humidity); peak no longer takes part, since relief already picks the tier. That removed the old issue where high-peak lowland picked whichever low-peak target was least wrong (forest on hot, dry ground).
 
-### Coverage today and what it implies (2026-09-22)
+### Lowland wave (branch `more_lowland_biomes`, 2026-10-02)
 
-Measured over seeds 1–20, 32k×32k blocks each, macro biome field (`build/probe/coverage.cpp`; the scanner coverage report in `plans/biome_balancing.md` should replace it):
+Done:
+- **Biomes:** flower meadow, old-growth forest, cherry grove, taiga, birch forest, redwood forest
+  (all lowland climate targets).
+- **Trees:** fir (vanilla spruce layer pattern), cherry, boreal pine, boreal and autumn birch (tall
+  variant), giant oak, redwood (tall narrow cone with buttress roots); the pine is reworked into
+  branch pads and the large oak into straight limbs ending in leaf clumps. Design rule that came out
+  of iterating: clean, mostly symmetric layers (no full-square leaf layers, no drooping); ragged
+  layers only for the redwood, and never leaves that float.
+- **Ground and decor:** Yuushya flowers, tall plants and podzol/coarse dirt; two-tall decorators
+  (`upperHalf`); single-species flower drifts; noise-driven top-block patches (podzol, coarse dirt);
+  `StructureGen::emptyWeight` for thinning a mixed grid without widening it.
+- **Placement:** land columns match climate targets on the climate of a weighted Voronoi **climate
+  cell** (~384 blocks, warped, ragged edges, ±0.1 per-cell climate offset) instead of their own,
+  which removed slivers and in-between-biome ribbons; climate noise scale doubled. See
+  `knowledge/terrain/biome_system.md`.
+- **Tooling:** `BiomeScanner --coverage` (land share and patch sizes over many seeds, `--cells=0`
+  to compare) and a cell debug view.
 
-| share of land | biomes |
-|---|---|
-| 32% | forest |
-| 14% | mountains |
-| 5–7% | tianzi, beach, savanna, red desert, gravel beach, ice fields |
-| 3–4% | desert, plains, tundra, mesa |
-| ≤2.4% | black sand beach, swamp, oasis |
+Coverage after the wave (8 seeds): lowland climate biomes range from about 8% (taiga, plains) down
+to about 3.5% (forest, savanna); forest is no longer dominant. Mountains is 5.2%, Tianzi 7%,
+red desert 5.9%, mesa 3.2%.
 
-After switching to 2D climate matching per tier (relief picks highland) and re-spacing the lowland targets (8 seeds): forest 22%, plains 11%, tundra 11%, savanna 9%, mountains 5%, desert 5%, ice fields 5% of land; regime biomes unchanged. Forest still leads and highland is small until the new highland biomes exist.
+Tried and removed: per-biome climate biases calibrated by the scanner to hit target shares. It hit
+the shares exactly but pushed biomes far from their targets (forest and birch forest onto ground
+cold enough for snow layers, which follow column temperature, not labels). Revisit share balancing
+after the terrain shape work, preferring target placement over large biases.
 
-- **Forest is far too prevalent.** Its climate target sits near where temperature/humidity values cluster, so it wins most mild ground. Break it up with many **mild biomes**, especially forest variants that share the climate band but differ in trees and ground cover. Candidates: birch forest, old-growth / dark forest, autumn / maple forest, cherry grove, mixed conifer forest, flower meadow, and the Atlantic forest from the roster. Several mild targets close together also make equalization (below) more effective, since the dense middle of climate space gets divided among more biomes.
-- **Mountains shrink once the highland biomes land** (cloud forest, taiga, moor/alpine meadow, high desert steppe above): today every high-relief column is mountains.
-- **Biomes are too small and chaotic.** Borders change too often and produce tiny slivers. Two separate fixes:
-  - *Scale:* raise `climateNoiseScale` in `biome_noise.cpp` so regions are larger overall. Relief fields (peak, erosion, inland) have their own `reliefNoiseScale`, so coastlines and mountains stay put; landform regimes that multiply climate and relief fields will grow partly.
-  - *Slivers:* after scaling, measure connected-patch sizes (scanner report) and remove what remains with the balancing plan's tools: axis equalization plus relaxation for even shares, and a minimum patch size for multi-axis regimes (Tianzi etc.), whose products produce stringy regions.
-- Order: add biomes first (more mild and highland targets), then scale, then balance, since every added biome reshuffles shares.
+### Next for biomes
 
-### First wave and deferred biomes (2026-09-23)
+- **Highland wave.** Highland (`isHighland`, threshold 0.1 on `mountainPeakWeight`) is only ~5% of
+  land, all mountains; split among the planned highland biomes each would be ~1%. Lower the
+  threshold (e.g. 0.03-0.05) so foothills count, give bare mountains the coldest/highest climate
+  target, and add the highland biomes above.
+- **Rainforest** (warm, very humid lowland; mahogany emergents over dense undergrowth) needs a
+  mahogany tree and benefits from vines. Warm humid ground currently goes to cherry grove and
+  redwood forest.
+- **After facing:** giant ferns and fallen logs (redwood/old-growth floors), vines, then leaf litter
+  and petal carpets (flat custom-model quads, as in vanilla).
+- **Unplaced blocks:** peony and rose bush are registered but no biome places them yet (flower
+  meadow fits), and nothing places cattails, so `CATTAIL_BOTTOM`'s `upperHalf` is unused.
+- **Snow on labels:** cold-climate snow cover starts at temperature -0.25; keep cool forest targets
+  (birch forest at -0.3) in mind when moving targets, or they read as snowy forests.
 
-First wave, all climate targets needing only new tree structures and ground cover (blocks
-already exist): **cherry grove**, **mixed conifer forest** (fir + pine), **redwood forest**, and
-**willow** mixed into the existing swamp alongside cypress. Reference implementations live in
-`../mega-minecraft` (redwood especially).
-
-Deferred:
-- **Taiga / boreal:** waits for snow layers on tree canopies
-  ([issue #300](https://github.com/AdityaGupta1/biomeinator/issues/300)); a snowy conifer biome
-  without them looks unfinished.
-- **Monterey cypress coast:** belongs on the seaside cliffs below, which don't exist yet, and
-  likely needs a darker, denser leaf block (the existing cypress leaves are the swamp's light,
-  feathery bald cypress). The log block can be reused.
+Deferred from earlier: **Monterey cypress coast** belongs on the seaside cliffs below and likely
+needs a darker, denser leaf block than the swamp's bald cypress.
 
 ### Seaside cliffs (Big Sur)
 
