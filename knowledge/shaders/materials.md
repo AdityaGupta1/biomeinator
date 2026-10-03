@@ -24,7 +24,7 @@ renders (see [scene → blender_export.md](../scene/blender_export.md)):
   internal reflection at a microfacet just reflects instead of producing a dead sample. Structured
   exactly like Cycles' `bsdf_microfacet_sample`/`eval` for the glass closure; the reference is the
   OSL `dielectric_bsdf` closure with separate reflection/transmission tints.
-- **Glossy reflection over diffuse with `MATERIAL_FLAG_MICROFACET_FRESNEL`** (scattering surfaces
+- **Glossy reflection over diffuse with `MATERIAL_FLAG_LAYERED_MICROFACET_FRESNEL`** (scattering surfaces
   only): per-microfacet Fresnel layered over diffuse. Sampling picks the lobe from `F(h)` of a VNDF
   half vector, as glass does, and the glossy lobe's value and pdf carry `F(h)`. A diffuse direction
   has no half vector, so the diffuse lobe gets one minus the visible microfacets' *average* Fresnel,
@@ -107,7 +107,7 @@ slab, and the two compound when tuning the transmission share. Because they reus
 diffuse-transmission and glossy-over-diffuse lobes, scattering surfaces block shadow rays like any
 opaque surface.
 
-The ice-water face is why scattering surfaces use microfacet Fresnel. Its IOR ratio is close to 1, so
+The ice-water face is why scattering surfaces use layered microfacet Fresnel. Its IOR ratio is close to 1, so
 seen from the water its reflectance is negligible until a few degrees from grazing, where it climbs to
 total internal reflection (the critical angle is about 79 degrees). Evaluated at the shading normal,
 that climb is a step: past a fixed viewing angle the underside turns into a perfect mirror of the dark
@@ -174,7 +174,7 @@ same value or the MIS weights disagree. Rough glass is not passthrough: the anyh
 `trySplitMaterial` splits macro-normal Fresnel only at roughness 0 for now (#372). Rough glass could
 never be split this way, since a split on the macro-normal Fresnel would mis-weight lobes whose
 Fresnel is per microfacet; other rough macro-Fresnel materials simply aren't split yet. Rough
-microfacet-Fresnel materials (scattering surfaces) are split: split 0 is the diffuse lobe exactly as
+layered microfacet-Fresnel materials (scattering surfaces) are split: split 0 is the diffuse lobe exactly as
 it lies under the glossy one, folded into a scaled diffuse-only lobe (front hemisphere weighted by one
 minus the average Fresnel, thin-wall back hemisphere unweighted, so the transmission share is
 reweighted too), and split 1 is the glossy lobe alone carrying `F(h)`, whose pdf then has no Fresnel

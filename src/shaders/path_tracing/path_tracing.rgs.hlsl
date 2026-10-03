@@ -103,9 +103,9 @@ FirstBounceAlbedos computeFirstBounceAlbedos(const Material material,
                                              const TexSampleCtx texCtx,
                                              const float3 weight)
 {
-    // A microfacet-Fresnel lobe reflects its average Fresnel whether or not a split separated it from the
+    // A layered microfacet-Fresnel lobe reflects its average Fresnel whether or not a split separated it from the
     // diffuse lobe
-    const float fresnelReflectance = (material.hasMicrofacetFresnel() && material.roughness > 0.f)
+    const float fresnelReflectance = (material.hasLayeredMicrofacetFresnel() && material.roughness > 0.f)
         ? averageMicrofacetFresnel(material, wo_WS, surfShadingNor_WS)
         : glossyReflectionProbability(material, wo_WS, surfShadingNor_WS);
     const float3 glossyReflectionAlbedo = calculateDlssSpecularAlbedo(

@@ -111,8 +111,9 @@ struct InstanceData
 // auxTextureId is a packed aux texture: r = emissive strength (color comes from the
 // base color texture, whose diffuse is zero wherever r > 0), g = biome tint mask.
 #define MATERIAL_FLAG_PACKED_AUX (1 << 4)
-// Rough glossy reflection over diffuse evaluates Fresnel per microfacet instead of at the shading normal
-#define MATERIAL_FLAG_MICROFACET_FRESNEL (1 << 5)
+// Glossy reflection layered over diffuse evaluates Fresnel per microfacet, like the dielectric, instead of at the
+// shading normal
+#define MATERIAL_FLAG_LAYERED_MICROFACET_FRESNEL (1 << 5)
 
 #define MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION (MATERIAL_FLAG_DIFFUSE | MATERIAL_FLAG_GLOSSY_TRANSMISSION)
 #define MATERIAL_FLAGS_GLOSSY (MATERIAL_FLAG_GLOSSY_REFLECTION | MATERIAL_FLAG_GLOSSY_TRANSMISSION)
@@ -213,9 +214,9 @@ public:
         return bool(flags & MATERIAL_FLAG_PACKED_AUX);
     }
 
-    bool hasMicrofacetFresnel()
+    bool hasLayeredMicrofacetFresnel()
     {
-        return bool(flags & MATERIAL_FLAG_MICROFACET_FRESNEL);
+        return bool(flags & MATERIAL_FLAG_LAYERED_MICROFACET_FRESNEL);
     }
 
     bool canScatter()

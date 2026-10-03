@@ -155,7 +155,7 @@ static const float scatteringDiffuseTransmission = 0.85f;
 // Roughness comes from the packed aux b channel, as for glass.
 void applyScatteringMaterial(inout Material material, const float2 uv, const TexSampleCtx texCtx)
 {
-    material.flags |= MATERIAL_FLAG_GLOSSY_REFLECTION | MATERIAL_FLAG_MICROFACET_FRESNEL;
+    material.flags |= MATERIAL_FLAG_GLOSSY_REFLECTION | MATERIAL_FLAG_LAYERED_MICROFACET_FRESNEL;
     material.glossyReflectionTint = float3(1.f, 1.f, 1.f);
     material.roughness = getPackedAuxRoughness(material, uv, texCtx);
     material.diffuseTransmission = scatteringDiffuseTransmission;
@@ -188,7 +188,7 @@ float3 calculateDlssSpecularAlbedo(const float3 glossyReflectionTint, const floa
     return mad(glossyReflectionTint, max(0, scale), max(0, bias));
 }
 
-// Average Fresnel reflectance of the visible microfacets of a rough microfacet-Fresnel lobe. No microfacet
+// Average Fresnel reflectance of the visible microfacets of a rough layered microfacet-Fresnel lobe. No microfacet
 // is visible from behind the shading normal, so it is 0 there.
 float averageMicrofacetFresnel(const Material material, const float3 wo_WS, const float3 surfShadingNor_WS)
 {
@@ -196,16 +196,16 @@ float averageMicrofacetFresnel(const Material material, const float3 wo_WS, cons
     return (cosThetaWo > 0.f) ? ggxFresnelAlbedo(material.roughness, cosThetaWo, material.ior) : 0.f;
 }
 
-// Microfacet Fresnel picks the glossy lobe per sampled microfacet only when a lobe lies beneath it; a lone
+// Layered microfacet Fresnel picks the glossy lobe per sampled microfacet only when a lobe lies beneath it; a lone
 // glossy lobe (the reflection half of a path split) is always picked and carries F(h) as its weight
 bool picksLobePerMicrofacet(const Material material)
 {
-    return material.hasMicrofacetFresnel() && material.roughness > 0.f && material.hasDiffuseOrGlossyTransmission();
+    return material.hasLayeredMicrofacetFresnel() && material.roughness > 0.f && material.hasDiffuseOrGlossyTransmission();
 }
 
 // Probability of choosing the glossy reflection lobe in sampleBsdf, and the share of light the diffuse lobe
 // beneath it doesn't get. With shading-normal Fresnel it is also the glossy lobe's Fresnel weight, so it
-// cancels out of the sampling weight; with microfacet Fresnel it is the visible microfacets' average Fresnel.
+// cancels out of the sampling weight; with layered microfacet Fresnel it is the visible microfacets' average Fresnel.
 // sampleBsdf and evaluateBsdf must use the exact same value or MIS breaks silently.
 float glossyReflectionProbability(const Material material, const float3 wo_WS, const float3 surfShadingNor_WS)
 {
@@ -232,7 +232,7 @@ float microfacetFresnel(const Material material, const float3 wo_WS, const float
 // Fresnel weight of the rough glossy reflection lobe for the microfacet h_WS
 float glossyReflectionFresnel(const Material material, const float3 wo_WS, const float3 h_WS, const float fresnelReflectance)
 {
-    return material.hasMicrofacetFresnel() ? microfacetFresnel(material, wo_WS, h_WS) : fresnelReflectance;
+    return material.hasLayeredMicrofacetFresnel() ? microfacetFresnel(material, wo_WS, h_WS) : fresnelReflectance;
 }
 
 // Terms shared by the value and pdf of the dielectric lobe (glossy reflection + glossy transmission, i.e. glass).
@@ -548,7 +548,7 @@ BsdfSample sampleBsdf(const Material material,
     }
 
     const float alpha = material.roughness * material.roughness;
-    // Microfacet Fresnel picks the lobe per sampled microfacet, as the dielectric does
+    // Layered microfacet Fresnel picks the lobe per sampled microfacet, as the dielectric does
     const bool sampleMicrofacetFirst = picksLobePerMicrofacet(material);
     const float fresnelReflectance =
         sampleMicrofacetFirst ? 0.f : glossyReflectionProbability(material, wo_WS, surfShadingNor_WS);
@@ -736,7 +736,7 @@ bool trySplitMaterial(inout Material surfMaterial,
             const float averageFresnel = averageMicrofacetFresnel(surfMaterial, wo_WS, surfShadingNor_WS);
             const float transmission = surfMaterial.diffuseTransmission;
             const float lobeScale = (1.f - transmission) * (1.f - averageFresnel) + transmission;
-            surfMaterial.flags &= ~(MATERIAL_FLAG_GLOSSY_REFLECTION | MATERIAL_FLAG_MICROFACET_FRESNEL);
+            surfMaterial.flags &= ~(MATERIAL_FLAG_GLOSSY_REFLECTION | MATERIAL_FLAG_LAYERED_MICROFACET_FRESNEL);
             surfMaterial.glossyReflectionTint = float3(0, 0, 0);
             surfMaterial.diffuseTransmission = (lobeScale > 0.f) ? transmission / lobeScale : 0.f;
             pathWeight *= lobeScale;
