@@ -33,7 +33,7 @@ Metadata is published only after the whole definition parses successfully.
 
 ## BlockType Drives Meshing
 
-The non-obvious culling rules in `shouldGenerateFace`:
+The non-obvious culling rules in `blockFaceVisible`:
 - **TRANSPARENT_CUTOUT** between two cutout blocks: only the one at the lower/equal position generates the face. This prevents double-rendering the shared boundary (both quads would be coplanar and z-fight).
 - **Partial-height solids** (`LIQUID_TOP` lava, `LAYER` snow) cull by *top height*, not by shape:
   a solid's side face shows only where the neighbor's top is lower than its own
@@ -47,17 +47,36 @@ The non-obvious culling rules in `shouldGenerateFace`:
   rules for those types would punch a hole above every snow layer they touch.
 - **WATER** only generates faces against AIR — water-water faces are hidden, and water against solid is hidden (the solid block's face covers it). Exception: `LIQUID_TOP` blocks always generate the +Y (top) face regardless of neighbor, so the water surface is always visible.
 
-## GLASS blocks
+## Volume blocks (GLASS, SCATTERING)
 
-`BlockType::GLASS` is a fully opaque-alpha cube that the path tracer shades as glass (see
-[shaders → materials.md](../shaders/materials.md)). It is its own `BlockType` purely for the
-culling rules: a face between two glass blocks would be a refraction interface *inside* what should
-read as one solid crystal, and glass buried in rock is never seen, so both are culled — a crystal
-formation meshes as a hollow shell. Solid neighbors are unaffected and still generate their face
-towards glass, so rock and emitters behind a crystal stay visible through it.
+`BlockType::GLASS` and `BlockType::SCATTERING` (ice) are fully opaque-alpha cubes filled with a
+transmissive medium; they differ only in how the path tracer shades their faces — refraction for
+glass, a translucent surface standing in for a scattering medium for ice (see
+[shaders → materials.md](../shaders/materials.md)). They are their own types purely for the
+culling rules: a face between two blocks of the same type would be an interface *inside* what
+should read as one solid crystal or ice sheet, and a volume buried in rock is never seen, so both
+are culled — a formation meshes as a hollow shell. Solid neighbors are unaffected and still
+generate their face towards the volume, so rock and emitters behind a crystal stay visible through
+it, and a snow layer on ice closes the ice shell with its own bottom face. Two *different* volume
+types touching share a single face, owned like a cutout boundary, since coplanar faces from both
+would z-fight.
 
-Glass is opaque to the acceleration structure: its texels have alpha 1, so it needs no OMM or
-anyhit handling, and shadow rays are blocked by it as they are by any rough transmissive surface.
+Volume blocks are opaque to the acceleration structure: their texels have alpha 1, so they need no
+OMM or anyhit handling, and shadow rays are blocked by them as they are by any rough transmissive
+surface.
+
+Ice being `SCATTERING` rather than `SOLID` reaches into generation: snow layers accept scattering
+tops explicitly, and the ice-fields soil layer under the snow cap is a translucent volume too.
+
+## Media
+
+Water and volume blocks name the medium that fills them (`"medium"` in the JSON); the parser
+rejects a water or volume block without one and any other block with one, so a new transparent
+block cannot silently become an air pocket. The medium ids are shared with the shaders through
+`common_structs.h`; each medium's IOR and absorption live in `shaders/materials/media.hlsli`. Faces
+record the media on their two sides (see [greedy_meshing.md](greedy_meshing.md)), which is what
+lets a crystal under water refract by the glass-to-water ratio and paths inside ice or water absorb
+correctly (see [shaders → path_tracing.md](../shaders/path_tracing.md)).
 
 ## Procedural color
 

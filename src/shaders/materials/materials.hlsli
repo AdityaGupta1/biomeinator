@@ -7,6 +7,7 @@
 #include "../rendering/common/common_registers.h"
 
 #include "common/payload.hlsli"
+#include "materials/media.hlsli"
 #include "util/ggx.hlsli"
 #include "util/sampling.hlsli"
 
@@ -117,8 +118,6 @@ float3 getMaterialEmissiveColor(const Material material, const float2 uv, const 
     return emissiveColor * material.emissiveStrength * texCtx.proceduralColor;
 }
 
-static const float glassIor = 1.55f; // quartz-ish
-
 float getMaterialRoughness(const Material material, const float2 uv, const TexSampleCtx texCtx)
 {
     // Packed-aux terrain resolves roughness in its surface override. glTF uses G of a
@@ -128,18 +127,38 @@ float getMaterialRoughness(const Material material, const float2 uv, const TexSa
         : material.roughness;
 }
 
+float getPackedAuxRoughness(const Material material, const float2 uv, const TexSampleCtx texCtx)
+{
+    return (material.hasPackedAux() && material.auxTextureId != TEXTURE_ID_INVALID)
+        ? sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx).b
+        : 0.f;
+}
+
 // Turns the hit's material into glass, for faces flagged FACE_FLAG_IS_GLASS. Terrain shares
 // one diffuse material across every block, so glass is a per-triangle override rather than its own
 // material and instance; the base color texture becomes the transmission tint and the packed aux
-// b channel carries per-texel roughness. Reflection is untinted, as for any dielectric.
+// b channel carries per-texel roughness. Reflection is untinted, as for any dielectric. The IOR
+// comes from the media on the face's two sides.
 void applyGlassMaterial(inout Material material, const float2 uv, const TexSampleCtx texCtx)
 {
     material.flags = (material.flags & ~MATERIAL_FLAG_DIFFUSE) | MATERIAL_FLAGS_GLOSSY;
     material.glossyReflectionTint = float3(1.f, 1.f, 1.f);
-    material.roughness = (material.hasPackedAux() && material.auxTextureId != TEXTURE_ID_INVALID)
-        ? sampleTexture(material.hasArrayTexture(), material.auxTextureId, uv, texCtx).b
-        : 0.f;
-    material.ior = glassIor;
+    material.roughness = getPackedAuxRoughness(material, uv, texCtx);
+}
+
+// Share of the light entering a scattering medium that leaves through the far side rather than
+// back out of the side it entered
+static const float scatteringDiffuseTransmission = 0.85f;
+
+// Turns the hit's material into a surface standing in for a scattering medium (ice), for faces flagged
+// FACE_FLAG_IS_SCATTERING: untinted glossy reflection over a diffuse lobe that transmits part of its light.
+// Roughness comes from the packed aux b channel, as for glass.
+void applyScatteringMaterial(inout Material material, const float2 uv, const TexSampleCtx texCtx)
+{
+    material.flags |= MATERIAL_FLAG_GLOSSY_REFLECTION | MATERIAL_FLAG_LAYERED_MICROFACET_FRESNEL;
+    material.glossyReflectionTint = float3(1.f, 1.f, 1.f);
+    material.roughness = getPackedAuxRoughness(material, uv, texCtx);
+    material.diffuseTransmission = scatteringDiffuseTransmission;
 }
 
 // this is the recommended method from the DLSS-RR integration guide (https://github.com/NVIDIA/DLSS/blob/main/doc/DLSS-RR%20Integration%20Guide.pdf)
@@ -169,9 +188,25 @@ float3 calculateDlssSpecularAlbedo(const float3 glossyReflectionTint, const floa
     return mad(glossyReflectionTint, max(0, scale), max(0, bias));
 }
 
-// Probability of choosing the glossy reflection lobe in sampleBsdf; also the Fresnel weight applied
-// to that lobe, so it cancels out of the sampling weight. sampleBsdf and evaluateBsdf must use the exact
-// same value or MIS breaks silently.
+// Average Fresnel reflectance of the visible microfacets of a rough layered microfacet-Fresnel lobe. No microfacet
+// is visible from behind the shading normal, so it is 0 there.
+float averageMicrofacetFresnel(const Material material, const float3 wo_WS, const float3 surfShadingNor_WS)
+{
+    const float cosThetaWo = cosTheta(wo_WS, surfShadingNor_WS);
+    return (cosThetaWo > 0.f) ? ggxFresnelAlbedo(material.roughness, cosThetaWo, material.ior) : 0.f;
+}
+
+// Layered microfacet Fresnel picks the glossy lobe per sampled microfacet only when a lobe lies beneath it; a lone
+// glossy lobe (the reflection half of a path split) is always picked and carries F(h) as its weight
+bool picksLobePerMicrofacet(const Material material)
+{
+    return material.hasLayeredMicrofacetFresnel() && material.roughness > 0.f && material.hasDiffuseOrGlossyTransmission();
+}
+
+// Probability of choosing the glossy reflection lobe in sampleBsdf, and the share of light the diffuse lobe
+// beneath it doesn't get. With shading-normal Fresnel it is also the glossy lobe's Fresnel weight, so it
+// cancels out of the sampling weight; with layered microfacet Fresnel it is the visible microfacets' average Fresnel.
+// sampleBsdf and evaluateBsdf must use the exact same value or MIS breaks silently.
 float glossyReflectionProbability(const Material material, const float3 wo_WS, const float3 surfShadingNor_WS)
 {
     if (!material.hasGlossyReflection())
@@ -182,7 +217,22 @@ float glossyReflectionProbability(const Material material, const float3 wo_WS, c
     {
         return 1.f;
     }
+    if (picksLobePerMicrofacet(material))
+    {
+        return averageMicrofacetFresnel(material, wo_WS, surfShadingNor_WS);
+    }
     return walterFresnel(material.ior, cosTheta(wo_WS, surfShadingNor_WS));
+}
+
+float microfacetFresnel(const Material material, const float3 wo_WS, const float3 h_WS)
+{
+    return walterFresnel(material.ior, dot(wo_WS, h_WS));
+}
+
+// Fresnel weight of the rough glossy reflection lobe for the microfacet h_WS
+float glossyReflectionFresnel(const Material material, const float3 wo_WS, const float3 h_WS, const float fresnelReflectance)
+{
+    return material.hasLayeredMicrofacetFresnel() ? microfacetFresnel(material, wo_WS, h_WS) : fresnelReflectance;
 }
 
 // Terms shared by the value and pdf of the dielectric lobe (glossy reflection + glossy transmission, i.e. glass).
@@ -357,10 +407,12 @@ BsdfEval evaluateBsdf(const Material material,
             // fresnelReflectance, mirroring the Blender node group's Fresnel-node mix.
             const float3 multipleScatteringCompensation =
                 ggxEnergyCompensation(material.roughness, cosThetaWo, material.glossyReflectionTint);
-            result.value += material.glossyReflectionTint * fresnelReflectance * multipleScatteringCompensation * d * g2 /
+            const float lobeFresnel = glossyReflectionFresnel(material, wo_WS, h_WS, fresnelReflectance);
+            const float lobeProbability = picksLobePerMicrofacet(material) ? lobeFresnel : fresnelReflectance;
+            result.value += material.glossyReflectionTint * lobeFresnel * multipleScatteringCompensation * d * g2 /
                             (4.f * cosThetaWo * cosThetaWi);
             // VNDF density of the half vector, mapped to wi through the reflection Jacobian
-            result.pdf += fresnelReflectance * ggxSmithG1(alpha, cosThetaWo) * d / (4.f * cosThetaWo);
+            result.pdf += lobeProbability * ggxSmithG1(alpha, cosThetaWo) * d / (4.f * cosThetaWo);
         }
     }
 
@@ -495,15 +547,34 @@ BsdfSample sampleBsdf(const Material material,
         return sampleDielectricBsdf(material, uv, wo_WS, surfShadingNor_WS, texCtx, rng);
     }
 
-    const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfShadingNor_WS);
-    const bool chooseReflect = rng.nextFloat() < fresnelReflectance; // nextFloat() is in [0, 1), so F = 0 and F = 1 are exact
+    const float alpha = material.roughness * material.roughness;
+    // Layered microfacet Fresnel picks the lobe per sampled microfacet, as the dielectric does
+    const bool sampleMicrofacetFirst = picksLobePerMicrofacet(material);
+    const float fresnelReflectance =
+        sampleMicrofacetFirst ? 0.f : glossyReflectionProbability(material, wo_WS, surfShadingNor_WS);
+    // A mapped normal can face away from wo even when its mirror reflection is
+    // above the geometric surface. GGX has no visible microfacets from that side;
+    // evaluating such a sample would give value = pdf = 0 and poison accumulation.
+    const bool woFacesAway = cosTheta(wo_WS, surfShadingNor_WS) <= 0.f;
+    float3 h_WS = surfShadingNor_WS;
+    bool chooseReflect;
+    if (sampleMicrofacetFirst)
+    {
+        chooseReflect = false;
+        if (!woFacesAway)
+        {
+            h_WS = sampleGgxVndf(wo_WS, surfShadingNor_WS, alpha, rng);
+            chooseReflect = rng.nextFloat() < microfacetFresnel(material, wo_WS, h_WS);
+        }
+    }
+    else
+    {
+        chooseReflect = rng.nextFloat() < fresnelReflectance; // nextFloat() is in [0, 1), so F = 0 and F = 1 are exact
+    }
 
     if (chooseReflect)
     {
-        // A mapped normal can face away from wo even when its mirror reflection is
-        // above the geometric surface. GGX has no visible microfacets from that side;
-        // evaluating such a sample would give value = pdf = 0 and poison accumulation.
-        if (cosTheta(wo_WS, surfShadingNor_WS) <= 0.f)
+        if (woFacesAway)
         {
             return deadBsdfSample(surfShadingNor_WS);
         }
@@ -518,8 +589,10 @@ BsdfSample sampleBsdf(const Material material,
             return result;
         }
 
-        const float alpha = material.roughness * material.roughness;
-        const float3 h_WS = sampleGgxVndf(wo_WS, surfShadingNor_WS, alpha, rng);
+        if (!sampleMicrofacetFirst)
+        {
+            h_WS = sampleGgxVndf(wo_WS, surfShadingNor_WS, alpha, rng);
+        }
         result.wi_WS = normalize(reflect(-wo_WS, h_WS));
         if (cosTheta(result.wi_WS, surfShadingNor_WS) <= 0.f) // sample fell below the horizon
         {
@@ -584,15 +657,23 @@ void scatterRayCone(inout RayCone cone, const Material material, const BsdfSampl
 // Thin diffuse transmission fraction applied to FACE_FLAG_DIFFUSE_TRANSMISSION hits
 static const float foliageDiffuseTransmission = 0.4f;
 
-Material getMaterialFromPayload(const Payload payload, const uint triangleFlags, const TexSampleCtx texCtx)
+Material getMaterialFromPayload(const Payload payload, const PerFaceData perFaceData, const TexSampleCtx texCtx)
 {
     Material material = materials[payload.materialIdx];
     // Resolve surface overrides before orienting IOR for this particular hit.
-    if (bool(triangleFlags & FACE_FLAG_IS_GLASS))
+    if (perFaceData.hasFlag(FACE_FLAG_IS_GLASS))
         applyGlassMaterial(material, payload.hitInfo.uv, texCtx);
+    if (perFaceData.hasFlag(FACE_FLAG_IS_SCATTERING))
+    {
+        applyScatteringMaterial(material, payload.hitInfo.uv, texCtx);
+    }
     material.roughness = getMaterialRoughness(material, payload.hitInfo.uv, texCtx);
-    if (bool(triangleFlags & FACE_FLAG_DIFFUSE_TRANSMISSION))
+    if (perFaceData.hasFlag(FACE_FLAG_DIFFUSE_TRANSMISSION))
         material.diffuseTransmission = foliageDiffuseTransmission;
+    if (perFaceData.isMediumBoundary())
+    {
+        material.ior = mediumIors[perFaceData.getBackMedium()] / mediumIors[perFaceData.getFrontMedium()];
+    }
 
     if (bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT))
     {
@@ -643,6 +724,34 @@ bool trySplitMaterial(inout Material surfMaterial,
             }
             return true;
         }
+    }
+
+    if (picksLobePerMicrofacet(surfMaterial) && surfMaterial.hasDiffuse())
+    {
+        if (pathSplitIdx == 0)
+        {
+            // The diffuse lobe as it lies under the glossy one: its front hemisphere keeps what the microfacets
+            // don't reflect on average, its thin-wall back hemisphere everything (see evaluateBsdf). Folding
+            // that into one diffuse lobe scales it and reweights its transmission share.
+            const float averageFresnel = averageMicrofacetFresnel(surfMaterial, wo_WS, surfShadingNor_WS);
+            const float transmission = surfMaterial.diffuseTransmission;
+            const float lobeScale = (1.f - transmission) * (1.f - averageFresnel) + transmission;
+            surfMaterial.flags &= ~(MATERIAL_FLAG_GLOSSY_REFLECTION | MATERIAL_FLAG_LAYERED_MICROFACET_FRESNEL);
+            surfMaterial.glossyReflectionTint = float3(0, 0, 0);
+            surfMaterial.diffuseTransmission = (lobeScale > 0.f) ? transmission / lobeScale : 0.f;
+            pathWeight *= lobeScale;
+        }
+        else
+        {
+            // The glossy lobe alone carries F per microfacet, so the split itself weights nothing
+            surfMaterial.flags &= ~MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION;
+            surfMaterial.baseColor = float3(0, 0, 0);
+            surfMaterial.baseColorTextureId = TEXTURE_ID_INVALID;
+            surfMaterial.emissiveStrength = 0.f;
+            surfMaterial.emissiveColor = float3(0, 0, 0);
+            surfMaterial.auxTextureId = TEXTURE_ID_INVALID;
+        }
+        return true;
     }
 
     // Rough glass weights its lobes per microfacet, so a split on the macro-normal Fresnel would mis-weight them;

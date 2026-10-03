@@ -129,7 +129,7 @@ TexSampleCtx makeTintedTexSampleCtx(const PerFaceData perFaceData, const float r
 Material getHitMaterial(const Payload payload, const float coneWidth)
 {
     const PerFaceData data = loadPerFaceData(instanceDatas[payload.hitInfo.instanceId], payload.hitInfo.triangleIdx);
-    return getMaterialFromPayload(payload, data.getFlags(),
+    return getMaterialFromPayload(payload, data,
         makeUntintedTexSampleCtx(computeMipLevel(coneWidth), data.getTexArraySliceIdx()));
 }
 
@@ -305,7 +305,8 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const PerFaceData perFaceData = loadPerFaceData(instanceData, PrimitiveIndex());
     const bool hasNormalMap = material.normalTextureId != TEXTURE_ID_INVALID &&
                               (!material.hasPackedAux() || perFaceData.hasFlag(FACE_FLAG_NORMAL_MAP));
-    const bool hasGlossy = material.hasGlossy() || (hasNormalMap && perFaceData.hasFlag(FACE_FLAG_IS_GLASS));
+    const bool hasGlossy =
+        material.hasGlossy() || (hasNormalMap && perFaceData.hasFlag(FACE_FLAG_IS_GLASS | FACE_FLAG_IS_SCATTERING));
     const bool isWaterTop = perFaceData.hasFlag(FACE_FLAG_IS_WATER_TOP);
 
     if (hasNormalMap)

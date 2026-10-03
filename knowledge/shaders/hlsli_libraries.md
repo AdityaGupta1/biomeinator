@@ -1,4 +1,4 @@
-_Last edited: 2026-09-17_
+_Last edited: 2026-09-30_
 
 # HLSL Utility Libraries
 
@@ -41,7 +41,9 @@ _Last edited: 2026-09-17_
 - **`util/ggx.hlsli`** / **`util/ggx_tables.hlsli`** — GGX distribution, Smith masking, VNDF
   sampling, refraction half vector/Jacobian, and the albedo tables (copied from Cycles,
   Apache-2.0) behind multiple-scattering compensation. Distribution functions take
-  `alpha = roughness²`; table lookups take roughness.
+  `alpha = roughness²`; table lookups take roughness. `util/ggx_fresnel_tables.hlsli` is generated
+  (not copied) by `util/gen_ggx_fresnel_tables.py`; rerun the script after changing its axes or
+  the Fresnel it integrates, which must stay identical to `walterFresnel`.
 - **`util/shading_normal.hlsli`** — Cycles' `ensure_valid_specular_reflection` port (Apache-2.0),
   applied in `ClosestHit_Primary` for materials with glossy lobes.
 - **`util/color.hlsli`** — luminance, sRGB conversion, DLSS specular albedo helper.

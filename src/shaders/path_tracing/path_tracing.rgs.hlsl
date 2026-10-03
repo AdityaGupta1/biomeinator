@@ -40,7 +40,7 @@ RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFU
 bool isOrphanWaterBackfaceHit(const Payload payload)
 {
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT) || !bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT) ||
-        bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
+        getPayloadMedium(payload) == MEDIUM_WATER)
     {
         return false;
     }
@@ -62,14 +62,14 @@ bool isOrphanWaterBackfaceHit(const Payload payload)
 float applySegmentAtmosphere(inout Payload payload, const float3 origin_WS, const float3 dir,
     const uint numInScatterSteps, const bool cloudScatter, inout float3 pathColor, out CloudResult cloud)
 {
-    const bool underwater = bool(payload.flags & PAYLOAD_FLAG_UNDERWATER);
-    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f && !underwater;
+    const uint medium = getPayloadMedium(payload);
+    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f && medium == MEDIUM_AIR;
     const float volumeDistance = getSegmentVolumeDistance(payload, origin_WS, dir);
     const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
         ? distance(origin_WS, payload.hitInfo.hitPos_WS) : renderParams.cloudSettings.drawDistance;
     const CloudTraversal cloudState = beginCloudTraversal(origin_WS, dir, segmentDistance, cloudUnboundedDistance);
     cloud = integrateClouds(origin_WS, dir, cloudState,
-        fogEnabled ? volumeDistance : 0.f, underwater ? volumeDistance : 0.f, cloudScatter, payload.rng);
+        fogEnabled ? volumeDistance : 0.f, (medium == MEDIUM_WATER) ? volumeDistance : 0.f, cloudScatter, payload.rng);
     float fogTransmittance = 1.f;
     float3 fogScatter = 0.f;
     if (fogEnabled)
@@ -103,7 +103,11 @@ FirstBounceAlbedos computeFirstBounceAlbedos(const Material material,
                                              const TexSampleCtx texCtx,
                                              const float3 weight)
 {
-    const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfShadingNor_WS);
+    // A layered microfacet-Fresnel lobe reflects its average Fresnel whether or not a split separated it from the
+    // diffuse lobe
+    const float fresnelReflectance = (material.hasLayeredMicrofacetFresnel() && material.roughness > 0.f)
+        ? averageMicrofacetFresnel(material, wo_WS, surfShadingNor_WS)
+        : glossyReflectionProbability(material, wo_WS, surfShadingNor_WS);
     const float3 glossyReflectionAlbedo = calculateDlssSpecularAlbedo(
         material.glossyReflectionTint, material.roughness * material.roughness, cosTheta(wo_WS, surfShadingNor_WS));
     // The lobe the light reaches when it isn't reflected: diffuse, or transmission for glass
@@ -218,7 +222,6 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 #endif
         const InstanceData instanceData = instanceDatas[payload.hitInfo.instanceId];
         const PerFaceData perFaceData = loadPerFaceData(instanceData, payload.hitInfo.triangleIdx);
-        const bool hitWasWater = perFaceData.hasFlag(FACE_FLAG_IS_WATER);
         const TexSampleCtx surfTexCtx =
             makeTintedTexSampleCtx(perFaceData, payload.rayCone.width, payload.hitInfo.hitPos_WS);
 
@@ -340,10 +343,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         if (isPassthrough)
         {
             payload.pathWeight *= getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, surfTexCtx).rgb;
-            if (hitWasWater)
-            {
-                setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
-            }
+            transmitThroughFace(payload, perFaceData);
             setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, surfGeoNor_WS, ray.Direction, true /*faceforwardNormal*/);
             // bounceBsdfPdf, bounceWasSpecular, etc. are intentionally preserved from the last real BSDF sample
         }
@@ -379,19 +379,19 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 // sample area lights
                 // ------------------------------
 
-                const bool isUnderwater = payload.flags & PAYLOAD_FLAG_UNDERWATER;
+                const uint2 surfMedia = uint2(getPayloadMedium(payload), getFarSideMedium(payload, perFaceData));
 
                 DirectLightingSample lightSample;
                 if (useRtsl)
                 {
                     lightSample = sampleDirectLightingRtsl(
-                        surfPos_WS, surfShadingNor_WS, surfGeoNor_WS, payload.rayCone, canPassthrough, isUnderwater,
+                        surfPos_WS, surfShadingNor_WS, surfGeoNor_WS, payload.rayCone, canPassthrough, surfMedia,
                         surfMaterial.acceptsBacksideLight(), payload.rng);
                 }
                 else
                 {
                     lightSample =
-                        sampleDirectLightingUniform(surfPos_WS, surfGeoNor_WS, payload.rayCone, canPassthrough, isUnderwater,
+                        sampleDirectLightingUniform(surfPos_WS, surfGeoNor_WS, payload.rayCone, canPassthrough, surfMedia,
                             surfMaterial.acceptsBacksideLight(), payload.rng);
                 }
 
@@ -420,7 +420,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 if (sceneParams.voxelMode == 1)
                 {
                     DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfShadingNor_WS, surfGeoNor_WS, payload.rayCone,
-                        canPassthrough, isUnderwater, surfMaterial.acceptsBacksideLight(), payload.rng);
+                        canPassthrough, surfMedia, surfMaterial.acceptsBacksideLight(), payload.rng);
                     if (domeLightSample.didReachDomeLight)
                     {
                         // no need to consider area light pdf because area light sampling can't hit dome light
@@ -468,9 +468,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             }
 
             // A rough glossy first bounce would otherwise write the stochastically chosen lobe's weight as its
-            // albedo. Only pathSplitIdx 0 can reach a rough material (trySplitMaterial breaks split 1 out for
-            // anything it can't split, and the alpha split makes split 1 a delta passthrough), so the single
-            // write to the shared specular albedo target has no other writer to race with.
+            // albedo. Only one path split can reach a rough glossy material (trySplitMaterial breaks split 1 out
+            // for anything it can't split, the alpha split makes split 1 a delta passthrough, and the microfacet
+            // Fresnel split leaves glossy only in split 1), so the single write to the shared specular albedo
+            // target has no other writer to race with.
             const bool useAnalyticAlbedoGuides =
                 (pathDepth == 0) && surfMaterial.hasGlossy() && surfMaterial.roughness > 0.f;
             if (useAnalyticAlbedoGuides)
@@ -501,9 +502,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfShadingNor_WS);
             }
 
-            if (hitWasWater && dot(surfBsdfSample.wi_WS, surfShadingNor_WS) < 0.f) // apply only for rays that will transmit through the water
+            if (dot(surfBsdfSample.wi_WS, surfGeoNor_WS) < 0.f)
             {
-                setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
+                transmitThroughFace(payload, perFaceData);
             }
 
             if (pathDepth == 0 && !useAnalyticAlbedoGuides && !useDiffuseMaterialAlbedo)
@@ -528,7 +529,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         ray.TMin = 0.f;
         ray.TMax = RAY_DEFAULT_TMAX;
 
-        payload.flags &= PAYLOAD_FLAG_UNDERWATER; // reset all payload flags except PAYLOAD_FLAG_UNDERWATER
+        payload.flags &= PAYLOAD_MEDIUM_MASK; // reset all payload flags except the medium
         payload.waterEntryT = RAY_DEFAULT_TMAX;
         payload.waterExitT = RAY_DEFAULT_TMAX;
 #if SHARC_QUERY

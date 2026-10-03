@@ -7,8 +7,7 @@
 
 #include "common/global_params.hlsli"
 #include "common/payload.hlsli"
-
-static const float3 waterSigmaA = float3(0.35f, 0.06f, 0.02f) * 0.4f;
+#include "materials/media.hlsli"
 
 float3 computeWaterAbsorption(const float dist)
 {
@@ -43,26 +42,38 @@ float getSegmentVolumeDistance(const Payload payload, const float3 rayOrigin, co
         : getDistanceToVoxelBounds(rayOrigin, rayDir);
 }
 
-void setUnderwaterFromHit(inout Payload payload, const bool wasBackfaceHit)
+// The medium on the far side of the hit face, which a transmitted path enters. Thin sheets (foliage, alpha
+// passthrough) have the same medium on both sides.
+uint getFarSideMedium(const Payload payload, const PerFaceData perFaceData)
 {
-    if (wasBackfaceHit)
+    if (!perFaceData.isMediumBoundary())
     {
-        payload.flags &= ~PAYLOAD_FLAG_UNDERWATER;
+        return getPayloadMedium(payload);
     }
-    else
-    {
-        payload.flags |= PAYLOAD_FLAG_UNDERWATER;
-    }
+    return bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT) ? perFaceData.getFrontMedium() : perFaceData.getBackMedium();
+}
+
+void transmitThroughFace(inout Payload payload, const PerFaceData perFaceData)
+{
+    setPayloadMedium(payload, getFarSideMedium(payload, perFaceData));
+}
+
+// surfMedia holds the medium on the side of the surface the path arrived from (which surfGeoNor_WS faces)
+// and on the far side; a shadow ray starts in whichever it leaves into.
+bool isShadowRayStartUnderwater(const uint2 surfMedia, const float3 wi_WS, const float3 surfGeoNor_WS)
+{
+    return ((dot(wi_WS, surfGeoNor_WS) >= 0.f) ? surfMedia.x : surfMedia.y) == MEDIUM_WATER;
 }
 
 float3 computeSegmentAbsorption(const Payload payload, const float3 rayOrigin, const float3 rayDir)
 {
-    if (!bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
+    const uint medium = getPayloadMedium(payload);
+    if (medium == MEDIUM_AIR)
     {
         return float3(1.f, 1.f, 1.f);
     }
 
-    return computeWaterAbsorption(getSegmentVolumeDistance(payload, rayOrigin, rayDir));
+    return exp(-mediumSigmaAs[medium] * getSegmentVolumeDistance(payload, rayOrigin, rayDir));
 }
 
 float3 computePassthroughAbsorption(const Payload payload, const float rayEndT)

@@ -5,6 +5,8 @@
 #ifndef COMMON_STRUCTS_H
 #define COMMON_STRUCTS_H
 
+#include "common_media.h"
+
 #ifdef __cplusplus
 #include <DirectXMath.h>
 
@@ -109,6 +111,9 @@ struct InstanceData
 // auxTextureId is a packed aux texture: r = emissive strength (color comes from the
 // base color texture, whose diffuse is zero wherever r > 0), g = biome tint mask.
 #define MATERIAL_FLAG_PACKED_AUX (1 << 4)
+// Glossy reflection layered over diffuse evaluates Fresnel per microfacet, like the dielectric, instead of at the
+// shading normal
+#define MATERIAL_FLAG_LAYERED_MICROFACET_FRESNEL (1 << 5)
 
 #define MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION (MATERIAL_FLAG_DIFFUSE | MATERIAL_FLAG_GLOSSY_TRANSMISSION)
 #define MATERIAL_FLAGS_GLOSSY (MATERIAL_FLAG_GLOSSY_REFLECTION | MATERIAL_FLAG_GLOSSY_TRANSMISSION)
@@ -209,6 +214,11 @@ public:
         return bool(flags & MATERIAL_FLAG_PACKED_AUX);
     }
 
+    bool hasLayeredMicrofacetFresnel()
+    {
+        return bool(flags & MATERIAL_FLAG_LAYERED_MICROFACET_FRESNEL);
+    }
+
     bool canScatter()
     {
         return hasGlossyReflection() || hasDiffuseOrGlossyTransmission();
@@ -303,6 +313,15 @@ static_assert(sizeof(PackedTerrainVertex) == 12, "PackedTerrainVertex must be 12
 #define FACE_FLAG_PROCEDURAL_COLOR (1 << 5)
 // The terrain texture array slice has a normal map.
 #define FACE_FLAG_NORMAL_MAP (1 << 6)
+// Faces of a scattering medium, approximated as a surface: glossy reflection over a diffuse lobe
+// that transmits part of its light (see applyScatteringMaterial)
+#define FACE_FLAG_IS_SCATTERING (1 << 7)
+
+#define FACE_MEDIUM_BITS 3
+#define FACE_MEDIUM_MASK ((1u << FACE_MEDIUM_BITS) - 1u)
+#define FACE_MEDIUM_FRONT_SHIFT 8
+#define FACE_MEDIUM_BACK_SHIFT (FACE_MEDIUM_FRONT_SHIFT + FACE_MEDIUM_BITS)
+#define FACE_MEDIA_FLAGS(front, back) (((front) << FACE_MEDIUM_FRONT_SHIFT) | ((back) << FACE_MEDIUM_BACK_SHIFT))
 
 #define FACE_FLAGS_BITS 16
 #define FACE_FLAGS_MASK ((1u << FACE_FLAGS_BITS) - 1u)
@@ -331,6 +350,21 @@ public:
         return bool(packedFlagsAndSlice & flag);
     }
 
+    uint getFrontMedium()
+    {
+        return (packedFlagsAndSlice >> FACE_MEDIUM_FRONT_SHIFT) & FACE_MEDIUM_MASK;
+    }
+
+    uint getBackMedium()
+    {
+        return (packedFlagsAndSlice >> FACE_MEDIUM_BACK_SHIFT) & FACE_MEDIUM_MASK;
+    }
+
+    bool isMediumBoundary()
+    {
+        return getFrontMedium() != getBackMedium();
+    }
+
     uint getTexArraySliceIdx()
     {
         return packedFlagsAndSlice >> FACE_FLAGS_BITS;
@@ -339,6 +373,8 @@ public:
 
 #ifdef __cplusplus
 static_assert(sizeof(PerFaceData) == 8, "PerFaceData must be 8 bytes for parity with the HLSL layout");
+static_assert(FACE_MEDIUM_BACK_SHIFT + FACE_MEDIUM_BITS <= FACE_FLAGS_BITS, "Face media must fit in the face flags");
+static_assert(MEDIUM_COUNT <= (1u << FACE_MEDIUM_BITS), "Medium ids must fit in FACE_MEDIUM_BITS");
 #endif
 
 #ifdef __cplusplus

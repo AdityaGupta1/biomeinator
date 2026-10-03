@@ -1,12 +1,45 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-10-02_
 
 # Mesh Generation
 
 `Chunk::createInstances()` in `src/terrain/chunk.cpp` — converts block data into vertex/index buffers. Per-face emission with segment culling (not traditional greedy meshing despite the filename).
 
-## Two Instances Per Chunk
+## Three Instances Per Chunk
 
-Terrain and water are separate `Instance` objects with independent BLAS. Water gets `FACE_FLAG_IS_WATER` on all triangles so the path tracer can handle it differently. If no water faces are generated, the water instance is freed in `cleanUnusedInstances`.
+Terrain and water are separate `Instance` objects with independent BLAS. Water gets `FACE_FLAG_IS_WATER` on all triangles so the path tracer can handle it differently. If no water faces are generated, the water instance is freed in `cleanUnusedInstances`. A third, the waterline instance, holds only the split side faces described below. Few chunks have any, so unlike the other two it is not requested up front: the worker meshes the bands into chunk-owned vectors, and `createWaterlineInstance` makes the instance on the main thread when the chunk is queued for its BLAS, only if there are bands.
+
+## Face Media
+
+Every cube face of a water or volume block records the medium in front of it (the neighbor's) and
+behind it (its own) in its face flags. The front is air where a partial-height block leaves the
+rest of a cell open: a water top's own top face, and a bottom face resting on a water top. Faces of
+air-medium blocks (solid, cutout, foliage) record no boundary even when they border water: light
+never crosses an opaque face, and a diffuse sample dipping below a normal-mapped seabed's shading
+normal would otherwise flip the path out of the water. X-shaped and custom models record none
+either, so foliage standing in water leaves the path's medium alone.
+
+## Waterline Bands
+
+A volume block's side face next to a water top borders water below the surface and air above it,
+so it is emitted as two bands split at the surface height, each with its own front medium. The
+bands go into the waterline instance rather than the terrain one because they must move with the
+waves: the displacement pass moves every vertex resting at the 7/8 surface height, so the split
+vertices follow `waveHeight` exactly like the water surface's edge vertices at the same position
+and the joint stays watertight every frame. The terrain instance cannot carry them (packed
+vertices, never refit) and neither can the water instance (its material is untextured; the
+waterline instance uses the terrain material, so the usual per-face overrides apply).
+
+The bands' v coordinate counts down from the cell's top edge, as on a whole side face, and the
+displacement pass rewrites it on moved side-face vertices. v is linear in height on a vertical
+face, so the texture stays fixed in world space and only the split line slides over it. The bands
+carry no `FACE_FLAG_IS_WATER_TOP`, so the G-buffer reports camera-only motion for them, which is
+correct for a world-locked texture.
+
+**Unresolved:** waterline bands are never registered as area lights, so an emissive volume block
+next to a water top would light the world through its bands by BSDF sampling only. Registering them
+is not just a matter of adding them: per-frame displacement never rebuilds the light sampling
+structure, so their triangle areas (and NEE's light pdf) would go stale. No emissive volume block
+exists yet; the fix is left open.
 
 ## Crack Prevention
 
