@@ -45,16 +45,24 @@ constexpr uint8_t surfaceForFace(BlockFace face)
     }
 }
 
-// Freeing chunks' large buffers stalled present for around 30 ms whenever a region was evicted, even
-// from a background thread, so destroyed chunks hand them to chunks generated later instead. A
-// chunk's buffers are pooled as one set so a chunk always takes and returns all of them together.
-// The pool is uncapped: chunks take from it before allocating, so pooled and resident sets together
-// never exceed the most chunks that were ever resident at once.
+template<typename T>
+uint64_t capacityBytes(const std::vector<T>& vector)
+{
+    return vector.capacity() * sizeof(T);
+}
+
+// A chunk's large buffers, pooled as one set and never freed while running; see
+// knowledge/terrain/region_system.md (Freeing without stutter)
 struct ChunkBuffers
 {
     std::vector<Block> blocks;
     std::vector<uint64_t> terrainAirMask;
     std::vector<uint64_t> terrainSolidCubeMask;
+
+    uint64_t capacityBytes() const
+    {
+        return ::capacityBytes(blocks) + ::capacityBytes(terrainAirMask) + ::capacityBytes(terrainSolidCubeMask);
+    }
 };
 
 std::mutex bufferPoolMutex;
@@ -70,12 +78,6 @@ ChunkBuffers takePooledBuffers()
     ChunkBuffers buffers = std::move(bufferPool.back());
     bufferPool.pop_back();
     return buffers;
-}
-
-template<typename T>
-uint64_t capacityBytes(const std::vector<T>& vector)
-{
-    return vector.capacity() * sizeof(T);
 }
 } // namespace
 
@@ -106,7 +108,7 @@ ChunkMemory Chunk::getMemory() const
         .structures = capacityBytes(this->structures) + capacityBytes(this->surfaceStructureCandidates) +
                       capacityBytes(this->caveStructures),
         .misc = sizeof(Chunk) + capacityBytes(this->biomes) + capacityBytes(this->terrainTopY) +
-                  capacityBytes(this->terrainSurfaceHeight) + capacityBytes(this->segmentsToGenerate) + blockStatesBytes,
+                capacityBytes(this->terrainSurfaceHeight) + capacityBytes(this->segmentsToGenerate) + blockStatesBytes,
     };
 }
 
@@ -116,8 +118,7 @@ uint64_t Chunk::getPooledBufferBytes()
     uint64_t bytes = 0;
     for (const ChunkBuffers& buffers : bufferPool)
     {
-        bytes += capacityBytes(buffers.blocks) + capacityBytes(buffers.terrainAirMask) +
-                 capacityBytes(buffers.terrainSolidCubeMask);
+        bytes += buffers.capacityBytes();
     }
     return bytes;
 }
@@ -297,15 +298,12 @@ bool Chunk::isTerrainSolidCube_WS(glm::ivec3 pos_WS) const
 uint32_t Chunk::structureNeighborBit(glm::ivec2 offset)
 {
     constexpr int radius = static_cast<int>(structureMaxChunkRadius);
-    constexpr int sideLength = 2 * radius + 1;
-    return 1u << ((offset.y + radius) * sideLength + (offset.x + radius));
+    return 1u << ((offset.y + radius) * static_cast<int>(structureNeighborSideLength) + (offset.x + radius));
 }
 
 // Row-major from the (-radius, -radius) corner
 Chunk::StructureNeighborhood Chunk::collectStructureNeighbors()
 {
-    constexpr uint32_t sideLength = 2 * structureMaxChunkRadius + 1;
-
     Chunk* corner = this;
     for (uint32_t i = 0; i < structureMaxChunkRadius; ++i)
     {
@@ -318,21 +316,21 @@ Chunk::StructureNeighborhood Chunk::collectStructureNeighbors()
     StructureNeighborhood neighborhood{};
     uint32_t neighborIdx = 0;
     Chunk* rowStart = corner;
-    for (uint32_t z = 0; z < sideLength; ++z)
+    for (uint32_t z = 0; z < structureNeighborSideLength; ++z)
     {
         Chunk* current = rowStart;
-        for (uint32_t x = 0; x < sideLength; ++x)
+        for (uint32_t x = 0; x < structureNeighborSideLength; ++x)
         {
             neighborhood[neighborIdx++] = current;
 
-            if (x < sideLength - 1)
+            if (x < structureNeighborSideLength - 1)
             {
                 current = current->neighbors[static_cast<size_t>(NeighborDirection::X_POS)];
                 ASSERT(current != nullptr);
             }
         }
 
-        if (z < sideLength - 1)
+        if (z < structureNeighborSideLength - 1)
         {
             rowStart = rowStart->neighbors[static_cast<size_t>(NeighborDirection::Z_POS)];
             ASSERT(rowStart != nullptr);
@@ -345,7 +343,7 @@ void Chunk::markStructureNeighborsReady(uint32_t neighborBits)
 {
     const uint32_t readyMask =
         this->readyStructureNeighborsMask.fetch_or(neighborBits, std::memory_order_acq_rel) | neighborBits;
-    if (readyMask == (1u << numStructureNeighbors) - 1 && this->getState() >= ChunkState::HAS_TERRAIN &&
+    if (readyMask == allStructureNeighborsMask && this->getState() >= ChunkState::HAS_TERRAIN &&
         this->advanceState(ChunkState::NEEDS_FILL_STRUCTURES))
     {
         Terrain::addChunkToRevisit(this);
@@ -752,16 +750,13 @@ void Chunk::fillStructuresAndDecorators()
     }
     this->markNeighborsWithBlocks(neighborsWithBlocksBits);
 
-    if (Terrain::isValidatingEviction() && !this->hasSerializedData)
-    {
-        Terrain::validateRegeneratedChunk(this);
-    }
+    Terrain::validateRegeneratedChunk(this);
 }
 
 void Chunk::markNeighborsWithBlocks(uint32_t neighborBits)
 {
     const uint32_t blocksMask = this->neighborsWithBlocksMask.fetch_or(neighborBits, std::memory_order_acq_rel) | neighborBits;
-    if (blocksMask == 0xF && this->getState() >= ChunkState::HAS_ALL_BLOCKS &&
+    if (blocksMask == allNeighborsMask && this->getState() >= ChunkState::HAS_ALL_BLOCKS &&
         this->advanceState(ChunkState::NEEDS_SEGMENTS))
     {
         Terrain::addChunkToRevisit(this);
@@ -1131,14 +1126,14 @@ static PerFaceData makeBlockFaceData(const BlockData& block, uint32_t slice, uin
 
 void Chunk::createInstances()
 {
-    std::vector<Vertex>& terrainVerts = this->terrainInstance->host_verts;
-    std::vector<uint32_t>& terrainIdxs = this->terrainInstance->host_idxs;
-    std::vector<PerFaceData>& terrainPerFaceDatas = this->terrainInstance->host_perFaceDatas;
-    std::vector<uint16_t>& terrainOmmIdxs = this->terrainInstance->host_ommIdxs;
+    std::vector<Vertex>& terrainVerts = this->terrainInstance->hostGeometry.verts;
+    std::vector<uint32_t>& terrainIdxs = this->terrainInstance->hostGeometry.idxs;
+    std::vector<PerFaceData>& terrainPerFaceDatas = this->terrainInstance->hostGeometry.perFaceDatas;
+    std::vector<uint16_t>& terrainOmmIdxs = this->terrainInstance->hostGeometry.ommIdxs;
     std::vector<uint32_t> terrainEmissiveTriangleIdxs;
-    std::vector<Vertex>& waterVerts = this->waterInstance->host_verts;
-    std::vector<uint32_t>& waterIdxs = this->waterInstance->host_idxs;
-    std::vector<PerFaceData>& waterPerFaceDatas = this->waterInstance->host_perFaceDatas;
+    std::vector<Vertex>& waterVerts = this->waterInstance->hostGeometry.verts;
+    std::vector<uint32_t>& waterIdxs = this->waterInstance->hostGeometry.idxs;
+    std::vector<PerFaceData>& waterPerFaceDatas = this->waterInstance->hostGeometry.perFaceDatas;
 
     constexpr size_t numTerrainVertsToReserve = 1 << 14; // approximate size
     terrainVerts.reserve(numTerrainVertsToReserve);
@@ -1387,7 +1382,7 @@ void Chunk::createInstances()
 
     // The packed form is the geometry: the fp32 copy that builds the BLAS and the area lights is
     // decoded from it so every consumer sees the same quantized positions and UVs
-    std::vector<PackedTerrainVertex>& terrainPackedVerts = this->terrainInstance->host_packedTerrainVerts;
+    std::vector<PackedTerrainVertex>& terrainPackedVerts = this->terrainInstance->hostGeometry.packedTerrainVerts;
     terrainPackedVerts.resize(terrainVerts.size());
     std::transform(terrainVerts.begin(), terrainVerts.end(), terrainPackedVerts.begin(), Util::packTerrainVertex);
     std::transform(terrainPackedVerts.begin(), terrainPackedVerts.end(), terrainVerts.begin(), Util::unpackTerrainVertex);
@@ -1407,15 +1402,7 @@ void Chunk::createInstances()
         waterInstance->setIsDeformable(true);
     }
 
-    this->advanceState(ChunkState::HAS_GEOMETRY);
-    if (this->getIsMarkedForDestruction())
-    {
-        Terrain::addChunkToDestroy(this);
-    }
-    else
-    {
-        Terrain::addChunkToCreateBlas(this);
-    }
+    Terrain::addChunkWithNewGeometry(this);
 }
 
 void Chunk::destroyInstances(ToFreeList& toFreeList)
@@ -1502,12 +1489,12 @@ void Chunk::loadSerializedData(SerializedChunkData&& data)
 
 bool Chunk::getIsMarkedForDestruction() const
 {
-    return this->isMarkedForDestruction.load(std::memory_order_acquire);
+    return this->isMarkedForDestruction;
 }
 
 void Chunk::setIsMarkedForDestruction(bool marked)
 {
-    this->isMarkedForDestruction.store(marked, std::memory_order_release);
+    this->isMarkedForDestruction = marked;
 }
 
 void Chunk::setInstancesVisible(bool visible)
@@ -1558,7 +1545,8 @@ uint64_t Chunk::hashFinalBlocks() const
     {
         blockStatesHash += std::hash<uint64_t>{}((static_cast<uint64_t>(blockIdx) << 8) | blockState);
     }
-    return std::hash<std::string_view>{}(blockBytes) ^ (blockStatesHash * 0x9E3779B97F4A7C15ull);
+    constexpr uint64_t fibonacciHashMultiplier = 0x9E3779B97F4A7C15ull;
+    return std::hash<std::string_view>{}(blockBytes) ^ (blockStatesHash * fibonacciHashMultiplier);
 }
 
 bool Chunk::tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const
@@ -1626,7 +1614,9 @@ void Chunk::segmentPosToBounds(uvec3 chunkSegmentPos, uvec3& outSegmentStartPos,
 }
 
 Region::Region(glm::ivec2 regionPos)
-    : regionPos(regionPos), regionPosChunks(regionPos * static_cast<int>(regionSideLength))
+    : regionPos(regionPos),
+      regionPosChunks(regionPos * static_cast<int>(regionSideLength)),
+      regionMaxPosChunks(regionPosChunks + static_cast<int>(regionSideLength) - 1)
 {}
 
 Chunk* Region::getChunk(ivec2 chunkPos)
@@ -1665,11 +1655,21 @@ void Region::setNeighbor(NeighborDirection dir, Region* neighborRegion)
     ++neighborRegion->numNeighborsSet;
 }
 
+// Also clears the opposite direction
 void Region::clearNeighbor(NeighborDirection dir)
 {
-    ASSERT(this->neighbors[static_cast<size_t>(dir)] != nullptr);
+    Region* neighborRegion = this->neighbors[static_cast<size_t>(dir)];
+    ASSERT(neighborRegion != nullptr);
     this->neighbors[static_cast<size_t>(dir)] = nullptr;
     --this->numNeighborsSet;
+    neighborRegion->neighbors[static_cast<size_t>(oppositeNeighborDirection(dir))] = nullptr;
+    --neighborRegion->numNeighborsSet;
+}
+
+bool Region::containsChunk(glm::ivec2 chunkPos) const
+{
+    return glm::all(glm::greaterThanEqual(chunkPos, this->regionPosChunks)) &&
+           glm::all(glm::lessThanEqual(chunkPos, this->regionMaxPosChunks));
 }
 
 uint32_t Region::getNumNeighborsSet() const
@@ -1691,6 +1691,16 @@ void Region::unpin()
 bool Region::isPinned() const
 {
     return this->numPins.load(std::memory_order_acquire) != 0;
+}
+
+bool Region::getIsStaged() const
+{
+    return this->isStaged;
+}
+
+void Region::setIsStaged(bool staged)
+{
+    this->isStaged = staged;
 }
 
 // x changes fastest, then z

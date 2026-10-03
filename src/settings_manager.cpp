@@ -117,7 +117,10 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
     ADD_OPTION("cloudWindZ", "Cloud wind Z in blocks/s", float, "50");
     ADD_OPTION("renderDistance", "Render distance in chunks (must be positive)", int, "30");
     ADD_OPTION("world", "World to import", std::string, "");
-    ADD_OPTION("evictRegions", "Free regions far from the camera, regenerating them if the camera returns", bool, "true");
+    ADD_OPTION("evictRegions",
+               "Free regions far from the camera, regenerating them if the camera returns",
+               bool,
+               "true");
     ADD_OPTION("validateEviction",
                "Check that chunks regenerated after eviction match what they held before",
                bool,

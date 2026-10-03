@@ -7,35 +7,35 @@ _Last edited: 2026-10-02_
 ## Lifecycle
 
 1. `Scene::requestNewInstance()` allocates on main thread, taking pooled CPU geometry vectors if any.
-2. Worker thread fills `host_verts`, `host_idxs`, `host_perFaceDatas` directly (public vectors),
+2. Worker thread fills `hostGeometry.verts`, `.idxs`, `.perFaceDatas` directly (public vectors),
    and sets `trisPerFaceLog2` if a `PerFaceData` entry covers more than one triangle. Terrain
-   also fills `host_packedTerrainVerts` and decodes `host_verts` back from it, so the BLAS
+   also fills `hostGeometry.packedTerrainVerts` and decodes `.verts` back from it, so the BLAS
    build (from the staging upload) and the area lights use the same rounded geometry the shaders
    read; only the packed form goes resident. See
    [shaders → common_structs.md](../shaders/common_structs.md).
 3. Worker calls `finalizeGeometry()` to mark data as ready.
 4. Main thread calls `Scene::markInstanceReadyForBlasBuild()`.
 5. `Scene::makeQueuedBlases()` uploads geometry to GPU, builds BLAS, writes `InstanceData`, then
-   returns the `host_` vectors to the scene's pool.
+   returns its `hostGeometry` to the scene's pool.
 6. On destruction, `Instance::reset()` frees all buffer sections and returns the ID to the pool.
 
-## CPU Geometry Is Only Kept Until Upload (`hostGeometryPool`)
+## CPU Geometry Is Only Kept Until Upload (`hostGeometryPools`)
 
-Nothing reads an instance's `host_` vectors after `makeQueuedBlases` copies them into the staging
+Nothing reads an instance's `hostGeometry` after `makeQueuedBlases` copies it into the staging
 buffers: refits, compaction, area lights and the TLAS all use the GPU copies. So an instance
 returns its vectors, emptied but keeping their capacity, right after upload, and new instances
-take them. Before this, every live instance kept its geometry and freed instances queued for
-reuse kept theirs, about 2.8 MB per visible chunk. At render distance 30 that was about 10 GB of the
-20 GB committed; with the pool the total is 10.2 GB.
+take them. Keeping them for each live instance cost about 2.8 MB of CPU memory per visible chunk,
+about half of everything committed at render distance 30.
 
-The pool never frees anything while running, which is why it must stay bounded by other means.
-Freeing these buffers stalled frames: trimming four sets from the pool took 20–40 ms on the main
-thread, and up to 26 ms even with generation idle (see also [terrain → region_system.md](../terrain/region_system.md#freeing-without-stutter)).
-Instead, Terrain only meshes a chunk while fewer than `maxTerrainInstancesHoldingHostGeometry`
-(512) terrain instances hold geometry, so the large pool can never hold more sets than that.
-Streaming stays far below the cap; only loads reach it. At render distance 30 the pool tops out
-around 880 MB and the load takes 3.5 s, against 3.0 s uncapped; a cap of 256 halves the pool but
-takes 5 s.
+The pools never free anything while running, because freeing these buffers stalls frames: trimming
+four sets took 20–40 ms on the main thread, and up to 26 ms even with generation idle (see also
+[terrain → region_system.md](../terrain/region_system.md#freeing-without-stutter)). Instead,
+Terrain only meshes a chunk while fewer than `maxTerrainInstancesHoldingHostGeometry` (512) terrain
+instances hold geometry, so the large pool can never hold more sets than that. Streaming stays far
+below the cap; only loads reach it. At render distance 30 the pool tops out around 880 MB and the
+load takes 3.5 s, against 3.0 s uncapped; a cap of 256 halves the pool but takes 5 s. Sets keep
+the capacity of the largest mesh they have held, so the pool can creep above that over a long
+session, but never past 512 sets.
 
 Pooled sets keep their capacity, so there are two pools (`HostGeometrySize`). Water meshes are
 tiny, and drawing them from the same pool tied up terrain-sized sets and half the cap; water uses

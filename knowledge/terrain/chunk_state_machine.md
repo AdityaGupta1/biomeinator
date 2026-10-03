@@ -8,7 +8,7 @@ Each chunk has an `atomic<ChunkState>` that progresses forward from `NEEDS_TERRA
 
 **Main-thread**: the terrain manager's scan checks state and enqueues the next task (e.g. `NEEDS_TERRAIN` → `GENERATING_TERRAIN`).
 
-**Worker-thread**: a completed task advances to the "done" state (e.g. `GENERATING_TERRAIN` → `HAS_TERRAIN`) and calls `Terrain::addChunkToRevisit()` so the main thread schedules that chunk's next stage without a full re-scan.
+**Worker-thread**: a completed task advances to the "done" state (e.g. `GENERATING_TERRAIN` → `HAS_TERRAIN`) and calls `Terrain::addChunkToRevisit()` so the main thread schedules that chunk's next stage without a full re-scan. The exception is `GENERATING_GEOMETRY` → `HAS_GEOMETRY`, which the main thread performs; see [multithreading → chunk_gen_pipeline.md](../multithreading/chunk_gen_pipeline.md#completion-callbacks).
 
 **Dependency-driven** (the non-obvious ones):
 - `AWAITING_STRUCTURE_NEIGHBORS` → `NEEDS_FILL_STRUCTURES`: the last structure neighbor's `checkStructureNeighbors()` completes an atomic bit mask with a bit per neighbor. This can fire on any worker thread.
@@ -34,10 +34,10 @@ keeping it would hold pointers into removed chunks.
 
 ## `advanceState()` Semantics
 
-Compare-exchange loop that only succeeds if current state < target. Returns whether **this thread** performed the advance. This is critical: multiple threads may try to advance the same chunk (e.g. two neighbors both see numNeighborsWithBlocks == 4 due to race). Only the winner's `true` return should enqueue work.
+Compare-exchange loop that only succeeds if current state < target. Returns whether **this thread** performed the advance. This is critical: multiple threads may try to advance the same chunk (e.g. two neighbors both complete `neighborsWithBlocksMask` due to a race). Only the winner's `true` return should enqueue work.
 
 ## Destruction Is Partial
 
 When a chunk leaves range, only the GPU mesh is destroyed (instances freed, state reset to `NEEDS_GEOMETRY`). Block data, biomes, segments all survive — re-entering range only requires rebuilding geometry, not re-running noise. The chunk itself only goes when its whole region is evicted.
 
-If a chunk is mid-`GENERATING_GEOMETRY` when it leaves range, `isMarkedForDestruction` is set so the completing task destroys it immediately rather than submitting a BLAS that would be instantly torn down.
+If a chunk is mid-`GENERATING_GEOMETRY` when it leaves range, `isMarkedForDestruction` is set, and the main thread destroys its instances when the mesh is reported instead of submitting a BLAS that would be instantly torn down.

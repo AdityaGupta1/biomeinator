@@ -195,15 +195,18 @@ render distance 8, 3,000 frames flying straight at 200 blocks/s (2026-10-02): 3.
 
 Its `cpu` block splits the committed private memory into what the heaps hold in use, what they
 hold free, and what is outside them. It walks every heap, so it only runs at the end of a run.
-It also has terrain chunk buffers by purpose, and the instance sums have `hostBytes`, the CPU
-copies of instance geometry. Turning walks with eviction (seed 100, 3,000 frames at 100 blocks/s,
-DLSS and frame generation, 2026-10-02) at render distances 8, 16 and 30 committed 5.2, 8.8 and
-19.9 GB. Nearly all the growth scaled with the visible instance count, at about 3.4 MB per instance:
-- CPU geometry copies of live instances.
-- The same vectors held by freed instances queued for reuse, which were most of the
-  unattributed heap memory.
-- About 0.9 MB per instance outside the heaps, unexplained.
-Chunk data was under a fifth of the total, and about 2.3 GB outside the heaps is fixed.
+Blocks too large for a heap's own regions are allocated separately but still walked, so they are
+estimated as what the walked blocks hold beyond the regions' commit. The block also has terrain
+chunk buffers by purpose and both buffer pools, and the instance sums have `hostBytes`, the CPU
+copies of instance geometry not yet uploaded.
+
+Turning walks with eviction (seed 100, 3,000 frames at 100 blocks/s, DLSS and frame generation,
+2026-10-02), before instance geometry was pooled after upload: render distances 8, 16 and 30
+committed 5.2, 8.8 and 19.9 GB. Nearly all the growth scaled with the visible instance count, at
+about 3.4 MB per instance, mostly CPU geometry kept by live and freed instances plus about 0.9 MB
+outside the heaps that is unexplained. Chunk data was under a fifth of the total, and about
+2.3 GB outside the heaps is fixed. Pooling the geometry after upload took render distance 30 to
+about 8.6 GB.
 
 Seed 100 at render distance 30, fullscreen 1440p, 2026-09-20, before BLAS compaction: 5.9 GB
 in use. Static instances (terrain) held 1.94 GB of BLAS, 1.2 GB of verts, 400 MB of

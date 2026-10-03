@@ -35,14 +35,20 @@ class Scene;
 struct HostGeometry
 {
     std::vector<Vertex> verts;
+    // Optional resident form of verts (same count); verts then only feeds the BLAS build and area
+    // lights, see knowledge/scene/instance.md
     std::vector<PackedTerrainVertex> packedTerrainVerts;
-    std::vector<VertexTangent> tangents;
+    std::vector<VertexTangent> tangents; // optional, indexed like verts
     std::vector<uint32_t> idxs;
+    // One entry per 1 << Instance::trisPerFaceLog2 triangles
     std::vector<PerFaceData> perFaceDatas;
+    // Per-triangle OMM Array indices (or special indices); empty for non-OMM geometry
     std::vector<uint16_t> ommIdxs;
     std::vector<AreaLight> areaLights;
 
     size_t capacityBytes() const;
+    // Empties every vector, keeping its capacity
+    void clear();
 };
 
 // Pooled sets keep their capacity, so instances with small meshes (e.g. water) use their own pool
@@ -68,7 +74,6 @@ private:
     ManagedBufferSection perFaceDatasBufferSection{};
     ManagedBufferSection tangentsBufferSection{};
 
-    std::vector<AreaLight> host_areaLights;
     ManagedBufferSection areaLightsBufferSection{};
 
     bool isVisible{ true };
@@ -77,7 +82,7 @@ private:
     bool isDeformable{ false };
     // If true, the BLAS geometry is flagged opaque so traversal never invokes anyhit for it
     bool isOpaque{ false };
-    // host_perFaceDatas holds one entry per 1 << trisPerFaceLog2 triangles
+    // See HostGeometry::perFaceDatas
     uint32_t trisPerFaceLog2{ 0 };
 
     Instance(::Scene* scene, uint32_t id);
@@ -98,20 +103,12 @@ private:
     // From creation until its geometry is uploaded or it is destroyed
     bool holdsHostGeometry{ false };
     HostGeometrySize hostGeometrySize{ HostGeometrySize::LARGE };
-    glm::vec3 boundsMin_OS{ 0.f, 0.f, 0.f }; // of host_verts, set by finalizeGeometry
+    glm::vec3 boundsMin_OS{ 0.f, 0.f, 0.f }; // of hostGeometry.verts, set by finalizeGeometry
     glm::vec3 boundsMax_OS{ 0.f, 0.f, 0.f };
     uint32_t tlasEntryIdx{ UINT32_MAX }; // index into Scene::tlasInstanceEntries while in the TLAS
 
 public:
-    std::vector<Vertex> host_verts{};
-    // Optional resident form of host_verts (same count); host_verts then only feeds the BLAS
-    // build and area lights, see knowledge/scene/instance.md
-    std::vector<PackedTerrainVertex> host_packedTerrainVerts{};
-    std::vector<VertexTangent> host_tangents{}; // optional, indexed like host_verts
-    std::vector<uint32_t> host_idxs{};
-    std::vector<PerFaceData> host_perFaceDatas{};
-    // Per-triangle OMM Array indices (or special indices); empty for non-OMM geometry
-    std::vector<uint16_t> host_ommIdxs{};
+    HostGeometry hostGeometry{};
 
     void setTransform(const DirectX::XMFLOAT3X4& transform);
     void setTransformOffset(glm::ivec3 offset);
@@ -225,8 +222,8 @@ private:
     bool waveFrustumSet{ false };
     float waveFrustumHeightBand{ FLT_MAX };
 
-    // Never freed while running: freeing these buffers stalled frames by up to 40 ms. It stays
-    // bounded because callers limit how many instances hold geometry at once.
+    // Never freed while running; bounded because callers cap how many instances hold geometry.
+    // See knowledge/scene/instance.md
     std::array<std::vector<HostGeometry>, static_cast<size_t>(HostGeometrySize::COUNT)> hostGeometryPools{};
     std::array<uint32_t, static_cast<size_t>(HostGeometrySize::COUNT)> numInstancesHoldingHostGeometry{};
 
@@ -329,7 +326,7 @@ public:
         return this->numBlasBuilds;
     }
 
-    struct InstanceGpuMemory
+    struct InstanceMemory
     {
         uint32_t numInstances{ 0 };
         size_t blasBytes{ 0 };
@@ -343,7 +340,7 @@ public:
         size_t hostBytes{ 0 };
     };
     // Sums the buffer sections held by every instance (in the TLAS or not) of one kind
-    InstanceGpuMemory getInstanceGpuMemory(bool deformable) const;
+    InstanceMemory getInstanceMemory(bool deformable) const;
     size_t getHostGeometryPoolBytes() const;
     // Instances between creation and upload; a pool never holds more sets than the peak of this
     uint32_t getNumInstancesHoldingHostGeometry(HostGeometrySize size) const;

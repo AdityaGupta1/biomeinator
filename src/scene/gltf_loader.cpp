@@ -475,9 +475,9 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             const size_t tangentStride = tangentAccessor ? getStride(*tangentAccessor) : 0;
             if (tangentAccessor)
             {
-                instance->host_tangents.resize(vertCount);
+                instance->hostGeometry.tangents.resize(vertCount);
             }
-            std::vector<Vertex>& host_verts = instance->host_verts;
+            std::vector<Vertex>& host_verts = instance->hostGeometry.verts;
             host_verts.resize(vertCount);
 
             const unsigned char* posData = readAccessorData(posAccessor);
@@ -508,11 +508,11 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
                 if (tangentAccessor)
                 {
                     const float* t = reinterpret_cast<const float*>(tangentData + tangentStride * v);
-                    instance->host_tangents[v] = { Util::octEncode({ t[0], t[1], t[2] }), t[3] };
+                    instance->hostGeometry.tangents[v] = { Util::octEncode({ t[0], t[1], t[2] }), t[3] };
                 }
             }
 
-            std::vector<uint32_t>& host_idxs = instance->host_idxs;
+            std::vector<uint32_t>& host_idxs = instance->hostGeometry.idxs;
             if (prim.indices >= 0)
             {
                 const Accessor& idxAccessor = model.accessors[prim.indices];
@@ -547,7 +547,7 @@ void loadGltf(const std::string& filePathStr, ::Scene& scene)
             DirectX::XMStoreFloat3x4(&instanceTransform, transform);
             instance->setTransform(instanceTransform);
 
-            instance->host_perFaceDatas.resize(instance->getTriCount());
+            instance->hostGeometry.perFaceDatas.resize(instance->getTriCount());
             instance->finalizeGeometry();
 
             const bool isEmissive = prim.material >= 0 &&

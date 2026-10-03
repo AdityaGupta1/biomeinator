@@ -84,12 +84,13 @@ def print_memory(memory):
               f"{mib(memory['processPeakPrivateBytes']):.0f} MiB peak")
     cpu = memory.get("cpu")
     if cpu:
-        outside = cpu["privateCommittedBytes"] - cpu["heapRegionCommittedBytes"] - cpu["heapLargeBusyBytes"]
-        print(f"  cpu: {mib(cpu['privateCommittedBytes']):.0f} MiB private committed; {cpu['heaps']} heaps hold "
-              f"{mib(cpu['heapBusyBytes']):.0f} MiB in use + {mib(cpu['heapLargeBusyBytes']):.0f} MiB large, "
+        outside = cpu["privateCommittedBytes"] - cpu["heapRegionCommittedBytes"] - cpu["heapLargeBlockBytes"]
+        print(f"  cpu: {mib(cpu['privateCommittedBytes']):.0f} MiB private committed; {cpu['numHeaps']} heaps hold "
+              f"{mib(cpu['heapBusyBytes']):.0f} MiB in use (incl. {mib(cpu['heapLargeBlockBytes']):.0f} MiB in large blocks), "
               f"{mib(cpu['heapFreeBytes']):.0f} MiB free but committed; {mib(outside):.0f} MiB outside heaps")
         chunks = ", ".join(f"{key} {mib(value):.0f}" for key, value in cpu["chunkBytes"].items())
-        print(f"  terrain: {cpu['terrainChunks']} chunks in {cpu['terrainRegions']} regions; {chunks} MiB")
+        print(f"  terrain: {cpu['numTerrainChunks']} chunks in {cpu['numTerrainRegions']} regions; {chunks} MiB")
+        print(f"  instance geometry pool: {mib(cpu['hostGeometryPoolBytes']):.0f} MiB")
     print(f"  {'buffer':<44}{'alloc MiB':>10}{'used MiB':>10}")
     for entry in memory["buffers"]:
         print(f"  {entry['name']:<44}{mib(entry['allocatedBytes']):>10.1f}{mib(entry['usedBytes']):>10.1f}")

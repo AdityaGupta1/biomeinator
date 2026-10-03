@@ -240,14 +240,18 @@ private:
     bool hasSerializedData{ false };
 
     std::atomic<ChunkState> state{ ChunkState::NEEDS_TERRAIN };
-    std::atomic<bool> isMarkedForDestruction{ false };
+    // Main thread only
+    bool isMarkedForDestruction{ false };
     bool areInstancesVisible{ false };
 
     Instance* terrainInstance{ nullptr };
     Instance* waterInstance{ nullptr };
 
-    static constexpr uint32_t numStructureNeighbors = (2 * structureMaxChunkRadius + 1) * (2 * structureMaxChunkRadius + 1);
+    static constexpr uint32_t structureNeighborSideLength = 2 * structureMaxChunkRadius + 1;
+    static constexpr uint32_t numStructureNeighbors = structureNeighborSideLength * structureNeighborSideLength;
     static_assert(numStructureNeighbors < 32, "readyStructureNeighborsMask needs a bit per structure neighbor");
+    static constexpr uint32_t allStructureNeighborsMask = (1u << numStructureNeighbors) - 1;
+    static constexpr uint32_t allNeighborsMask = (1u << 4) - 1;
     using StructureNeighborhood = std::array<Chunk*, numStructureNeighbors>;
     StructureNeighborhood collectStructureNeighbors();
     static uint32_t structureNeighborBit(glm::ivec2 offset);
@@ -369,12 +373,15 @@ class Region
 private:
     std::array<Region*, 4> neighbors{};
     uint32_t numNeighborsSet{ 0 };
+    // Far enough from the camera to be removed once unpinned; no new work is scheduled for it
+    bool isStaged{ false };
     // Queued or running tasks that may touch this region's chunks; it is only removed at zero
     std::atomic<uint32_t> numPins{ 0 };
 
 public:
     const glm::ivec2 regionPos;
     const glm::ivec2 regionPosChunks;
+    const glm::ivec2 regionMaxPosChunks; // inclusive
 
     std::array<std::unique_ptr<Chunk>, regionSideLength * regionSideLength> chunks{};
 
@@ -389,12 +396,14 @@ public:
     void clearNeighbor(NeighborDirection dir);
     uint32_t getNumNeighborsSet() const;
 
+    bool containsChunk(glm::ivec2 chunkPos) const;
+
     void pin();
     void unpin();
     bool isPinned() const;
 
-    // Far enough from the camera to be removed once unpinned; no new work is scheduled for it
-    bool isStaged{ false };
+    bool getIsStaged() const;
+    void setIsStaged(bool staged);
 
     static uint32_t chunkPosToIdx(glm::ivec2 regionChunkPos);
 };

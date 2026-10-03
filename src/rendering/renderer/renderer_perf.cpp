@@ -388,7 +388,7 @@ static nlohmann::json streamingJson()
     };
 }
 
-static nlohmann::json instanceMemoryJson(const Scene::InstanceGpuMemory& memory)
+static nlohmann::json instanceMemoryJson(const Scene::InstanceMemory& memory)
 {
     return {
         { "count", memory.numInstances },
@@ -419,13 +419,13 @@ static nlohmann::json cpuMemoryJson()
         }
     }
 
-    // Large allocations are reported as busy entries but live outside the heap's own regions
     uint64_t heapRegionCommittedBytes = 0;
     uint64_t heapBusyBytes = 0;
-    uint64_t heapLargeBusyBytes = 0;
     uint64_t heapFreeBytes = 0;
     std::vector<HANDLE> heaps(GetProcessHeaps(0, nullptr));
-    heaps.resize(GetProcessHeaps(static_cast<DWORD>(heaps.size()), heaps.data()));
+    // A heap created between the two calls makes the second count larger than the buffer
+    const DWORD numHeaps = GetProcessHeaps(static_cast<DWORD>(heaps.size()), heaps.data());
+    heaps.resize(std::min<size_t>(numHeaps, heaps.size()));
     for (HANDLE heap : heaps)
     {
         if (!HeapLock(heap))
@@ -441,8 +441,7 @@ static nlohmann::json cpuMemoryJson()
             }
             else if (entry.wFlags & PROCESS_HEAP_ENTRY_BUSY)
             {
-                (entry.iRegionIndex == 0 && entry.cbData >= 512 * 1024 ? heapLargeBusyBytes : heapBusyBytes) +=
-                    entry.cbData + entry.cbOverhead;
+                heapBusyBytes += entry.cbData + entry.cbOverhead;
             }
             else if (!(entry.wFlags & PROCESS_HEAP_UNCOMMITTED_RANGE))
             {
@@ -451,18 +450,23 @@ static nlohmann::json cpuMemoryJson()
         }
         HeapUnlock(heap);
     }
+    // Blocks too large for a heap's own regions are allocated separately but still walked, so they
+    // are what the walked blocks hold beyond the regions' commit
+    const uint64_t heapLargeBlockBytes =
+        std::max<int64_t>(0, static_cast<int64_t>(heapBusyBytes + heapFreeBytes - heapRegionCommittedBytes));
 
     const Terrain::ResidencyStats residency = Terrain::getResidencyStats();
     const ChunkMemory& chunks = residency.chunkMemory;
     return {
         { "privateCommittedBytes", privateCommittedBytes },
-        { "heaps", heaps.size() },
+        { "numHeaps", heaps.size() },
         { "heapRegionCommittedBytes", heapRegionCommittedBytes },
         { "heapBusyBytes", heapBusyBytes },
-        { "heapLargeBusyBytes", heapLargeBusyBytes },
+        { "heapLargeBlockBytes", heapLargeBlockBytes },
         { "heapFreeBytes", heapFreeBytes },
-        { "terrainRegions", residency.numRegions },
-        { "terrainChunks", residency.numChunks },
+        { "hostGeometryPoolBytes", renderState.scene.getHostGeometryPoolBytes() },
+        { "numTerrainRegions", residency.numRegions },
+        { "numTerrainChunks", residency.numChunks },
         { "chunkBytes", {
             { "blocks", chunks.blocks },
             { "terrainMasks", chunks.terrainMasks },
@@ -506,9 +510,8 @@ static nlohmann::json memoryJson()
         { "processPeakPrivateBytes", processMemory.PeakPagefileUsage },
         { "cpu", cpuMemoryJson() },
         { "buffers", buffers },
-        { "staticInstances", instanceMemoryJson(renderState.scene.getInstanceGpuMemory(false)) },
-        { "deformableInstances", instanceMemoryJson(renderState.scene.getInstanceGpuMemory(true)) },
-        { "hostGeometryPoolBytes", renderState.scene.getHostGeometryPoolBytes() },
+        { "staticInstances", instanceMemoryJson(renderState.scene.getInstanceMemory(false)) },
+        { "deformableInstances", instanceMemoryJson(renderState.scene.getInstanceMemory(true)) },
     };
 }
 

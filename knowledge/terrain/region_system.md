@@ -52,30 +52,37 @@ two. Otherwise a worker could advance a survivor in the same instant the main th
 
 ### Freeing without stutter
 
-At render distance 30, evicting a region freed about 1,000 chunks, which took around 100 ms on the
-main thread. The main thread now only unlinks a removed region, and a low-priority thread destroys
-it. That alone was not enough: freeing the chunks' 256 KB block arrays and 32 KB terrain masks
-still stalled `present` for 30 ms a few frames later, even from that thread and even paced at
-16 chunks per millisecond. Keeping the regions instead of freeing them removed the stalls. So
-destroyed chunks return those buffers to a pool in `chunk.cpp` that new chunks generate into.
+Freeing large buffers while running stalls frames on this machine, whichever thread does it:
+destroying a region's ~1,000 chunks took about 100 ms on the main thread, and freeing their
+256 KB block arrays and 32 KB masks from a low-priority thread still stalled `present` for 30 ms,
+even paced. So a low-priority thread destroys removed regions (the main thread only unlinks them),
+and their chunks' blocks and both masks go to a pool in `chunk.cpp` that new chunks generate into.
+
+- The three buffers are pooled as one set, so a chunk always takes and returns all of them; pools
+  per buffer drift apart, since a chunk has two masks but one block array.
+- The pool is uncapped. A cap frees its overflow, which brought the stalls back after long flights
+  as evictions finished. It stays bounded because chunks take from it before allocating: pooled and
+  resident sets together never exceed the most chunks ever resident, plus any still queued for the
+  deleter thread.
+- Reimport stops the deleter thread before emptying the pool, since an imported world does not
+  generate into it. Shutdown destroys the regions explicitly rather than during static destruction,
+  where `~Chunk` would depend on the pool in another file still existing.
+
 The heap was not returning that memory to the OS anyway, so process memory is not affected.
-A chunk's blocks and both masks are pooled as one set, so a chunk always takes and returns all of
-them together. Separate pools drifted apart, since a chunk takes two masks but one block array.
-The pool is uncapped: a capped pool freed its overflow after long flights, which brought the stalls
-back as evictions finished. It stays bounded because chunks take from it before allocating, so
-pooled and resident sets together never exceed the most chunks ever resident at once.
-Reimport empties it, since an imported world does not generate into it.
 
 ### Validating
 
 `--validateEviction` records a hash of each generated chunk's final blocks and block states when
 its region is evicted, and compares it when the chunk next finishes its structure pass. Only
-mismatches are logged, as errors, one per chunk. A headless random walk at a small
-render distance (`--renderDistance=8 --perfMoveSpeed=200 --perfMoveTurnFrames=500
---perfFrames=8000`, seed 100) evicts around a hundred regions and revisits about 8,000 chunks.
-To check the validator can fail, skip the structure pass after the first few thousand fills:
-that run reported thousands of mismatches. Dropping the readiness bit clear instead crashes,
-because chunks fill against neighbors that have no terrain.
+mismatches are logged, as errors, one per chunk; imported chunks are skipped, since they are
+regenerated from the seed. A headless random walk at a small render distance
+(`--renderDistance=8 --perfMoveSpeed=200 --perfMoveTurnFrames=500 --perfFrames=8000`, seed 100)
+evicts around a hundred regions and revisits about 8,000 chunks.
+
+To confirm the validator can still fail after changing it, plant a fault that alters regenerated
+blocks without crashing, such as skipping the structure pass after the first few thousand fills.
+Faults in the readiness bookkeeping tend to crash rather than mismatch, because chunks then fill
+against neighbors that have no terrain.
 
 ## Neighbor Wiring
 

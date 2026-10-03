@@ -30,8 +30,9 @@ namespace Terrain
 
 void init(Scene* scene);
 
-void addChunkToCreateBlas(Chunk* chunk);
-void addChunkToDestroy(Chunk* chunk);
+// For createInstances when the chunk's mesh is complete; the main thread then advances it to
+// HAS_GEOMETRY
+void addChunkWithNewGeometry(Chunk* chunk);
 // For workers that advanced a chunk's state: the main thread schedules its next stage without
 // rescanning every chunk in range
 void addChunkToRevisit(Chunk* chunk);
@@ -39,9 +40,8 @@ void addChunkToRevisit(Chunk* chunk);
 // Forces a full scan of every chunk in range on the next update
 void setDirty();
 
-// With --validateEviction, chunks regenerated after their region was evicted are compared against
-// what they held before; see knowledge/terrain/region_system.md
-bool isValidatingEviction();
+// With --validateEviction, compares a chunk that just got its blocks against what it held before
+// its region was evicted, if it was; see knowledge/terrain/region_system.md
 void validateRegeneratedChunk(const Chunk* chunk);
 
 void update(ToFreeList& toFreeList);

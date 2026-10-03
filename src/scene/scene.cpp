@@ -34,15 +34,20 @@ size_t HostGeometry::capacityBytes() const
            areaLights.capacity() * sizeof(AreaLight);
 }
 
+void HostGeometry::clear()
+{
+    verts.clear();
+    packedTerrainVerts.clear();
+    tangents.clear();
+    idxs.clear();
+    perFaceDatas.clear();
+    ommIdxs.clear();
+    areaLights.clear();
+}
+
 void Instance::takeHostGeometry(HostGeometry&& geometry)
 {
-    this->host_verts = std::move(geometry.verts);
-    this->host_packedTerrainVerts = std::move(geometry.packedTerrainVerts);
-    this->host_tangents = std::move(geometry.tangents);
-    this->host_idxs = std::move(geometry.idxs);
-    this->host_perFaceDatas = std::move(geometry.perFaceDatas);
-    this->host_ommIdxs = std::move(geometry.ommIdxs);
-    this->host_areaLights = std::move(geometry.areaLights);
+    this->hostGeometry = std::move(geometry);
 }
 
 void Instance::releaseHostGeometry()
@@ -53,15 +58,7 @@ void Instance::releaseHostGeometry()
     }
     this->holdsHostGeometry = false;
     --this->scene->numInstancesHoldingHostGeometry[static_cast<size_t>(this->hostGeometrySize)];
-    this->scene->recycleHostGeometry(this->hostGeometrySize, {
-        .verts = std::move(this->host_verts),
-        .packedTerrainVerts = std::move(this->host_packedTerrainVerts),
-        .tangents = std::move(this->host_tangents),
-        .idxs = std::move(this->host_idxs),
-        .perFaceDatas = std::move(this->host_perFaceDatas),
-        .ommIdxs = std::move(this->host_ommIdxs),
-        .areaLights = std::move(this->host_areaLights),
-    });
+    this->scene->recycleHostGeometry(this->hostGeometrySize, std::exchange(this->hostGeometry, {}));
 }
 
 void Instance::reset(bool alsoFreeFromScene)
@@ -107,18 +104,18 @@ void Instance::setTransformOffset(glm::ivec3 offset)
 
 void Instance::finalizeGeometry()
 {
-    ASSERT(this->host_verts.size() > 0);
+    ASSERT(this->hostGeometry.verts.size() > 0);
 
-    ASSERT(this->host_packedTerrainVerts.empty() || this->host_packedTerrainVerts.size() == this->host_verts.size());
+    ASSERT(this->hostGeometry.packedTerrainVerts.empty() || this->hostGeometry.packedTerrainVerts.size() == this->hostGeometry.verts.size());
 
     const uint32_t triCount = this->getTriCount();
     const uint32_t trisPerFace = 1u << this->trisPerFaceLog2;
     ASSERT(triCount % trisPerFace == 0);
-    ASSERT(this->host_perFaceDatas.size() == triCount / trisPerFace);
+    ASSERT(this->hostGeometry.perFaceDatas.size() == triCount / trisPerFace);
 
     this->boundsMin_OS = glm::vec3(FLT_MAX);
     this->boundsMax_OS = glm::vec3(-FLT_MAX);
-    for (const Vertex& vert : this->host_verts)
+    for (const Vertex& vert : this->hostGeometry.verts)
     {
         const glm::vec3 pos(vert.pos_OS.x, vert.pos_OS.y, vert.pos_OS.z);
         this->boundsMin_OS = glm::min(this->boundsMin_OS, pos);
@@ -132,7 +129,7 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
 {
     ASSERT(this->isGeometryFinalized);
 
-    this->host_areaLights.reserve(this->host_areaLights.size() + triangleIdxs.size());
+    this->hostGeometry.areaLights.reserve(this->hostGeometry.areaLights.size() + triangleIdxs.size());
 
     const XMMATRIX objectToWorld = XMLoadFloat3x4(&this->transform);
 
@@ -141,23 +138,23 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
         uint32_t i0 = triangleIdx * 3;
         uint32_t i1 = i0 + 1;
         uint32_t i2 = i0 + 2;
-        if (!this->host_idxs.empty())
+        if (!this->hostGeometry.idxs.empty())
         {
-            i0 = this->host_idxs[i0];
-            i1 = this->host_idxs[i1];
-            i2 = this->host_idxs[i2];
+            i0 = this->hostGeometry.idxs[i0];
+            i1 = this->hostGeometry.idxs[i1];
+            i2 = this->hostGeometry.idxs[i2];
         }
 
-        const uint32_t localAreaLightIdx = static_cast<uint32_t>(this->host_areaLights.size());
-        this->host_areaLights.emplace_back();
-        AreaLight& light = this->host_areaLights.back();
+        const uint32_t localAreaLightIdx = static_cast<uint32_t>(this->hostGeometry.areaLights.size());
+        this->hostGeometry.areaLights.emplace_back();
+        AreaLight& light = this->hostGeometry.areaLights.back();
 
         light.instanceId = this->id;
         light.triangleIdx = triangleIdx;
 
-        XMVECTOR p0 = XMLoadFloat3(&this->host_verts[i0].pos_OS);
-        XMVECTOR p1 = XMLoadFloat3(&this->host_verts[i1].pos_OS);
-        XMVECTOR p2 = XMLoadFloat3(&this->host_verts[i2].pos_OS);
+        XMVECTOR p0 = XMLoadFloat3(&this->hostGeometry.verts[i0].pos_OS);
+        XMVECTOR p1 = XMLoadFloat3(&this->hostGeometry.verts[i1].pos_OS);
+        XMVECTOR p2 = XMLoadFloat3(&this->hostGeometry.verts[i2].pos_OS);
 
         p0 = DirectX::XMVector3Transform(p0, objectToWorld);
         p1 = DirectX::XMVector3Transform(p1, objectToWorld);
@@ -175,7 +172,7 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
         // padding triangle of an odd custom model, which is never listed at all
         const uint32_t triIdxInFace = triangleIdx & ((1u << this->trisPerFaceLog2) - 1u);
         const uint32_t faceLightIdx = localAreaLightIdx - triIdxInFace;
-        PerFaceData& faceData = this->host_perFaceDatas[triangleIdx >> this->trisPerFaceLog2];
+        PerFaceData& faceData = this->hostGeometry.perFaceDatas[triangleIdx >> this->trisPerFaceLog2];
         if (faceData.localAreaLightIdx == LIGHT_IDX_INVALID)
         {
             ASSERT(triIdxInFace == 0);
@@ -195,7 +192,7 @@ uint32_t Instance::getId() const
 
 uint32_t Instance::getTriCount() const
 {
-    return this->host_idxs.empty() ? (this->host_verts.size() / 3) : (this->host_idxs.size() / 3);
+    return this->hostGeometry.idxs.empty() ? (this->hostGeometry.verts.size() / 3) : (this->hostGeometry.idxs.size() / 3);
 }
 
 bool Instance::getIsGeometryFinalized() const
@@ -287,9 +284,9 @@ void Scene::init()
     this->areaLightSamplingStructure.init(1 << 21 /*elements*/, { .perFrameUpload = true });
 }
 
-Scene::InstanceGpuMemory Scene::getInstanceGpuMemory(const bool deformable) const
+Scene::InstanceMemory Scene::getInstanceMemory(const bool deformable) const
 {
-    InstanceGpuMemory memory;
+    InstanceMemory memory;
     for (const auto& [_, instance] : this->instances)
     {
         if (instance->isDeformable != deformable)
@@ -305,13 +302,7 @@ Scene::InstanceGpuMemory Scene::getInstanceGpuMemory(const bool deformable) cons
         memory.perFaceDatasBytes += instance->perFaceDatasBufferSection.sizeBytes;
         memory.tangentsBytes += instance->tangentsBufferSection.sizeBytes;
         memory.areaLightsBytes += instance->areaLightsBufferSection.sizeBytes;
-        memory.hostBytes += instance->host_verts.capacity() * sizeof(Vertex) +
-                            instance->host_packedTerrainVerts.capacity() * sizeof(PackedTerrainVertex) +
-                            instance->host_tangents.capacity() * sizeof(VertexTangent) +
-                            instance->host_idxs.capacity() * sizeof(uint32_t) +
-                            instance->host_perFaceDatas.capacity() * sizeof(PerFaceData) +
-                            instance->host_ommIdxs.capacity() * sizeof(uint16_t) +
-                            instance->host_areaLights.capacity() * sizeof(AreaLight);
+        memory.hostBytes += instance->hostGeometry.capacityBytes();
     }
     return memory;
 }
@@ -438,13 +429,7 @@ void Scene::recycleHostGeometry(const HostGeometrySize size, HostGeometry&& geom
     {
         return;
     }
-    geometry.verts.clear();
-    geometry.packedTerrainVerts.clear();
-    geometry.tangents.clear();
-    geometry.idxs.clear();
-    geometry.perFaceDatas.clear();
-    geometry.ommIdxs.clear();
-    geometry.areaLights.clear();
+    geometry.clear();
     this->hostGeometryPools[static_cast<size_t>(size)].push_back(std::move(geometry));
 }
 
@@ -792,22 +777,22 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     {
         AcsHelper::BlasBuildInputs blasInputs;
 
-        ASSERT(instance->host_verts.size() > 0);
-        blasInputs.host_verts = &instance->host_verts;
-        if (!instance->host_packedTerrainVerts.empty())
+        ASSERT(instance->hostGeometry.verts.size() > 0);
+        blasInputs.host_verts = &instance->hostGeometry.verts;
+        if (!instance->hostGeometry.packedTerrainVerts.empty())
         {
-            blasInputs.host_packedTerrainVerts = &instance->host_packedTerrainVerts;
+            blasInputs.host_packedTerrainVerts = &instance->hostGeometry.packedTerrainVerts;
         }
 
-        if (instance->host_idxs.size() > 0)
+        if (instance->hostGeometry.idxs.size() > 0)
         {
-            blasInputs.host_idxs = &instance->host_idxs;
+            blasInputs.host_idxs = &instance->hostGeometry.idxs;
         }
 
-        if (instance->host_ommIdxs.size() > 0)
+        if (instance->hostGeometry.ommIdxs.size() > 0)
         {
-            ASSERT(instance->host_ommIdxs.size() == instance->getTriCount());
-            blasInputs.host_ommIdxs = &instance->host_ommIdxs;
+            ASSERT(instance->hostGeometry.ommIdxs.size() == instance->getTriCount());
+            blasInputs.host_ommIdxs = &instance->hostGeometry.ommIdxs;
         }
 
         blasInputs.allowUpdate = instance->isDeformable;
@@ -821,7 +806,7 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             compactableInstances.push_back(instance);
         }
 
-        ASSERT(instance->host_perFaceDatas.size() > 0);
+        ASSERT(instance->hostGeometry.perFaceDatas.size() > 0);
     }
 
     AcsHelper::makeBlases(cmdList,
@@ -843,7 +828,7 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     for (Instance* const instance : instancesToBuildThisFrame)
     {
         InstanceData instanceData{};
-        const bool packedVerts = !instance->host_packedTerrainVerts.empty();
+        const bool packedVerts = !instance->hostGeometry.packedTerrainVerts.empty();
         instanceData.vertexFormat = packedVerts ? VERTEX_FORMAT_PACKED_TERRAIN : VERTEX_FORMAT_FULL;
         instanceData.vertsBufferOffset = packedVerts
             ? Util::convertByteSizeToCount<PackedTerrainVertex>(instance->geoWrapper.vertsBufferSection.offsetBytes)
@@ -853,11 +838,11 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         instanceData.materialIdx = instance->materialIdx;
         instanceData.trisPerFaceLog2 = instance->trisPerFaceLog2;
         instanceData.tangentsBufferOffset = TANGENT_BUFFER_OFFSET_INVALID;
-        if (!instance->host_tangents.empty())
+        if (!instance->hostGeometry.tangents.empty())
         {
-            ASSERT(instance->host_tangents.size() == instance->host_verts.size());
+            ASSERT(instance->hostGeometry.tangents.size() == instance->hostGeometry.verts.size());
             const ManagedBufferSection upload =
-                sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_tangents);
+                sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->hostGeometry.tangents);
             // This committed buffer can resize, so keep its copy transitions unbatched.
             instance->tangentsBufferSection = this->managedTangentsBuffer.copyFromManagedBuffer(
                 cmdList, toFreeList, sharedBlasUploadBuffer, upload);
@@ -867,7 +852,7 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         }
 
         const ManagedBufferSection perFaceDatasUploadBufferSection =
-            sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_perFaceDatas);
+            sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->hostGeometry.perFaceDatas);
         instance->perFaceDatasBufferSection = this->managedPerFaceDatasBuffer.copyFromManagedBuffer(
             cmdList, toFreeList, sharedBlasUploadBuffer, perFaceDatasUploadBufferSection);
         instanceData.perFaceDatasBufferOffset =
@@ -875,10 +860,10 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
 
         toFreeList.pushManagedBufferSection(perFaceDatasUploadBufferSection);
 
-        if (!instance->host_areaLights.empty())
+        if (!instance->hostGeometry.areaLights.empty())
         {
             const ManagedBufferSection areaLightsUploadBufferSection =
-                sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->host_areaLights);
+                sharedBlasUploadBuffer.copyFromHostVector(cmdList, toFreeList, instance->hostGeometry.areaLights);
             instance->areaLightsBufferSection = this->managedAreaLightsBuffer.copyFromManagedBuffer(
                 cmdList, toFreeList, sharedBlasUploadBuffer, areaLightsUploadBufferSection);
             instanceData.areaLightsBufferOffset =
