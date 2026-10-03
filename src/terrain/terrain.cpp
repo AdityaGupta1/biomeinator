@@ -600,8 +600,14 @@ void update(ToFreeList& toFreeList)
     const Camera& camera = Renderer::getCamera();
     const glm::ivec3 cameraPosInt_WS = camera.getPosInt_WS();
     const glm::ivec2 currentChunkPos = cameraChunkPosition(cameraPosInt_WS);
-    const glm::ivec2 minRenderChunkPos = currentChunkPos - distances.renderDistance;
-    const glm::ivec2 maxRenderChunkPos = currentChunkPos + distances.renderDistance;
+    glm::ivec2 minRenderChunkPos = currentChunkPos - distances.renderDistance;
+    glm::ivec2 maxRenderChunkPos = currentChunkPos + distances.renderDistance;
+    if (lodsEnabled)
+    {
+        // Rays that leave the terrain through LOD tiles are still within the world's volumes
+        TerrainLod::getCoveredChunkBounds(currentChunkPos, SettingsManager::getAsInt("lodDistance"),
+                                          minRenderChunkPos, maxRenderChunkPos);
+    }
 
     voxelRenderBoundsMin_WS = {
         minRenderChunkPos.x * static_cast<int>(chunkSizeXZ),

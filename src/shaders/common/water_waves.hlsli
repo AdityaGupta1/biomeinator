@@ -7,6 +7,7 @@
 #include "../rendering/common/common_settings.h"
 
 #include "util/FastNoiseLite.hlsli"
+#include "util/math.hlsli"
 
 // Layered wave model. Vertex displacement (waveHeight) is a pure analytic sum of sines:
 // two large-scale swells present everywhere, plus three small chop waves scaled by a
@@ -84,9 +85,20 @@ fnl_state makeNoiseState(int seed, int fractalType, int octaves)
 static const fnl_state MED_CHOP_NOISE_STATE = makeNoiseState(9001, FNL_FRACTAL_NONE, 1);
 static const fnl_state NOISE_WAVE_STATE = makeNoiseState(1337, FNL_FRACTAL_FBM, NOISE_WAVE_OCTAVES);
 
-// accumulates one sine wave's height into x and its analytic XZ gradient into yz
-void addWave(float amplitude, float2 waveVec, float speed, float2 posXZ_WS, float waveTime, inout float3 heightAndGrad)
+// Weight of a band of detail seen through a pixel footprint (in blocks), fading out as the footprint
+// grows from minWavelength to maxWavelength; detail finer than a footprint only aliases into sparkle
+float waveDetailWeight(float minWavelength, float maxWavelength, float footprint)
 {
+    return 1.f - smoothstep(minWavelength, maxWavelength, footprint);
+}
+
+// accumulates one sine wave's height into x and its analytic XZ gradient into yz, faded out once the
+// pixel footprint (0 for none) reaches its wavelength
+void addWave(float amplitude, float2 waveVec, float speed, float2 posXZ_WS, float waveTime, float footprint,
+             inout float3 heightAndGrad)
+{
+    const float wavelength = M_TWO_PI / length(waveVec);
+    amplitude *= waveDetailWeight(0.25f * wavelength, wavelength, footprint);
     const float phase = dot(posXZ_WS, waveVec) + speed * waveTime;
     heightAndGrad.x += amplitude * sin(phase);
     heightAndGrad.yz += amplitude * cos(phase) * waveVec;
@@ -107,14 +119,14 @@ float sineChop01(float2 posXZ_WS, float waveTime)
     return sineChop01AndGradient(posXZ_WS, waveTime).x;
 }
 
-// returns height in x, d(height)/dx in y, d(height)/dz in z
-float3 waveHeightAndGradient(float2 posXZ_WS, float waveTime)
+// returns height in x, d(height)/dx in y, d(height)/dz in z, filtered to the pixel footprint
+float3 waveHeightAndGradient(float2 posXZ_WS, float waveTime, float footprint)
 {
     float3 result = float3(0.f, 0.f, 0.f);
     [unroll]
     for (int i = 0; i < SWELL_WAVE_COUNT; i++)
     {
-        addWave(SWELL_STRENGTHS[i], SWELL_FREQS[i], SWELL_SPEEDS[i], posXZ_WS, waveTime, result);
+        addWave(SWELL_STRENGTHS[i], SWELL_FREQS[i], SWELL_SPEEDS[i], posXZ_WS, waveTime, footprint, result);
     }
 
     const float3 envelope = sineChop01AndGradient(posXZ_WS, waveTime);
@@ -123,7 +135,7 @@ float3 waveHeightAndGradient(float2 posXZ_WS, float waveTime)
     [unroll]
     for (int j = 0; j < CHOP_WAVE_COUNT; j++)
     {
-        addWave(CHOP_STRENGTHS[j], CHOP_FREQS[j], CHOP_SPEEDS[j], posXZ_WS, waveTime, chop);
+        addWave(CHOP_STRENGTHS[j], CHOP_FREQS[j], CHOP_SPEEDS[j], posXZ_WS, waveTime, footprint, chop);
     }
 
     // product rule: d(envelope * chop.x) = envelopeGrad * chop.x + envelope * chopGrad
@@ -135,7 +147,7 @@ float3 waveHeightAndGradient(float2 posXZ_WS, float waveTime)
 
 float waveHeight(float2 posXZ_WS, float waveTime)
 {
-    return waveHeightAndGradient(posXZ_WS, waveTime).x;
+    return waveHeightAndGradient(posXZ_WS, waveTime, 0.f).x;
 }
 
 // Displacement fades to rest height with distance from the camera and outside the padded view
@@ -171,8 +183,16 @@ float medChop01(float2 posXZ_WS, float noiseTime)
 // noise tilt added to the shading normal via the wave gradient. Two decorrelated
 // OpenSimplex2 FBM samples give independent X and Z perturbation, scaled by a choppiness
 // factor (large-scale sine envelope * medium-scale noise envelope), floored at CHOP_FLOOR.
-float2 waveNormalPerturbation(float2 posXZ_WS, float waveTime, float noiseTime)
+float2 waveNormalPerturbation(float2 posXZ_WS, float waveTime, float noiseTime, float footprint)
 {
+    // From the finest octave's wavelength to the base octave's
+    const float baseWavelength = 1.f / NOISE_WAVE_FREQ;
+    const float weight = waveDetailWeight(baseWavelength / (1 << (NOISE_WAVE_OCTAVES - 1)), baseWavelength, footprint);
+    if (weight <= 0.f)
+    {
+        return float2(0.f, 0.f);
+    }
+
     const float chop = CHOP_FLOOR + (1.f - CHOP_FLOOR) * sineChop01(posXZ_WS, waveTime) * medChop01(posXZ_WS, noiseTime);
 
     const float3 samplePos = float3(posXZ_WS * NOISE_WAVE_FREQ, noiseTime * NOISE_WAVE_SPEED);
@@ -180,18 +200,19 @@ float2 waveNormalPerturbation(float2 posXZ_WS, float waveTime, float noiseTime)
     const float nx = fnlGetNoise3D(NOISE_WAVE_STATE, samplePos.x, samplePos.y, samplePos.z);
     const float nz = fnlGetNoise3D(NOISE_WAVE_STATE, decorrelated.x, decorrelated.y, decorrelated.z);
 
-    return chop * NOISE_PERTURB_STRENGTH * float2(nx, nz);
+    return weight * chop * NOISE_PERTURB_STRENGTH * float2(nx, nz);
 }
 
 // Shading normal for a water top-surface hit: the analytic wave gradient plus the noise
 // perturbation, flipped for backface (underwater) hits.
-// Deliberately unfaded: the shading normal keeps the full wave gradient over water whose
+// Not faded with the displacement: the shading normal keeps the wave gradient over water whose
 // geometry the distance fade has flattened, so far water still reads as waves and the fade
-// boundary shows no change in shading, only in silhouette
-float3 waveShadingNormal(float2 posXZ_WS, float waveTime, float noiseTime, bool backfaceHit)
+// boundary shows no change in shading, only in silhouette. Instead each band fades with the pixel
+// footprint (in blocks) as it becomes too fine to resolve, the noise first and the swells last.
+float3 waveShadingNormal(float2 posXZ_WS, float waveTime, float noiseTime, bool backfaceHit, float footprint)
 {
-    const float2 grad = waveHeightAndGradient(posXZ_WS, waveTime).yz
-                      + waveNormalPerturbation(posXZ_WS, waveTime, noiseTime);
+    const float2 grad = waveHeightAndGradient(posXZ_WS, waveTime, footprint).yz
+                      + waveNormalPerturbation(posXZ_WS, waveTime, noiseTime, footprint);
     const float flip = backfaceHit ? -1.f : 1.f;
     return flip * normalize(float3(-grad.x, 1.f, -grad.y));
 }

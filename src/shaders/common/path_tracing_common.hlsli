@@ -420,8 +420,11 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     if (isWaterTop)
     {
         const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
+        // The footprint stretches along the surface as the ray grazes it
+        const float footprint = getRayConeWidthAtDistance(payload.rayCone, RayTCurrent()) /
+                                max(abs(dot(WorldRayDirection(), geoNor_WS)), 0.05f);
         shadingNor_WS = waveShadingNormal(posXZ_WS, renderParams.waveTime, renderParams.animTime,
-                                          bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
+                                          bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT), footprint);
     }
 
     // Glossy lobes need reflections to stay above the geometric surface. Use Cycles' bump-map

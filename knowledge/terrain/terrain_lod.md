@@ -41,16 +41,19 @@ The same rule runs the progressive load: generation is ordered by distance in ti
 first on ties, so the whole area gets coarse tiles before anything is refined and chunks appear only
 once their surroundings at every level are covered.
 
-When the camera moves away and a tile stops subdividing before its own geometry exists, it keeps
-showing whatever finer tiles or chunks still cover it (`isCoveredByExisting`). Those are kept alive by
-being visited, not by being needed. A gap can still open when the chunks covering it leave the BLAS
-distance before the tile is generated.
+Any tile that can't be shown makes every ancestor show itself instead, up to the root, so a gap
+anywhere replaces terrain right next to the camera with the coarsest level. Coverage therefore must not
+lapse. When the camera moves away and a tile stops subdividing before its own geometry exists, it
+counts and keeps showing whatever finer tiles or chunks still cover it (`areChildrenCoveredByExisting`);
+those are kept alive by being visited, not by being needed. Tiles near the render distance's edge also
+keep their geometry, because the chunks covering them leave the BLAS distance after a single crossing,
+sooner than a tile could be generated.
 
 ## Tiles inside the render distance
 
 Tiles wholly inside the render distance exist only as placeholders while their chunks load. Below level
 2 there are too many to be worth generating, and once all of a placeholder's children are ready its
-geometry is freed.
+geometry is freed, except within `keepGeometryMarginChunks` of the edge (see above).
 
 ## Gotchas
 
@@ -66,3 +69,6 @@ geometry is freed.
 - Tiles are never emissive. That keeps them out of the area-light structures, whose bounds assume
   everything lies within the render distance.
 - LOD water is a static top surface with no walls.
+- With LODs on, the voxel bounds that water absorption and fog use for rays that miss everything cover
+  the root tiles, not just the render distance. Underwater surfaces in LOD tiles otherwise got no
+  absorption on their sky light, which showed as a line in the water at the render distance.

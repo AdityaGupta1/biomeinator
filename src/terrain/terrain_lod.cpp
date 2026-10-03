@@ -38,6 +38,9 @@ inline constexpr int subdivideDistanceTiles = 2;
 // Tiles entirely within the render distance are only placeholders until their chunks are ready. Below
 // this level there are too many of them to be worth generating, so their parents stand in.
 inline constexpr int minPlaceholderLevel = 2;
+// Tiles within this many chunks of the render distance's edge keep their geometry even where chunks
+// cover them: moving away needs them as soon as the chunks leave, sooner than they could be generated
+inline constexpr int keepGeometryMarginChunks = 4;
 // Cliffs on a tile's edges reach this many cells below the lower of the two sides, so the different
 // surface of a neighbor at another level never leaves a gap to see through
 inline constexpr int edgeSkirtDepthCells = 4;
@@ -409,8 +412,35 @@ static ivec2 childTilePos(const LodTile& tile, int childIdx)
     return tile.tilePos * 2 + ivec2(childIdx & 1, childIdx >> 1);
 }
 
+static bool isCoveredByExisting(const LodTile& tile, const UpdateContext& ctx);
+
+// Whether the tile's chunk (level 0) or existing children are ready to cover it, whether or not they are
+// still needed
+static bool areChildrenCoveredByExisting(const LodTile& tile, const UpdateContext& ctx)
+{
+    if (tile.level == 0)
+    {
+        return ctx.isChunkReady(tile.tilePos);
+    }
+    for (int childIdx = 0; childIdx < 4; ++childIdx)
+    {
+        const LodTile* child = findTile(childTilePos(tile, childIdx), tile.level - 1);
+        if (child == nullptr || !isCoveredByExisting(*child, ctx))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool isCoveredByExisting(const LodTile& tile, const UpdateContext& ctx)
+{
+    return tile.isReady() || areChildrenCoveredByExisting(tile, ctx);
+}
+
 // Visits the tiles the camera needs below this one, creating any that are missing, and returns whether
-// the tile's area can be shown: by the tile itself or by its ready descendants and chunks
+// the tile's area can be shown: by the tile itself or by its ready descendants and chunks. One tile
+// that can't be shown makes every ancestor show itself instead, so coverage must not lapse.
 static bool visitNeededTile(LodTile& tile, const UpdateContext& ctx)
 {
     tile.lastNeededFrame = frame;
@@ -437,10 +467,16 @@ static bool visitNeededTile(LodTile& tile, const UpdateContext& ctx)
             }
         }
     }
+    else
+    {
+        // A tile that stopped subdividing before it was regenerated is still covered by what it showed
+        childrenRenderable = areChildrenCoveredByExisting(tile, ctx);
+    }
     tile.childrenRenderable = childrenRenderable;
 
-    const bool fullyInRenderDistance = ctx.farthestDistanceTo(tile) <= ctx.renderDistance;
-    tile.needsGeometry = !(fullyInRenderDistance && (tile.level < minPlaceholderLevel || childrenRenderable));
+    const bool deepInRenderDistance =
+        ctx.farthestDistanceTo(tile) <= ctx.renderDistance - keepGeometryMarginChunks;
+    tile.needsGeometry = !(deepInRenderDistance && (tile.level < minPlaceholderLevel || childrenRenderable));
     if (tile.needsGeometry && tile.state == LodTileState::NEEDS_GEOMETRY)
     {
         // Distance in tile widths, so the whole area gets coarse tiles before any of it is refined
@@ -449,28 +485,6 @@ static bool visitNeededTile(LodTile& tile, const UpdateContext& ctx)
     }
 
     return tile.isReady() || childrenRenderable;
-}
-
-// Whether existing tiles and chunks cover the tile's area, whether or not they are still needed
-static bool isCoveredByExisting(const LodTile& tile, const UpdateContext& ctx)
-{
-    if (tile.isReady())
-    {
-        return true;
-    }
-    if (tile.level == 0)
-    {
-        return ctx.isChunkReady(tile.tilePos);
-    }
-    for (int childIdx = 0; childIdx < 4; ++childIdx)
-    {
-        const LodTile* child = findTile(childTilePos(tile, childIdx), tile.level - 1);
-        if (child == nullptr || !isCoveredByExisting(*child, ctx))
-        {
-            return false;
-        }
-    }
-    return true;
 }
 
 // Only for tiles isCoveredByExisting accepts
@@ -495,27 +509,36 @@ static void displayExisting(LodTile& tile, const UpdateContext& ctx)
 }
 
 // Shows the finest level the camera wants wherever all of it is ready, so each tile is swapped for its
-// children, or the other way around, in a single frame
+// children, or the other way around, in a single frame. A tile not yet regenerated keeps showing the
+// finer tiles or chunks that still cover it.
 static void displayNeededTile(LodTile& tile, const UpdateContext& ctx)
 {
     tile.lastVisitedFrame = frame;
-    if (tile.subdivides && tile.childrenRenderable)
+    const bool showChildren = tile.childrenRenderable && (tile.subdivides || !tile.isReady());
+    if (!showChildren)
     {
-        if (tile.level == 0)
+        if (tile.isReady())
         {
-            displayedChunkPositions.push_back(tile.tilePos);
-            return;
-        }
-        for (int childIdx = 0; childIdx < 4; ++childIdx)
-        {
-            displayNeededTile(*findTile(childTilePos(tile, childIdx), tile.level - 1), ctx);
+            displayedTiles.push_back(&tile);
         }
         return;
     }
-    // A tile not yet regenerated keeps showing the finer tiles or chunks that still cover it
-    if (isCoveredByExisting(tile, ctx))
+    if (tile.level == 0)
     {
-        displayExisting(tile, ctx);
+        displayedChunkPositions.push_back(tile.tilePos);
+        return;
+    }
+    for (int childIdx = 0; childIdx < 4; ++childIdx)
+    {
+        LodTile& child = *findTile(childTilePos(tile, childIdx), tile.level - 1);
+        if (tile.subdivides)
+        {
+            displayNeededTile(child, ctx);
+        }
+        else
+        {
+            displayExisting(child, ctx);
+        }
     }
 }
 
@@ -658,6 +681,23 @@ static int getRootLevel(int lodDistance)
     return level;
 }
 
+static void getRootTileBounds(ivec2 cameraChunkPos, int lodDistance, ivec2& outMinRootPos, ivec2& outMaxRootPos)
+{
+    const ivec2 rootSideChunks(1 << getRootLevel(lodDistance));
+    outMinRootPos = glmUtil::floorDiv(cameraChunkPos - lodDistance, rootSideChunks);
+    outMaxRootPos = glmUtil::floorDiv(cameraChunkPos + lodDistance, rootSideChunks);
+}
+
+void getCoveredChunkBounds(ivec2 cameraChunkPos, int lodDistance, ivec2& outMinChunkPos, ivec2& outMaxChunkPos)
+{
+    ivec2 minRootPos;
+    ivec2 maxRootPos;
+    getRootTileBounds(cameraChunkPos, lodDistance, minRootPos, maxRootPos);
+    const int rootSideChunks = 1 << getRootLevel(lodDistance);
+    outMinChunkPos = minRootPos * rootSideChunks;
+    outMaxChunkPos = (maxRootPos + 1) * rootSideChunks - 1;
+}
+
 void update(ivec2 cameraChunkPos,
             int renderDistance,
             int lodDistance,
@@ -676,9 +716,9 @@ void update(ivec2 cameraChunkPos,
     };
 
     const int rootLevel = getRootLevel(lodDistance);
-    const ivec2 rootSideChunks(1 << rootLevel);
-    const ivec2 minRootPos = glmUtil::floorDiv(cameraChunkPos - lodDistance, rootSideChunks);
-    const ivec2 maxRootPos = glmUtil::floorDiv(cameraChunkPos + lodDistance, rootSideChunks);
+    ivec2 minRootPos;
+    ivec2 maxRootPos;
+    getRootTileBounds(cameraChunkPos, lodDistance, minRootPos, maxRootPos);
     std::vector<LodTile*> roots;
     for (int rootZ = minRootPos.y; rootZ <= maxRootPos.y; ++rootZ)
     {
