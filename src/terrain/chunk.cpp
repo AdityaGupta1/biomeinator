@@ -1722,6 +1722,16 @@ void Region::setIsStaged(bool staged)
     this->isStaged = staged;
 }
 
+bool Region::getIsImported() const
+{
+    return this->isImported;
+}
+
+void Region::setIsImported()
+{
+    this->isImported = true;
+}
+
 // x changes fastest, then z
 //
 // for loops should be written like this:

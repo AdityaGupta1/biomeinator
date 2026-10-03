@@ -377,6 +377,8 @@ private:
     uint32_t numNeighborsSet{ 0 };
     // Far enough from the camera to be removed once unpinned; no new work is scheduled for it
     bool isStaged{ false };
+    // Loaded from an imported world, so never evicted: regenerating it could differ from the import
+    bool isImported{ false };
     // Queued or running tasks that may touch this region's chunks; it is only removed at zero
     std::atomic<uint32_t> numPins{ 0 };
 
@@ -406,6 +408,8 @@ public:
 
     bool getIsStaged() const;
     void setIsStaged(bool staged);
+    bool getIsImported() const;
+    void setIsImported();
 
     static uint32_t chunkPosToIdx(glm::ivec2 regionChunkPos);
 };

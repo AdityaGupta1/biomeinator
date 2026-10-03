@@ -74,6 +74,12 @@ against the scan, and load through `loadSerializedData`, which already rejoins t
 
 ## Part 3: Temporary disk cache and distance policy
 
+Status (2026-10-02): shelved. Without terrain editing, evicted terrain regenerates identically
+and no slower than exploring new terrain, so the cache would add the complexity below for a CPU
+saving on return trips. Imported regions are never evicted instead, since an older export would
+regenerate differently. Revisit if terrain becomes editable or exported worlds grow too large to
+keep resident.
+
 - Create unique session directories and hold the in-use lock for their lifetime.
   Clean abandoned sessions at startup and retire old sessions during reimport.
 - Add bounded background region writes and loads, with the hysteresis policy

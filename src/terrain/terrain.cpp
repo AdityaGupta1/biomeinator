@@ -388,7 +388,7 @@ static void updateRegionStaging(glm::ivec2 cameraChunkPos, const ChunkScanDistan
     for (const auto& [regionPos, region] : regions)
     {
         const int distance = chunkDistanceToRegion(*region, cameraChunkPos);
-        if (!evictingRegions || distance <= distances.keepRegionDistance)
+        if (!evictingRegions || region->getIsImported() || distance <= distances.keepRegionDistance)
         {
             region->setIsStaged(false);
         }
@@ -403,10 +403,9 @@ static void updateRegionStaging(glm::ivec2 cameraChunkPos, const ChunkScanDistan
 static std::unordered_map<glm::ivec2, uint64_t, IVec2Hash> evictedChunkHashes;
 static std::mutex evictedChunkHashesMutex;
 
-// Only generated chunks: imported ones are regenerated from the seed, which need not match
 static void recordEvictedChunkHash(const Chunk* chunk)
 {
-    if (!validatingEviction || chunk->getState() < ChunkState::HAS_ALL_BLOCKS || chunk->getHasSerializedData())
+    if (!validatingEviction || chunk->getState() < ChunkState::HAS_ALL_BLOCKS)
     {
         return;
     }
@@ -417,7 +416,7 @@ static void recordEvictedChunkHash(const Chunk* chunk)
 
 void validateRegeneratedChunk(const Chunk* chunk)
 {
-    if (!validatingEviction || chunk->getHasSerializedData())
+    if (!validatingEviction)
     {
         return;
     }
@@ -440,6 +439,7 @@ void validateRegeneratedChunk(const Chunk* chunk)
 // readiness depends on them, and after the completion lists its tasks pushed to were drained
 static void removeRegion(Region* region, ToFreeList& toFreeList)
 {
+    ASSERT(!region->getIsImported());
     constexpr int radius = static_cast<int>(structureMaxChunkRadius);
     for (const std::unique_ptr<Chunk>& chunkPtr : region->chunks)
     {
@@ -1177,6 +1177,7 @@ static std::optional<ImportedWorld> readWorld(const std::filesystem::path& world
                 return std::nullopt;
             }
             auto region = std::make_unique<Region>(position);
+            region->setIsImported();
             for (auto& chunk : *data)
             {
                 region->createChunk(chunk.position)->loadSerializedData(std::move(chunk.data));

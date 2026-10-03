@@ -16,8 +16,14 @@ nearby back-and-forth movement never regenerates terrain. Whole regions are evic
 `--evictRegions`, on by default) once they are far enough away, which is what bounds CPU memory
 while exploring: a generated chunk holds about 300 KB that nothing else ever frees. An evicted
 region is simply dropped, and the normal pipeline regenerates its chunks if the camera returns.
-Generation is deterministic, so they come back identical, but a chunk imported from an older
-world comes back as this build generates it. Evicted regions are not in later exports.
+Generation is deterministic, so they come back identical. Evicted regions are not in later exports.
+
+There is deliberately no disk cache for evicted regions. Without terrain editing, regenerating a
+region costs the same as generating one the camera has never visited, and a cache would add
+session directories, locks, crash cleanup and asynchronous I/O for nothing else. Imported regions
+are the exception: they are never evicted, because a world exported by an older build would
+regenerate differently. Exported worlds are small enough that keeping them resident is cheap; if
+they grow, or terrain becomes editable, that is when a disk cache is needed.
 
 ### Distances
 
@@ -74,8 +80,7 @@ The heap was not returning that memory to the OS anyway, so process memory is no
 
 `--validateEviction` records a hash of each generated chunk's final blocks and block states when
 its region is evicted, and compares it when the chunk next finishes its structure pass. Only
-mismatches are logged, as errors, one per chunk; imported chunks are skipped, since they are
-regenerated from the seed. A headless random walk at a small render distance
+mismatches are logged, as errors, one per chunk. A headless random walk at a small render distance
 (`--renderDistance=8 --perfMoveSpeed=200 --perfMoveTurnFrames=500 --perfFrames=8000`, seed 100)
 evicts around a hundred regions and revisits about 8,000 chunks.
 
