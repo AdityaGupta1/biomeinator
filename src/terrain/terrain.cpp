@@ -54,7 +54,7 @@ namespace Terrain
 static Scene* scene;
 
 // Cached at Terrain::init. See knowledge/terrain/world_export_import.md (Cost containment).
-static bool headless{ false };
+static bool automatedRun{ false };
 static bool evictingRegions{ false };
 static bool validatingEviction{ false };
 
@@ -194,7 +194,7 @@ static void validateDecorators()
 void init(Scene* scene)
 {
     Terrain::scene = scene;
-    Terrain::headless = SettingsManager::isHeadless();
+    Terrain::automatedRun = SettingsManager::isAutomatedRun();
     Terrain::evictingRegions = SettingsManager::getAsBool("evictRegions");
     Terrain::validatingEviction = SettingsManager::getAsBool("validateEviction");
 
@@ -308,7 +308,7 @@ void addChunkWithNewGeometry(Chunk* chunk)
 {
     std::scoped_lock<std::mutex> lock(chunksWithNewGeometryMutex);
     chunksWithNewGeometry.push_back(chunk);
-    if (headless && worldImportActive.load(std::memory_order_acquire) &&
+    if (automatedRun && worldImportActive.load(std::memory_order_acquire) &&
         pendingImportedChunks.erase(chunk->getChunkPos()) != 0)
     {
         importedChunksEnqueuedForBlas.fetch_add(1, std::memory_order_relaxed);
@@ -1149,7 +1149,7 @@ static std::optional<ImportedWorld> readWorld(const std::filesystem::path& world
         }
         ImportedWorld world;
         world.seed = worldJson["worldSeed"].get<uint32_t>();
-        world.renderDistance = headless ? worldJson["renderDistance"].get<int>() :
+        world.renderDistance = automatedRun ? worldJson["renderDistance"].get<int>() :
                                          SettingsManager::getAsInt("renderDistance");
         const auto& cameraJson = worldJson["camera"];
         world.cameraPosInt = { cameraJson["posInt"][0].get<int>(), cameraJson["posInt"][1].get<int>(),
@@ -1182,7 +1182,7 @@ static std::optional<ImportedWorld> readWorld(const std::filesystem::path& world
             {
                 region->createChunk(chunk.position)->loadSerializedData(std::move(chunk.data));
                 ++world.numChunks;
-                if (headless && glmUtil::chebyshevDistance(chunk.position, cameraChunkPos) <= createBlasDistance)
+                if (automatedRun && glmUtil::chebyshevDistance(chunk.position, cameraChunkPos) <= createBlasDistance)
                 {
                     world.pendingChunks.insert(chunk.position);
                 }
@@ -1205,13 +1205,13 @@ static void applyImportedWorld(ImportedWorld&& world, const std::filesystem::pat
     ASSERT(regions.empty());
     SettingsManager::setWorldSeed(world.seed);
     ChunkGenerator::init();
-    if (headless)
+    if (automatedRun)
     {
         SettingsManager::setAsInt("renderDistance", world.renderDistance);
     }
     regions = std::move(world.regions);
     const uint32_t expected = static_cast<uint32_t>(world.pendingChunks.size());
-    if (headless)
+    if (automatedRun)
     {
         std::scoped_lock lock(chunksWithNewGeometryMutex);
         pendingImportedChunks = std::move(world.pendingChunks);
@@ -1315,7 +1315,7 @@ void reimportWorld(const std::filesystem::path& worldDir)
     startRegionDeleter();
 }
 
-bool pollHeadlessTerrain()
+bool pollAutomatedRunTerrain()
 {
     if (!worldImportActive.load(std::memory_order_relaxed))
     {

@@ -297,7 +297,7 @@ struct FrameGenState
 {
     // DLSS-G additionally needs Reflex and PCL; all three are checked together at startup
     bool supported{ false };
-    // Shown in the GUI while unsupported; empty once supported or in headless runs
+    // Shown in the GUI while unsupported; empty once supported or in automated runs
     std::string unsupportedReason;
     // Only ever changes between frames, since flipping it recreates the swap chain
     bool active{ false };
@@ -441,7 +441,7 @@ struct RendererState
 
     // -- Mode flags --
     bool renderToFileMode{ false };
-    bool headless{ false };
+    bool automatedRun{ false };
     bool voxelMode{ false };
     bool useSer{ false };
     // Voxel mode with raytracing tier 1.2: terrain alpha cutout resolves via opacity micromaps

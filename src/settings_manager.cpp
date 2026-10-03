@@ -333,11 +333,11 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         parsedSettings["antialiasingMode"] = static_cast<uint32_t>(AntialiasingMode::DLSS);
     }
 
-    // A headless run renders a fixed, unanimated viewpoint with no frame-rate cap, so render-to-file
+    // An automated run renders a fixed, unanimated viewpoint with no frame-rate cap, so render-to-file
     // screenshots are reproducible and perf measurements are not throttled; each of these can
     // still be overridden explicitly
-    const bool isParsedHeadless = !getString("renderToFile").empty() || !getString("perfOutput").empty();
-    if (isParsedHeadless)
+    const bool isParsedAutomatedRun = !getString("renderToFile").empty() || !getString("perfOutput").empty();
+    if (isParsedAutomatedRun)
     {
         const auto defaultTo = [&parseResult, &parsedSettings](const char* name, const bool value)
         {
@@ -455,7 +455,7 @@ bool isPerfMode()
     return !getAsString("perfOutput").empty();
 }
 
-bool isHeadless()
+bool isAutomatedRun()
 {
     return isRenderToFileMode() || isPerfMode();
 }

@@ -54,6 +54,6 @@ bool isRenderToFileMode();
 bool isPerfMode();
 // Either automated run: camera locked, GUI hidden, animation paused, vsync off, SHaRC off (all as
 // overridable defaults), voxel import awaited
-bool isHeadless();
+bool isAutomatedRun();
 
 } // namespace SettingsManager

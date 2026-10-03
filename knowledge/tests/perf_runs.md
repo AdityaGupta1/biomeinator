@@ -66,13 +66,13 @@ loose for the delta being checked; warmup rarely needs touching.
   the process exits non-zero, `run` reports the entry as failed, and `compare` refuses to diff
   it. The partial report is for diagnosing the timeout, not for comparison.
 
-Perf mode is a *headless* run, sharing that flag with `--renderToFile`: camera locked, GUI
+Perf mode is an *automated* run, sharing that flag with `--renderToFile`: camera locked, GUI
 hidden, animation paused, vsync off, Streamline logging off, voxel import awaited.
-`SettingsManager::isHeadless()` is the switch for those; `isRenderToFileMode()` stays specific to the
+`SettingsManager::isAutomatedRun()` is the switch for those; `isRenderToFileMode()` stays specific to the
 screenshot-and-exit path and to the two things a perf run deliberately keeps: frame
 generation with Reflex, and a visible window brought to the foreground (fullscreen presentation
 needs an unoccluded window, and the scenes run fullscreen at 1440p so the numbers are what
-the game shows). The headless defaults (`lockCamera`,
+the game shows). The automated-run defaults (`lockCamera`,
 `showGui`, `animTimePaused`, `useVsync`) live in `parseArgs` and are only applied when the
 flag was not passed explicitly, so a run can opt back into animation if it wants moving water
 in the measurement.

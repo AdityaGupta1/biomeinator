@@ -52,7 +52,7 @@ void init()
     const auto initStart = std::chrono::steady_clock::now();
 
     renderState.renderToFileMode = SettingsManager::isRenderToFileMode();
-    renderState.headless = SettingsManager::isHeadless();
+    renderState.automatedRun = SettingsManager::isAutomatedRun();
     renderState.voxelMode = SettingsManager::getAsBool("voxelMode");
     renderState.animTime = SettingsManager::getAsFloat("animTime");
 
@@ -650,7 +650,8 @@ void render()
     const double animTimeDelta = renderState.animTime - renderState.prevAnimTime;
     renderState.prevAnimTime = renderState.animTime;
 
-    const bool waitingForTerrain = renderState.headless && renderState.voxelMode && !Terrain::pollHeadlessTerrain();
+    const bool waitingForTerrain =
+        renderState.automatedRun && renderState.voxelMode && !Terrain::pollAutomatedRunTerrain();
 
     perfRunUpdate(renderState.scene.hasTlas() && !waitingForTerrain, didSceneChange);
 

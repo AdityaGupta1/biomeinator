@@ -82,7 +82,7 @@ void initStreamline()
 
     sl::Preferences prefs = {};
     prefs.showConsole = false;
-    prefs.logLevel = renderState.headless ? sl::LogLevel::eOff : sl::LogLevel::eDefault;
+    prefs.logLevel = renderState.automatedRun ? sl::LogLevel::eOff : sl::LogLevel::eDefault;
 
     if (SettingsManager::getAsBool("verboseLogging"))
     {
@@ -170,7 +170,7 @@ void loadFrameGenPlugin(bool active)
     const std::string message = reason + "\nUpdate your graphics driver and try again. If this persists, use a GPU and "
                                          "driver that support these features.";
     Logger::logError("%s", message.c_str());
-    if (!renderState.headless)
+    if (!renderState.automatedRun)
     {
         const std::wstring wideMessage = Util::to_wstring(message.c_str());
         MessageBoxW(hwnd, wideMessage.c_str(), L"Biomeinator - unsupported GPU capabilities", MB_OK | MB_ICONERROR);

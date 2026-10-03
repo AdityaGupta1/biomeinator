@@ -40,11 +40,11 @@ Gotchas:
 - Scrub direction is sampled *before* `getPlayerInput()` in `render()`, so `lockCamera` (which
   zeroes `PlayerInput` wholesale) does not disable time control.
 
-## Headless Runs
+## Automated Runs
 
 `--renderToFile` (screenshot for rendering tests and agents) and `--perfOutput` (timing report) both make the run
-*headless*: Streamline logging is suppressed and in voxel mode the world import is awaited
-before anything counts. `renderState.headless` gates
+*automated*: Streamline logging is suppressed and in voxel mode the world import is awaited
+before anything counts. `renderState.automatedRun` gates
 those shared behaviours, and `SettingsManager` defaults the camera lock, GUI, animation pause
 and vsync for both (see [settings → settings_manager.md](../settings/settings_manager.md)).
 `renderState.renderToFileMode` gates the render-to-file exit, where accumulation runs to
