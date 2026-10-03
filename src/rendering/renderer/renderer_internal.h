@@ -87,6 +87,8 @@ inline std::string slResultToString(sl::Result result)
             return "Driver out of date";
         case sl::Result::eErrorOSOutOfDate:
             return "OS out of date";
+        case sl::Result::eErrorNGXFailed:
+            return "NGX failed";
         default:
             return "Unknown Streamline error: " + std::to_string(static_cast<uint32_t>(result));
     }

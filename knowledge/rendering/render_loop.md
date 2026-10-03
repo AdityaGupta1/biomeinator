@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-03_
 
 # Render Loop
 
@@ -10,6 +10,14 @@ _Last edited: 2026-09-30_
 When there's no TLAS or accumulation has stopped, the entire ray tracing + collect section
 is skipped and CPU sleeps 3ms to avoid spinning. Only postprocess runs (re-presents the
 previous frame's result).
+
+## Minimized Window
+
+`render()` returns early (after a short sleep) while the client area is empty, before any
+Streamline call. Running a frame there would resize to the 1x1 clamp in `resize()`, and DLSS-RR
+rejects that output size with `eErrorNGXFailed` on evaluate. The check is on the client rect, not
+`IsIconic`: on restore the minimized state clears before the client area regains its size, so an
+`IsIconic` guard still lets one 1x1 resize through.
 
 ## Frame Pacing
 
