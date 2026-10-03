@@ -29,14 +29,40 @@ struct LodColumn
     // What the top face shows; its sides show topSideBlock, which differs where a snow layer covers it
     Block topBlock;
     Block topSideBlock;
-    // Shown by cliffs below the top block: soilBlock down to soilDepth blocks below the top, rockBlock under it
+    // Shown by cliffs below the top block down to soilDepth blocks below the top, LodRockStrata under it
     Block soilBlock;
     int soilDepth;
-    Block rockBlock;
 };
 
-// Samples numSamplesXZ^2 columns cellSize blocks apart starting at originXZ_WS, x-innermost
-void sampleLodColumns(glm::ivec2 originXZ_WS, int cellSize, uint32_t numSamplesXZ, LodColumn* outColumns,
-                      ThreadMemoryAllocator& threadMemoryAlloc);
+// The rock each column's cliffs show by height, sampled every stepBlocks blocks on a world-aligned grid
+// from minY. Landform rock (Mesa terracotta, Tianzi strata) is banded by height, so a cliff taking one
+// rock at its own top would turn the bands vertical across columns.
+struct LodRockStrata
+{
+    int minY;
+    int stepBlocks;
+    uint32_t numLevels;
+    const Block* blocks; // numLevels per sample
+
+    int levelOf(int y) const
+    {
+        return (y - minY) / stepBlocks;
+    }
+
+    int levelBottomY(int level) const
+    {
+        return minY + level * stepBlocks;
+    }
+
+    Block at(uint32_t sampleIdx, int level) const
+    {
+        return blocks[sampleIdx * numLevels + level];
+    }
+};
+
+// Samples numSamplesXZ^2 columns cellSize blocks apart starting at originXZ_WS, x-innermost. The rock strata
+// reach strataDepth blocks below the lowest top, and live in threadMemoryAlloc.
+void sampleLodColumns(glm::ivec2 originXZ_WS, int cellSize, uint32_t numSamplesXZ, int strataDepth,
+                      LodColumn* outColumns, LodRockStrata& outRockStrata, ThreadMemoryAllocator& threadMemoryAlloc);
 
 }; // namespace ChunkGenerator

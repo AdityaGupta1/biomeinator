@@ -205,10 +205,16 @@ void LodTile::createGeometry(ThreadMemoryAllocator& threadMemoryAlloc)
     // A one-sample margin gives the cliffs on the tile's edges the heights outside it
     const int numSamplesXZ = numCells + 2;
     ChunkGenerator::LodColumn* columns = threadMemoryAlloc.request<ChunkGenerator::LodColumn>(numSamplesXZ * numSamplesXZ);
-    ChunkGenerator::sampleLodColumns(originXZ_WS - cellSize, cellSize, numSamplesXZ, columns, threadMemoryAlloc);
+    ChunkGenerator::LodRockStrata rockStrata;
+    ChunkGenerator::sampleLodColumns(originXZ_WS - cellSize, cellSize, numSamplesXZ, edgeSkirtDepthCells * cellSize,
+                                     columns, rockStrata, threadMemoryAlloc);
+    const auto sampleIdxAt = [&](ivec2 cellPos)
+    {
+        return static_cast<uint32_t>((cellPos.x + 1) + numSamplesXZ * (cellPos.y + 1));
+    };
     const auto columnAt = [&](ivec2 cellPos) -> const ChunkGenerator::LodColumn&
     {
-        return columns[(cellPos.x + 1) + numSamplesXZ * (cellPos.y + 1)];
+        return columns[sampleIdxAt(cellPos)];
     };
     const auto surfaceY = [&](ivec2 cellPos)
     {
@@ -276,7 +282,20 @@ void LodTile::createGeometry(ThreadMemoryAllocator& threadMemoryAlloc)
                 const float soilBottomY = std::clamp(topY - static_cast<float>(column.soilDepth), bottomY, topBlockBottomY);
                 addWall(topBlockBottomY, topY, column.topSideBlock);
                 addWall(soilBottomY, topBlockBottomY, column.soilBlock);
-                addWall(bottomY, soilBottomY, column.rockBlock);
+
+                // Rock in runs of equal strata
+                const uint32_t sampleIdx = sampleIdxAt(cellPos);
+                float runBottomY = bottomY;
+                for (int level = rockStrata.levelOf(static_cast<int>(bottomY)); runBottomY < soilBottomY; ++level)
+                {
+                    const float levelTopY = std::min(static_cast<float>(rockStrata.levelBottomY(level + 1)), soilBottomY);
+                    const Block block = rockStrata.at(sampleIdx, level);
+                    if (levelTopY >= soilBottomY || rockStrata.at(sampleIdx, level + 1) != block)
+                    {
+                        addWall(runBottomY, levelTopY, block);
+                        runBottomY = levelTopY;
+                    }
+                }
             }
         }
     }

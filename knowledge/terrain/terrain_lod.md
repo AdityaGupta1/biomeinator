@@ -17,8 +17,10 @@ resolution, shore band, snow cap and its steepness test, topsoil depth, sea ice,
 helpers the chunk generator shares, so the two agree at the seam. Snow layers skip the hollowness bias,
 which needs finer heights than coarse cells have. Cliffs show the top block's own side for one block
 (snowy grass under a snow layer, so snowy slopes of one-block steps read white as they do in chunks),
-the topsoil's mid block down to the topsoil depth, and the landform rock below it; one rock for the
-whole cliff, so strata don't show.
+the topsoil's mid block down to the topsoil depth, and the landform rock below it. Rock comes from
+`LodRockStrata`, sampled by height on a world-aligned grid as fine as the cells: landform rock is banded
+by height (Mesa terracotta, Tianzi strata), and taking each column's rock at its own top turned the bands
+into vertical stripes across columns.
 
 The broad terrain noise is sampled on the same 4-block world lattice chunks use and interpolated the
 same way, so a one-block cell's height equals its chunk's wherever the chunk has no detail noise or

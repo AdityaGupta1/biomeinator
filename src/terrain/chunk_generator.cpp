@@ -1642,7 +1642,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     }
 }
 
-void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numSamplesXZ, LodColumn* outColumns,
+void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numSamplesXZ, int strataDepth,
+                                      LodColumn* outColumns, LodRockStrata& outRockStrata,
                                       ThreadMemoryAllocator& threadMemoryAlloc)
 {
     const uint numSamples = numSamplesXZ * numSamplesXZ;
@@ -1737,6 +1738,18 @@ void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numS
         topBlockYs[sampleIdx] = topBlockY;
     }
 
+    // Vertical steps as wide as the cells, aligned in world y so neighboring tiles of a level agree
+    const auto [lowestTopY, highestTopY] = std::minmax_element(topBlockYs, topBlockYs + numSamples);
+    const int strataMinY = MathUtil::floorDiv(std::max(*lowestTopY - strataDepth, 0), cellSize) * cellSize;
+    const uint numStrataLevels = static_cast<uint>((*highestTopY - strataMinY) / cellSize + 1);
+    Block* strataBlocks = threadMemoryAlloc.request<Block>(numSamples * numStrataLevels);
+    outRockStrata = {
+        .minY = strataMinY,
+        .stepBlocks = cellSize,
+        .numLevels = numStrataLevels,
+        .blocks = strataBlocks,
+    };
+
     const vec2 jitterXZ(climateCellJitterBlocks);
     const BiomeNoiseFields::ClimateCellContext climateCellContext(vec2(originXZ_WS) - jitterXZ,
                                                                   vec2(lastSampleXZ_WS) + jitterXZ);
@@ -1756,6 +1769,12 @@ void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numS
             return (landformRock != Block::AIR) ? landformRock : Block::STONE;
         };
         const Block exposedRock = rockAt(topBlockY);
+        for (uint level = 0; level < numStrataLevels; ++level)
+        {
+            // Each step takes the rock at its middle
+            strataBlocks[sampleIdx * numStrataLevels + level] =
+                rockAt(outRockStrata.levelBottomY(static_cast<int>(level)) + cellSize / 2);
+        }
         const bool underwater = topBlockY < shape.waterLevel;
         const float temperature = biomeNoiseGrids.temperature[sampleIdx];
         const float humidity = biomeNoiseGrids.humidity[sampleIdx];
@@ -1783,7 +1802,6 @@ void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numS
             .topSideBlock = exposedRock,
             .soilBlock = exposedRock,
             .soilDepth = 0,
-            .rockBlock = exposedRock,
         };
         if (topBlocks.top != Block::AIR && !SurfaceMaterials::isQuartz(exposedRock))
         {
@@ -1799,7 +1817,6 @@ void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numS
                 column.soilBlock = topBlocks.mid;
             }
             column.soilDepth = static_cast<int>(topsoilDepth(formationSoilWeight(shape.natural)));
-            column.rockBlock = rockAt(topBlockY - column.soilDepth);
 
             if (!underwater && static_cast<float>(topBlockY) >= snowLineYAt(temperature, humidity, snowLineNoise[sampleIdx]))
             {
