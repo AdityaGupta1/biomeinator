@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-03_
 
 # Render Loop
 
@@ -42,14 +42,17 @@ Gotchas:
 
 ## Headless Runs
 
-`--renderingTestOutput` (rendering test screenshot) and `--perfOutput` (timing report) both make the run
+`--renderToFile` (screenshot for rendering tests and agents) and `--perfOutput` (timing report) both make the run
 *headless*: Streamline logging is suppressed and in voxel mode the world import is awaited
 before anything counts. `renderState.headless` gates
 those shared behaviours, and `SettingsManager` defaults the camera lock, GUI, animation pause
 and vsync for both (see [settings → settings_manager.md](../settings/settings_manager.md)).
-`renderState.renderingTestMode` gates the rendering test exit, where accumulation runs to
-`maxAccumulatedFrames` then auto-captures a screenshot and exits, plus the two things only a
-rendering test run gives up: frame generation and the foreground window. The
+`renderState.renderToFileMode` gates the render-to-file exit, where accumulation runs to
+`maxAccumulatedFrames` then auto-captures a screenshot and exits, plus the things only a
+render-to-file run gives up: frame generation and a visible window. The window is created but
+never shown, so agents can render images without windows popping up; the capture copies the
+back buffer before `Present`, and presenting to a hidden window returns the success code
+`DXGI_STATUS_OCCLUDED`, so nothing downstream depends on the window being visible. The
 perf lifecycle is separate and independent of accumulation; see
 [tests → perf_runs.md](../tests/perf_runs.md).
 

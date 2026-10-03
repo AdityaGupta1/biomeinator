@@ -408,8 +408,12 @@ void init()
                            nullptr,
                            nullptr);
 
-    // Non-test runs are brought to the front by the renderer once init finishes
-    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    // Render-to-file runs never show the window; other runs are brought to the front by the renderer once init
+    // finishes
+    if (!SettingsManager::isRenderToFileMode())
+    {
+        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    }
 
     RAWINPUTDEVICE rid{};
     rid.usUsagePage = 0x01; // generic desktop controls

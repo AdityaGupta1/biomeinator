@@ -1,4 +1,4 @@
-_Last edited: 2026-10-02_
+_Last edited: 2026-10-03_
 
 # Perf Runs
 
@@ -66,11 +66,11 @@ loose for the delta being checked; warmup rarely needs touching.
   the process exits non-zero, `run` reports the entry as failed, and `compare` refuses to diff
   it. The partial report is for diagnosing the timeout, not for comparison.
 
-Perf mode is a *headless* run, sharing that flag with `--renderingTestOutput`: camera locked, GUI
+Perf mode is a *headless* run, sharing that flag with `--renderToFile`: camera locked, GUI
 hidden, animation paused, vsync off, Streamline logging off, voxel import awaited.
-`SettingsManager::isHeadless()` is the switch for those; `isRenderingTestMode()` stays specific to the
-rendering test screenshot-and-exit path and to the two things a perf run deliberately keeps: frame
-generation with Reflex, and bringing the window to the foreground (fullscreen presentation
+`SettingsManager::isHeadless()` is the switch for those; `isRenderToFileMode()` stays specific to the
+screenshot-and-exit path and to the two things a perf run deliberately keeps: frame
+generation with Reflex, and a visible window brought to the foreground (fullscreen presentation
 needs an unoccluded window, and the scenes run fullscreen at 1440p so the numbers are what
 the game shows). The headless defaults (`lockCamera`,
 `showGui`, `animTimePaused`, `useVsync`) live in `parseArgs` and are only applied when the

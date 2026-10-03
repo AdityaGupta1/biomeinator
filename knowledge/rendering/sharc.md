@@ -1,11 +1,11 @@
-_Last edited: 2026-09-09_
+_Last edited: 2026-10-03_
 
 # SHaRC
 
 The standalone NVIDIA shader library is pinned in `external/SHARC`. Host ownership lives
 in `renderer/renderer_sharc.cpp`. The renderer keeps the reference pipeline and builds
 update/query variants of the same iterative path tracer. Interactive rendering enables
-SHaRC on supported devices; headless tests/perf default off to preserve reference goldens.
+SHaRC on supported devices; headless runs (`--renderToFile`, `--perfOutput`) default off so their output is the unbiased reference.
 The existing SM 6.9 requirement covers int64
 atomics on root-descriptor structured buffers; native fp16 is checked separately.
 

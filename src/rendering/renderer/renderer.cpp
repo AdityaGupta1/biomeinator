@@ -51,7 +51,7 @@ void init()
 {
     const auto initStart = std::chrono::steady_clock::now();
 
-    renderState.renderingTestMode = SettingsManager::isRenderingTestMode();
+    renderState.renderToFileMode = SettingsManager::isRenderToFileMode();
     renderState.headless = SettingsManager::isHeadless();
     renderState.voxelMode = SettingsManager::getAsBool("voxelMode");
     renderState.animTime = SettingsManager::getAsFloat("animTime");
@@ -120,7 +120,7 @@ void init()
     }
 
     // Perf runs come to the front too: fullscreen presentation needs an unoccluded window
-    if (!renderState.renderingTestMode)
+    if (!renderState.renderToFileMode)
     {
         SetForegroundWindow(hwnd);
     }
@@ -665,9 +665,9 @@ void render()
         {
             renderState.stopAccumulating = true;
 
-            if (renderState.renderingTestMode)
+            if (renderState.renderToFileMode)
             {
-                queueScreenshot(true /*useRenderingTestOutputPath*/);
+                queueScreenshot(true /*useRenderToFilePath*/);
             }
         }
     }
@@ -1123,7 +1123,7 @@ void render()
     {
         finalizeQueuedScreenshot(); // this calls flush()
 
-        if (renderState.renderingTestMode)
+        if (renderState.renderToFileMode)
         {
             Renderer::destroy();
             exit(0);

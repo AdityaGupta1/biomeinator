@@ -115,9 +115,9 @@ namespace
 // Frame generation is optional, so a missing feature only disables it rather than failing startup
 void initFrameGenSupport(const sl::AdapterInfo& adapterInfo)
 {
-    // Generated frames would corrupt rendering test screenshots, so a rendering test run stays on the
+    // Generated frames would corrupt render-to-file screenshots, so a render-to-file run stays on the
     // pre-frame-generation code path. Perf runs keep it so they measure what the game does.
-    if (renderState.renderingTestMode)
+    if (renderState.renderToFileMode)
     {
         return;
     }

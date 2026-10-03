@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-03_
 
 # Settings Manager
 
@@ -46,13 +46,13 @@ All settings and their defaults are defined in `parseArgs()` and are self-descri
 - **`antialiasingMode`**: Defaults to `DLSS` in voxel mode, `NONE` otherwise. Anything wanting a
   deterministic mode (e.g. the test runner) must pass `--antialiasingMode` explicitly.
 - **`debugBool0–3` / `debugFloat0–3`**: Passed to shaders every frame. Useful for tweaking shader behaviour on the fly without recompiling — wire them up temporarily to any shader constant while iterating.
-- **`renderingTestOutput`**: If set to a `.png` path, the engine accumulates to `maxAccumulatedFrames`, saves a screenshot, and exits. Used by the rendering tests.
+- **`renderToFile`**: If set to a `.png` path, the engine accumulates to `maxAccumulatedFrames` in a never-shown window, saves a screenshot, and exits. Used by the rendering tests and by agents that need an image of a scene or world without a window popping up.
 - **Generated-world camera arguments** (`cameraX/Y/Z`, `cameraYaw/Pitch`) make procedural
   terrain screenshots reproducible without exporting a world. Angles use degrees, yaw zero
   points along +Z, and positive pitch looks up. They only initialize voxel mode; an imported
   world's saved camera still takes precedence, and glTF cameras are unaffected.
-- **`perfOutput`**: If set to a `.json` path, the engine warms up, measures `perfFrames` frames, writes GPU timing statistics, and exits. Mutually exclusive with `renderingTestOutput`. See [tests → perf_runs.md](../tests/perf_runs.md).
-- **`isHeadless()`** is true for either of the above and is what code should test for "automated run" behaviour (no foreground window, await voxel import); `isRenderingTestMode()` and `isPerfMode()` are for the behaviour specific to each. A headless run also defaults `lockCamera`, `showGui`, `animTimePaused` and `useVsync` to a fixed, unanimated, unthrottled viewpoint, but only when they were not passed explicitly. This is the single place those defaults live; the rendering test runner and `run_perf.py` pass only their output path.
+- **`perfOutput`**: If set to a `.json` path, the engine warms up, measures `perfFrames` frames, writes GPU timing statistics, and exits. Mutually exclusive with `renderToFile`. See [tests → perf_runs.md](../tests/perf_runs.md).
+- **`isHeadless()`** is true for either of the above and is what code should test for "automated run" behaviour (no foreground window, await voxel import); `isRenderToFileMode()` and `isPerfMode()` are for the behaviour specific to each. A headless run also defaults `lockCamera`, `showGui`, `animTimePaused` and `useVsync` to a fixed, unanimated, unthrottled viewpoint, and `sharc` off so the output is the unbiased reference rather than the cached approximation (goldens and perf baselines are uncached; pass `--sharc=true` to see what the game converges to), but only when they were not passed explicitly. This is the single place those defaults live; the rendering test runner and `run_perf.py` pass only their output path.
 - **`forEachSetting`** exists so a perf report can embed every setting it ran with; there is no other reason to enumerate the map.
 - **`lockCamera`**: Disables player input; useful for test screenshots to get a reproducible viewpoint.
 - **`animTimePaused`** (default `false`): Freezes only the animation time driving world animation
