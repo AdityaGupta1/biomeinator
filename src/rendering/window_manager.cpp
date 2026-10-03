@@ -380,7 +380,7 @@ void init()
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     const HINSTANCE hInstance = GetModuleHandleW(nullptr);
-    const auto loadAppIcon = [hInstance](int widthMetric, int heightMetric)
+    const auto loadAppIcon = [hInstance](const int widthMetric, const int heightMetric)
     {
         return static_cast<HICON>(LoadImageW(hInstance,
                                              MAKEINTRESOURCEW(IDI_APP_ICON),
