@@ -1777,8 +1777,10 @@ void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numS
         LodColumn column{
             .topBlockY = topBlockY,
             .waterLevel = shape.waterLevel,
+            .waterTopBlock = Block::WATER_TOP,
             .biome = biome,
             .topBlock = exposedRock,
+            .topSideBlock = exposedRock,
             .soilBlock = exposedRock,
             .soilDepth = 0,
             .rockBlock = exposedRock,
@@ -1804,6 +1806,7 @@ void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numS
                 const bool tooSteep = slopeSquared >= SnowData::capSteepGradient * SnowData::capSteepGradient;
                 column.topBlock = tooSteep ? exposedRock : Block::SNOW;
             }
+            column.topSideBlock = column.topBlock;
         }
 
         const float snowPatch = snowPatchFromNoise(snowLayerPatchNoise[sampleIdx]);
@@ -1817,17 +1820,22 @@ void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numS
         }
         if (frozen)
         {
-            column.topBlockY = shape.waterLevel;
-            column.topBlock = column.soilBlock = column.rockBlock = Block::ICE;
+            column.waterTopBlock = Block::ICE;
         }
 
         // As Chunk::placeSnowLayers, without the hollowness bias, which needs finer heights than coarse cells have
         const bool holdsLayer = frozen || (!underwater && slopeSquared < SnowData::layerSteepGradient * SnowData::layerSteepGradient);
+        Block& surfaceBlock = frozen ? column.waterTopBlock : column.topBlock;
+        const int surfaceBlockY = frozen ? shape.waterLevel : topBlockY;
         const float coverage = SnowData::coverage(snowLayerLineYAt(temperature, humidity, snowLineNoise[sampleIdx]),
-                                                  static_cast<float>(column.topBlockY), coldCover);
-        if (holdsLayer && SnowData::acceptsLayer(Blocks::getBlockData(column.topBlock)) && snowPatch < coverage)
+                                                  static_cast<float>(surfaceBlockY), coldCover);
+        if (holdsLayer && SnowData::acceptsLayer(Blocks::getBlockData(surfaceBlock)) && snowPatch < coverage)
         {
-            column.topBlock = Block::SNOW_LAYER;
+            surfaceBlock = Block::SNOW_LAYER;
+            if (column.topSideBlock == Block::GRASS_BLOCK && !frozen)
+            {
+                column.topSideBlock = Block::SNOWY_GRASS_BLOCK;
+            }
         }
 
         outColumns[sampleIdx] = column;

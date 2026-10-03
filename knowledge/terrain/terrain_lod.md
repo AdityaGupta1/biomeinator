@@ -15,8 +15,10 @@ cost is that tiles only know what the noise knows before any chunk pass runs: no
 structures, decorators or swamp/oasis water shaping. Surface blocks follow the chunk rules (grass
 resolution, shore band, snow cap and its steepness test, topsoil depth, sea ice, snow layers) through
 helpers the chunk generator shares, so the two agree at the seam. Snow layers skip the hollowness bias,
-which needs finer heights than coarse cells have. Cliffs show the topsoil's mid block down to the
-topsoil depth and the landform rock below it; one rock for the whole cliff, so strata don't show.
+which needs finer heights than coarse cells have. Cliffs show the top block's own side for one block
+(snowy grass under a snow layer, so snowy slopes of one-block steps read white as they do in chunks),
+the topsoil's mid block down to the topsoil depth, and the landform rock below it; one rock for the
+whole cliff, so strata don't show.
 
 The broad terrain noise is sampled on the same 4-block world lattice chunks use and interpolated the
 same way, so a one-block cell's height equals its chunk's wherever the chunk has no detail noise or
@@ -72,8 +74,9 @@ geometry is freed, except within `keepGeometryMarginChunks` of the edge (see abo
   at its ends.
 - Tiles are never emissive. That keeps them out of the area-light structures, whose bounds assume
   everything lies within the render distance.
-- LOD water is a static top surface with no walls. Frozen sea is a solid ice column instead, so
-  nothing shows under it.
+- LOD water is a static top surface with no walls. Sea ice is a one-block slab over the cell's own
+  floor, with edges only where the neighbor's surface is lower; drawing it as a column down to the
+  floor showed through the clear water beside it as ice pillars.
 - With LODs on, the voxel bounds that water absorption and fog use for rays that miss everything cover
   the root tiles, not just the render distance. Underwater surfaces in LOD tiles otherwise got no
   absorption on their sky light, which showed as a line in the water at the render distance.

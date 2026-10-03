@@ -23,9 +23,13 @@ struct LodColumn
 {
     int topBlockY;
     int waterLevel;
+    // WATER_TOP, or what covers frozen water (ICE, or a snow layer on it)
+    Block waterTopBlock;
     Biome biome;
+    // What the top face shows; its sides show topSideBlock, which differs where a snow layer covers it
     Block topBlock;
-    // Shown by cliffs: soilBlock for the first soilDepth blocks below the top, rockBlock under it
+    Block topSideBlock;
+    // Shown by cliffs below the top block: soilBlock down to soilDepth blocks below the top, rockBlock under it
     Block soilBlock;
     int soilDepth;
     Block rockBlock;

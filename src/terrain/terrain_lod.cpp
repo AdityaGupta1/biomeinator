@@ -271,8 +271,11 @@ void LodTile::createGeometry(ThreadMemoryAllocator& threadMemoryAlloc)
                                 cornerTint);
                     }
                 };
-                const float soilBottomY = std::max(topY - static_cast<float>(column.soilDepth), bottomY);
-                addWall(soilBottomY, topY, column.soilBlock);
+                // The top block's own side, then the rest of the topsoil, then rock
+                const float topBlockBottomY = std::max(topY - 1.f, bottomY);
+                const float soilBottomY = std::clamp(topY - static_cast<float>(column.soilDepth), bottomY, topBlockBottomY);
+                addWall(topBlockBottomY, topY, column.topSideBlock);
+                addWall(soilBottomY, topBlockBottomY, column.soilBlock);
                 addWall(bottomY, soilBottomY, column.rockBlock);
             }
         }
@@ -281,13 +284,25 @@ void LodTile::createGeometry(ThreadMemoryAllocator& threadMemoryAlloc)
     const float waterTopHeight = blockShapeTopHeight(Blocks::getBlockData(Block::WATER_TOP).shape);
     const PerFaceData waterFaceData =
         blockFaceData(Block::WATER_TOP, BlockFace::Y_POS, FACE_FLAG_IS_WATER | FACE_FLAG_IS_WATER_TOP);
-    const auto waterLevelAt = [&](ivec2 cellPos)
+    // Water, or the ice slab over it, sits on the cell's own terrain, so the floor stays under the ice
+    const auto hasWaterTop = [&](ivec2 cellPos, Block waterTopBlock)
     {
         const ChunkGenerator::LodColumn& column = columnAt(cellPos);
-        return column.topBlockY < column.waterLevel ? column.waterLevel : -1;
+        return column.topBlockY < column.waterLevel && column.waterTopBlock == waterTopBlock;
+    };
+    const auto isFrozen = [&](ivec2 cellPos)
+    {
+        const ChunkGenerator::LodColumn& column = columnAt(cellPos);
+        return column.topBlockY < column.waterLevel && column.waterTopBlock != Block::WATER_TOP;
     };
     forEachRowRun(numCells,
-        [&](ivec2 runStartPos, ivec2 cellPos) { return waterLevelAt(cellPos) == waterLevelAt(runStartPos); },
+        [&](ivec2 runStartPos, ivec2 cellPos)
+        {
+            const ChunkGenerator::LodColumn& runStart = columnAt(runStartPos);
+            const ChunkGenerator::LodColumn& column = columnAt(cellPos);
+            return hasWaterTop(runStartPos, runStart.waterTopBlock) && hasWaterTop(cellPos, runStart.waterTopBlock) &&
+                   column.waterLevel == runStart.waterLevel;
+        },
         [&](int startX, int endX, int z)
         {
             const ChunkGenerator::LodColumn& column = columnAt(ivec2(startX, z));
@@ -295,10 +310,47 @@ void LodTile::createGeometry(ThreadMemoryAllocator& threadMemoryAlloc)
             {
                 return;
             }
-            const float waterY = static_cast<float>(column.waterLevel) + waterTopHeight;
-            addQuad(waterGeometry, BlockFace::Y_POS, vec3(startX * cellSizeF, waterY, z * cellSizeF),
-                    vec3(endX * cellSizeF, waterY, (z + 1) * cellSizeF), waterFaceData, cornerTint);
+            const vec3 runMin(startX * cellSizeF, static_cast<float>(column.waterLevel), z * cellSizeF);
+            const vec3 runMax(endX * cellSizeF, static_cast<float>(column.waterLevel), (z + 1) * cellSizeF);
+            if (column.waterTopBlock == Block::WATER_TOP)
+            {
+                const vec3 waterOffset(0.f, waterTopHeight, 0.f);
+                addQuad(waterGeometry, BlockFace::Y_POS, runMin + waterOffset, runMax + waterOffset, waterFaceData,
+                        cornerTint);
+            }
+            else
+            {
+                const vec3 slabOffset(0.f, 1.f, 0.f);
+                addQuad(terrainGeometry, BlockFace::Y_POS, runMin + slabOffset, runMax + slabOffset,
+                        blockFaceData(column.waterTopBlock, BlockFace::Y_POS), cornerTint);
+            }
         });
+
+    // Ice slabs show their one-block edges wherever the neighbor's surface is lower
+    for (int z = 0; z < numCells; ++z)
+    {
+        for (int x = 0; x < numCells; ++x)
+        {
+            const ivec2 cellPos(x, z);
+            if (!isFrozen(cellPos))
+            {
+                continue;
+            }
+            const float slabBottomY = static_cast<float>(columnAt(cellPos).waterLevel);
+            for (uint8_t faceIdx = 0; faceIdx < 4; ++faceIdx)
+            {
+                const BlockFace face = static_cast<BlockFace>(faceIdx);
+                const ivec2 neighborPos = cellPos + ivec2(blockFaceBases[faceIdx].normal.x, blockFaceBases[faceIdx].normal.z);
+                if (isFrozen(neighborPos) || surfaceY(neighborPos) > slabBottomY)
+                {
+                    continue;
+                }
+                addQuad(terrainGeometry, face, vec3(x * cellSizeF, slabBottomY, z * cellSizeF),
+                        vec3((x + 1) * cellSizeF, slabBottomY + 1.f, (z + 1) * cellSizeF),
+                        blockFaceData(Block::ICE, face), cornerTint);
+            }
+        }
+    }
 
     const ivec3 transformOffset(originXZ_WS.x, 0, originXZ_WS.y /*z*/);
     this->terrainInstance->setPackedVertexFormat(VERTEX_FORMAT_PACKED_LOD_TERRAIN);
