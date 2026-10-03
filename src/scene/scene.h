@@ -35,8 +35,8 @@ class Scene;
 struct HostGeometry
 {
     std::vector<Vertex> verts;
-    // Optional resident form of verts (same count); verts then only feeds the BLAS build and area
-    // lights, see knowledge/scene/instance.md
+    // Optional resident form of verts (same count) in the layout Instance::packedVertexFormat names;
+    // verts then only feeds the BLAS build and area lights, see knowledge/scene/instance.md
     std::vector<PackedTerrainVertex> packedTerrainVerts;
     std::vector<VertexTangent> tangents; // optional, indexed like verts
     std::vector<uint32_t> idxs;
@@ -84,6 +84,8 @@ private:
     bool isOpaque{ false };
     // See HostGeometry::perFaceDatas
     uint32_t trisPerFaceLog2{ 0 };
+    // VERTEX_FORMAT_* of HostGeometry::packedTerrainVerts, when there are any
+    uint32_t packedVertexFormat{ VERTEX_FORMAT_PACKED_TERRAIN };
 
     Instance(::Scene* scene, uint32_t id);
 
@@ -122,6 +124,8 @@ public:
     uint32_t getTriCount() const;
 
     bool getIsGeometryFinalized() const;
+    // Whether its BLAS is built, so showing it puts it in the TLAS this frame
+    bool getHasBlas() const;
 
     void setVisible(bool visible);
 
@@ -133,6 +137,8 @@ public:
 
     // Must be set before finalizeGeometry(); the triangle count must be a multiple of the face size
     void setTrisPerFaceLog2(uint32_t log2);
+
+    void setPackedVertexFormat(uint32_t vertexFormat);
 };
 
 class Scene

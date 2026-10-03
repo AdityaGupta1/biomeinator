@@ -1,0 +1,68 @@
+_Last edited: 2026-10-03_
+
+# Terrain LODs
+
+`src/terrain/terrain_lod.h/cpp` shows terrain out to `--lodDistance` chunks as heightfield tiles, and
+`ChunkGenerator::sampleLodColumns` samples their columns. LODs are off in headless runs, so goldens never
+see them.
+
+## Data comes from the noise, not from chunks
+
+A tile samples the generator's noise at its own cell spacing instead of downsampling generated chunks.
+Full chunk generation is the expensive part of streaming and evicted chunks are never stored, so
+building distant terrain from chunks would mean generating the whole LOD area at full detail. The
+cost is that tiles only know what the noise knows before any chunk pass runs: no detail noise, caves,
+structures, decorators, snow layers or swamp/oasis water shaping. Top blocks follow the same rules as
+the chunk stamp (grass resolution, shore band, snow cap with its steepness test), through helpers the
+chunk generator shares.
+
+The broad terrain noise is sampled on the same 4-block world lattice chunks use and interpolated the
+same way, so a one-block cell's height equals its chunk's wherever the chunk has no detail noise or
+surface cave. That keeps the seam with full-resolution chunks small for the near tiles.
+
+## Quadtree and selection
+
+A tile at level L covers 2^L × 2^L chunks with at most 64 cells per side, so cells are one block up to
+level 2 and double each level after. A tile subdivides when the camera is within two of its widths,
+which keeps a cell's angular size roughly constant, or when it reaches into the render distance; a
+level-0 tile's only child is its chunk. Selection is by distance on the CPU rather than screen-space
+error: secondary rays see terrain behind the camera, and the TLAS has to be chosen before tracing.
+
+## Swaps are atomic, so tiles own chunk visibility
+
+A tile is replaced by its four children (or a level-0 tile by its chunk) only in the frame all of them
+have BLASes, and keeps showing until then. The two never overlap: a ray leaving full-resolution terrain
+would otherwise hit the coarse surface under it and shadow itself, and screen-space compositing like
+the Minecraft LOD mods use doesn't exist for secondary rays. With LODs on, `Terrain` therefore never
+shows chunks itself; `TerrainLod::update` does, after the frame's chunk destruction so a chunk that lost
+its instances is already not ready.
+
+The same rule runs the progressive load: generation is ordered by distance in tile widths, coarser
+first on ties, so the whole area gets coarse tiles before anything is refined and chunks appear only
+once their surroundings at every level are covered.
+
+When the camera moves away and a tile stops subdividing before its own geometry exists, it keeps
+showing whatever finer tiles or chunks still cover it (`isCoveredByExisting`). Those are kept alive by
+being visited, not by being needed. A gap can still open when the chunks covering it leave the BLAS
+distance before the tile is generated.
+
+## Tiles inside the render distance
+
+Tiles wholly inside the render distance exist only as placeholders while their chunks load. Below level
+2 there are too many to be worth generating, and once all of a placeholder's children are ready its
+geometry is freed.
+
+## Gotchas
+
+- Tile edges carry skirts four cells deep below the lower side, so a neighbor at another level never
+  leaves a gap to see through. Inside a tile, cliffs stop at the lower neighbor.
+- Tiles have their own 12-byte vertex format (`PackedLodTerrainVertex`), sharing the packed terrain vertex
+  buffer: tiles are far wider than the packed terrain vertex's local range. UVs are derived from
+  position and normal rather than stored, since textures repeat once per block on world-aligned axes.
+- The biome tint map only covers the render distance, so tiles bake each corner's biome tint into its
+  vertices. The closest-hit shader interpolates it into `HitInfo::packedVertexTint`, which overrides
+  the map for tinted faces. Tinted tops are not merged into runs, since a run only carries the tints
+  at its ends.
+- Tiles are never emissive. That keeps them out of the area-light structures, whose bounds assume
+  everything lies within the render distance.
+- LOD water is a static top surface with no walls.

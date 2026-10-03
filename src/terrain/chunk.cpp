@@ -1078,15 +1078,6 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockS
                             neighborBlockData.shape, faceIdx);
 }
 
-inline constexpr ivec3 cubeFaceVertPositions[24] = {
-    ivec3(1, 1, 0), ivec3(1, 1, 1), ivec3(1, 0, 1), ivec3(1, 0, 0), // +x
-    ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 0, 1), ivec3(1, 0, 1), // +z
-    ivec3(0, 1, 1), ivec3(0, 1, 0), ivec3(0, 0, 0), ivec3(0, 0, 1), // -x
-    ivec3(0, 1, 0), ivec3(1, 1, 0), ivec3(1, 0, 0), ivec3(0, 0, 0), // -z
-    ivec3(1, 1, 1), ivec3(1, 1, 0), ivec3(0, 1, 0), ivec3(0, 1, 1), // +y
-    ivec3(0, 0, 1), ivec3(0, 0, 0), ivec3(1, 0, 0), ivec3(1, 0, 1), // -y
-};
-
 inline constexpr float halfInvSqrt2 = 0.5f / std::numbers::sqrt2_v<float>;
 inline constexpr float xShapeMin = 0.5f - halfInvSqrt2;
 inline constexpr float xShapeMax = 0.5f + halfInvSqrt2;
@@ -1099,48 +1090,11 @@ inline constexpr vec3 xShapedFaceNormals[2] = {
     vec3(halfInvSqrt2, 0.f, halfInvSqrt2),
 };
 
-inline constexpr uvec2 uvOffsets[4] = {
-    uvec2(1, 0),
-    uvec2(0, 0),
-    uvec2(0, 1),
-    uvec2(1, 1),
-};
-
 void Chunk::setInstances(Instance* terrainInstance, Instance* waterInstance)
 {
     this->terrainInstance = terrainInstance;
     this->waterInstance = waterInstance;
     this->setInstancesVisible(this->areInstancesVisible);
-}
-
-static PerFaceData makeBlockFaceData(const BlockData& block, uint32_t slice, uint32_t extraFlags = 0)
-{
-    uint32_t flags = extraFlags;
-    if (TerrainMaterials::sliceHasBiomeTint(slice))
-    {
-        flags |= FACE_FLAG_BIOME_TINT;
-    }
-    if (TerrainMaterials::sliceHasNormalMap(slice))
-    {
-        flags |= FACE_FLAG_NORMAL_MAP;
-    }
-    if (block.translucent)
-    {
-        flags |= FACE_FLAG_DIFFUSE_TRANSMISSION;
-    }
-    if (block.proceduralColor)
-    {
-        flags |= FACE_FLAG_PROCEDURAL_COLOR;
-    }
-    if (block.type == BlockType::GLASS)
-    {
-        flags |= FACE_FLAG_IS_GLASS;
-    }
-
-    PerFaceData data{};
-    data.setFlags(flags);
-    data.setTexArraySliceIdx(slice);
-    return data;
 }
 
 void Chunk::createInstances()
@@ -1245,7 +1199,7 @@ void Chunk::createInstances()
                         const size_t baseIndex = terrainIdxs.size();
                         terrainIdxs.insert(terrainIdxs.end(), model.indices.begin(), model.indices.end());
                         for (size_t i = baseIndex; i < terrainIdxs.size(); ++i) terrainIdxs[i] += baseVertex;
-                        const auto data = makeBlockFaceData(blockData, blockData.texSlices[0]);
+                        const auto data = TerrainMaterials::makeBlockFaceData(blockData, blockData.texSlices[0]);
                         const auto triangleCount = static_cast<uint32_t>(model.indices.size() / 3);
                         if (blockData.markAsEmitter)
                             for (uint32_t i = 0; i < triangleCount; ++i) terrainEmissiveTriangleIdxs.push_back(baseTriangle + i);
@@ -1281,7 +1235,7 @@ void Chunk::createInstances()
                         {
                             const vec3 vertPos_CS = basePos_CS + xShapedFaceVertPositions[i];
                             terrainVerts.emplace_back(
-                                makeVertex(vertPos_CS, xShapedFaceNormals[i / 4], vec2(uvOffsets[i % 4])));
+                                makeVertex(vertPos_CS, xShapedFaceNormals[i / 4], vec2(quadUvOffsets[i % 4])));
                         }
 
                         for (uint j = 0; j < 2; ++j)
@@ -1296,7 +1250,7 @@ void Chunk::createInstances()
                         }
 
                         terrainPerFaceDatas.insert(terrainPerFaceDatas.end(), 2,
-                                                   makeBlockFaceData(blockData, texArraySliceIdx));
+                                                   TerrainMaterials::makeBlockFaceData(blockData, texArraySliceIdx));
 
                         if (useOmms)
                         {
@@ -1337,7 +1291,7 @@ void Chunk::createInstances()
                                     vertPos_CS.y -= topYSubtract;
                                 }
 
-                                vec2 uv = vec2(uvOffsets[i]);
+                                vec2 uv = vec2(quadUvOffsets[i]);
                                 // Side faces (+X, +Z, -X, -Z) run v = 0 at the top edge to 1 at the bottom
                                 if (cropSideUvs && faceIdx < 4 && thisFaceVertPositions[i].y == 0)
                                 {
@@ -1365,7 +1319,7 @@ void Chunk::createInstances()
                                     waterFlags |= FACE_FLAG_IS_WATER_TOP;
                                 }
                             }
-                            perFaceDatas.emplace_back(makeBlockFaceData(blockData, texArraySliceIdx, waterFlags));
+                            perFaceDatas.emplace_back(TerrainMaterials::makeBlockFaceData(blockData, texArraySliceIdx, waterFlags));
 
                             if (useOmms && !isWater)
                             {

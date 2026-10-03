@@ -200,6 +200,11 @@ bool Instance::getIsGeometryFinalized() const
     return this->isGeometryFinalized;
 }
 
+bool Instance::getHasBlas() const
+{
+    return this->geoWrapper.blasBufferSection.isValid();
+}
+
 void Instance::setVisible(bool visible)
 {
     if (this->isVisible == visible)
@@ -234,6 +239,11 @@ void Instance::setIsDeformable(bool deformable)
 void Instance::setIsOpaque(bool opaque)
 {
     this->isOpaque = opaque;
+}
+
+void Instance::setPackedVertexFormat(const uint32_t vertexFormat)
+{
+    this->packedVertexFormat = vertexFormat;
 }
 
 void Instance::setTrisPerFaceLog2(const uint32_t log2)
@@ -829,7 +839,7 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     {
         InstanceData instanceData{};
         const bool packedVerts = !instance->hostGeometry.packedTerrainVerts.empty();
-        instanceData.vertexFormat = packedVerts ? VERTEX_FORMAT_PACKED_TERRAIN : VERTEX_FORMAT_FULL;
+        instanceData.vertexFormat = packedVerts ? instance->packedVertexFormat : VERTEX_FORMAT_FULL;
         instanceData.vertsBufferOffset = packedVerts
             ? Util::convertByteSizeToCount<PackedTerrainVertex>(instance->geoWrapper.vertsBufferSection.offsetBytes)
             : Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);

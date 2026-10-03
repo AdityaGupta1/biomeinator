@@ -1,4 +1,4 @@
-_Last edited: 2026-10-02_
+_Last edited: 2026-10-03_
 
 # Terrain Manager
 
@@ -22,6 +22,8 @@ The `+ structureMaxChunkRadius` term inside `fillStructuresDistance` (not the ob
 `generateTerrainDistance = fillStructuresDistance + structureMaxChunkRadius` similarly guarantees that the 5×5 footprint of every `fillStructuresDistance` chunk has materialised `Chunk*` objects (`checkStructureNeighbors` walks neighbor pointers and asserts non-null).
 
 Two further distances, measured to whole regions, decide when regions are evicted; see [region_system.md](region_system.md#distances).
+
+With LODs enabled, chunks within render distance are not shown by the scan: [terrain_lod.md](terrain_lod.md) decides when each one replaces the LOD tile covering it.
 
 ## Destruction Uses Union of Old + New Bounds
 

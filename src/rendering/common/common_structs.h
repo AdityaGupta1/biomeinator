@@ -29,7 +29,9 @@ struct HitInfo
 
     float2 uv;
     uint packedGeoNor; // face-oriented geometric normal for surface ray offsets
-    uint pad0;
+    // Interpolated biome tint baked into the hit's vertices as sRGB rgb8, with a = 255; 0 when the
+    // vertices carry none and tinted faces read the biome map
+    uint packedVertexTint;
 };
 
 struct GbufferData
@@ -73,8 +75,24 @@ struct PackedTerrainVertex
     uint packedNor; // as Vertex::packedNor
 };
 
+// Resident form of LOD terrain tile vertices, stored in the packed terrain vertex buffer at the same
+// stride. Tiles are far wider than PackedTerrainVertex's local range. Their texture tiles repeat once
+// per block on world-aligned axes, so UVs follow from position and normal (see lodTerrainUv), and the
+// biome tint is baked in because the biome map only covers the render distance.
+#define PACKED_LOD_TERRAIN_POS_XZ_SCALE 4.f
+#define PACKED_LOD_TERRAIN_POS_Y_SCALE 64.f
+#define PACKED_LOD_TERRAIN_POS_Y_BIAS 1.f
+
+struct PackedLodTerrainVertex
+{
+    uint packedPosXZ; // x in the low half, z in the high half
+    uint packedPosYNor; // y in the low half, the octahedral normal as snorm8x2 in the high half
+    uint packedTint; // biome tint as sRGB rgb8
+};
+
 #define VERTEX_FORMAT_FULL 0
 #define VERTEX_FORMAT_PACKED_TERRAIN 1
+#define VERTEX_FORMAT_PACKED_LOD_TERRAIN 2
 
 #define TANGENT_BUFFER_OFFSET_INVALID ~0u
 

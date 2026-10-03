@@ -10,6 +10,7 @@
 #include "chunk.h"
 #include "chunk_generator.h"
 #include "region_file.h"
+#include "terrain_lod.h"
 #include "terrain_materials.h"
 #include "terrain_omm.h"
 #include "multithreading/thread_memory_allocator.h"
@@ -57,6 +58,8 @@ static Scene* scene;
 static bool headless{ false };
 static bool evictingRegions{ false };
 static bool validatingEviction{ false };
+// LOD tiles then own chunk visibility
+static bool lodsEnabled{ false };
 
 // Each task pins the regions within this many chunks of its own so none of them is removed while it
 // runs. That covers every chunk the task reads or writes and, for chunks whose readiness it
@@ -197,6 +200,7 @@ void init(Scene* scene)
     Terrain::headless = SettingsManager::isHeadless();
     Terrain::evictingRegions = SettingsManager::getAsBool("evictRegions");
     Terrain::validatingEviction = SettingsManager::getAsBool("validateEviction");
+    Terrain::lodsEnabled = !Terrain::headless && SettingsManager::getAsInt("lodDistance") > 0;
 
     // Blocks::init() assigns the texture array slice indices that TerrainMaterials::init()
     // loads textures for
@@ -214,6 +218,8 @@ void init(Scene* scene)
     Structures::init();
     CaveStructures::init();
     ChunkGenerator::init();
+
+    TerrainLod::init(scene);
 
     threadPool.init();
     startRegionDeleter();
@@ -559,7 +565,10 @@ static void scheduleChunkWork(Chunk* chunk,
     if (inCurrentCreateBlasDistance)
     {
         chunk->setIsMarkedForDestruction(false);
-        chunk->setInstancesVisible(inCurrentRenderDistance);
+        if (!lodsEnabled)
+        {
+            chunk->setInstancesVisible(inCurrentRenderDistance);
+        }
 
         if (chunkState == ChunkState::NEEDS_GEOMETRY)
         {
@@ -875,6 +884,16 @@ void update(ToFreeList& toFreeList)
         chunk->destroyInstances(toFreeList);
     }
     chunksToDestroy.clear();
+
+    if (lodsEnabled)
+    {
+        std::vector<Task> lodTasks;
+        TerrainLod::update(currentChunkPos, distances.renderDistance, SettingsManager::getAsInt("lodDistance"),
+                           findChunk, toFreeList, lodTasks);
+        // Ahead of the chunk backlog: LOD tiles are few and cheap, and the coarse ones are what covers
+        // the world while it loads
+        tasksToEnqueue.insert(tasksToEnqueue.begin(), lodTasks.begin(), lodTasks.end());
+    }
 
     if (!regionsToRemove.empty())
     {
@@ -1251,6 +1270,7 @@ static void resetTerrainState()
     scene->invalidateRadianceHistory();
 
     ToFreeList scratchToFree;
+    TerrainLod::reset(scratchToFree);
     for (const auto& [regionPos, regionPtr] : regions)
     {
         if (!regionPtr)

@@ -94,12 +94,59 @@ Vertex unpackTerrainVertex(const PackedTerrainVertex packed)
     return vert;
 }
 
+// Texture tiles repeat once per block, oriented as on the matching faces of a chunk's blocks
+float2 lodTerrainUv(const float3 pos_OS, const float3 nor)
+{
+    const float3 absNor = abs(nor);
+    if (absNor.y >= absNor.x && absNor.y >= absNor.z)
+    {
+        return float2(pos_OS.z, -pos_OS.x);
+    }
+    if (absNor.x >= absNor.z)
+    {
+        return float2(nor.x > 0.f ? -pos_OS.z : pos_OS.z, -pos_OS.y);
+    }
+    return float2(nor.z > 0.f ? pos_OS.x : -pos_OS.x, -pos_OS.y);
+}
+
+// Both packed layouts share packedTerrainVerts; see PackedLodTerrainVertex
+PackedLodTerrainVertex loadPackedLodTerrainVertex(const uint idx)
+{
+    const PackedTerrainVertex words = packedTerrainVerts[idx];
+    PackedLodTerrainVertex packed;
+    packed.packedPosXZ = words.packedPosXY;
+    packed.packedPosYNor = words.packedPosZUv;
+    packed.packedTint = words.packedNor;
+    return packed;
+}
+
+Vertex unpackLodTerrainVertex(const PackedLodTerrainVertex packed)
+{
+    Vertex vert;
+    vert.pos_OS = float3(float(packed.packedPosXZ & 0xFFFF) / PACKED_LOD_TERRAIN_POS_XZ_SCALE,
+                         float(packed.packedPosYNor & 0xFFFF) / PACKED_LOD_TERRAIN_POS_Y_SCALE - PACKED_LOD_TERRAIN_POS_Y_BIAS,
+                         float(packed.packedPosXZ >> 16) / PACKED_LOD_TERRAIN_POS_XZ_SCALE);
+    const int2 norSnorm8 = int2(packed.packedPosYNor << 8, packed.packedPosYNor) >> 24;
+    vert.packedNor = packSnorm2ToUint(clamp(norSnorm8 / 127.f, -1.f, 1.f));
+    vert.uv = lodTerrainUv(vert.pos_OS, octDecode(vert.packedNor));
+    return vert;
+}
+
+float3 unpackLodTerrainTint(const PackedLodTerrainVertex packed)
+{
+    return float3(uint3(packed.packedTint, packed.packedTint >> 8, packed.packedTint >> 16) & 0xFF) / 255.f;
+}
+
 Vertex loadVert(const InstanceData instanceData, const uint vertIdx)
 {
     const uint idx = instanceData.vertsBufferOffset + vertIdx;
     if (instanceData.vertexFormat == VERTEX_FORMAT_PACKED_TERRAIN)
     {
         return unpackTerrainVertex(packedTerrainVerts[idx]);
+    }
+    if (instanceData.vertexFormat == VERTEX_FORMAT_PACKED_LOD_TERRAIN)
+    {
+        return unpackLodTerrainVertex(loadPackedLodTerrainVertex(idx));
     }
     return verts[idx];
 }
@@ -114,13 +161,13 @@ void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, o
 
 // Ctx for surface shading at a hit; samples the biome map and the procedural color ramp once here
 // so all color reads for the hit share them (c.f. makeUntintedTexSampleCtx())
-TexSampleCtx makeTintedTexSampleCtx(const PerFaceData perFaceData, const float rayConeWidth, const float3 pos_WS)
+TexSampleCtx makeTintedTexSampleCtx(const PerFaceData perFaceData, const float rayConeWidth, const HitInfo hitInfo)
 {
     TexSampleCtx texCtx;
     texCtx.mipLevel = computeMipLevel(rayConeWidth);
     texCtx.arraySliceIdx = perFaceData.getTexArraySliceIdx();
-    texCtx.biomeTint = getBiomeTint(perFaceData.getFlags(), pos_WS.xz);
-    texCtx.proceduralColor = getProceduralColor(perFaceData.getFlags(), pos_WS);
+    texCtx.biomeTint = getBiomeTint(perFaceData.getFlags(), hitInfo.hitPos_WS.xz, hitInfo.packedVertexTint);
+    texCtx.proceduralColor = getProceduralColor(perFaceData.getFlags(), hitInfo.hitPos_WS);
     return texCtx;
 }
 
@@ -275,6 +322,16 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     }
 
     payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+    payload.hitInfo.packedVertexTint = 0;
+    if (instanceData.vertexFormat == VERTEX_FORMAT_PACKED_LOD_TERRAIN)
+    {
+        const uint3 packedVertIdxs = instanceData.vertsBufferOffset + vertexIndices;
+        const float3 tint = unpackLodTerrainTint(loadPackedLodTerrainVertex(packedVertIdxs.x)) * bary.x +
+                            unpackLodTerrainTint(loadPackedLodTerrainVertex(packedVertIdxs.y)) * bary.y +
+                            unpackLodTerrainTint(loadPackedLodTerrainVertex(packedVertIdxs.z)) * bary.z;
+        const uint3 tint8 = uint3(round(saturate(tint) * 255.f));
+        payload.hitInfo.packedVertexTint = tint8.r | (tint8.g << 8) | (tint8.b << 16) | (0xFFu << 24);
+    }
     payload.hitInfo.instanceId = InstanceID();
     payload.hitInfo.triangleIdx = PrimitiveIndex();
     payload.materialIdx = materialIdx;

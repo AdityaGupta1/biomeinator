@@ -220,7 +220,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         const PerFaceData perFaceData = loadPerFaceData(instanceData, payload.hitInfo.triangleIdx);
         const bool hitWasWater = perFaceData.hasFlag(FACE_FLAG_IS_WATER);
         const TexSampleCtx surfTexCtx =
-            makeTintedTexSampleCtx(perFaceData, payload.rayCone.width, payload.hitInfo.hitPos_WS);
+            makeTintedTexSampleCtx(perFaceData, payload.rayCone.width, payload.hitInfo);
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and
         // multiply by Fresnel reflectance
@@ -584,7 +584,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         const PerFaceData secondHitPerFaceData =
                             loadPerFaceData(instanceDatas[payload.hitInfo.instanceId], payload.hitInfo.triangleIdx);
                         const TexSampleCtx secondHitTexCtx = makeTintedTexSampleCtx(
-                            secondHitPerFaceData, payload.rayCone.width, payload.hitInfo.hitPos_WS);
+                            secondHitPerFaceData, payload.rayCone.width, payload.hitInfo);
                         if (surfMaterial.hasDiffuse())
                         {
                             secondHitDiffuseAlbedo += getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, secondHitTexCtx).rgb;
@@ -739,7 +739,7 @@ void RayGeneration()
         {
             const Material material = getHitMaterial(payload, payload.rayCone.width);
             const PerFaceData tri = loadPerFaceData(instanceDatas[payload.hitInfo.instanceId], payload.hitInfo.triangleIdx);
-            const TexSampleCtx tex = makeTintedTexSampleCtx(tri, payload.rayCone.width, payload.hitInfo.hitPos_WS);
+            const TexSampleCtx tex = makeTintedTexSampleCtx(tri, payload.rayCone.width, payload.hitInfo);
             SharcHitData hit = makeSharcHit(payload.hitInfo.hitPos_WS, payload.hitInfo.hitShadingNor_WS,
                 getMaterialBaseColor(material, payload.hitInfo.uv, tex).rgb);
             float3 cachedRadiance;
