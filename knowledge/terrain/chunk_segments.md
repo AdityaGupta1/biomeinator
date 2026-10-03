@@ -1,4 +1,4 @@
-_Last edited: 2026-04-26_
+_Last edited: 2026-10-02_
 
 # Chunk Segments
 
@@ -14,7 +14,7 @@ The non-obvious optimization: when checking a segment's -x/-y/-z neighbor face, 
 
 ## Why Segments Need Neighbors
 
-Classification requires reading one-block-thick strips from adjacent chunks (for edge segments). This is why `generateSegments` waits until all 4 cardinal neighbors have their blocks (`NEEDS_SEGMENTS` depends on `numNeighborsWithBlocks == 4`).
+Classification requires reading one-block-thick strips from adjacent chunks (for edge segments). This is why `generateSegments` waits until all 4 cardinal neighbors have their blocks (`NEEDS_SEGMENTS` depends on a complete `neighborsWithBlocksMask`).
 
 ## Memory
 

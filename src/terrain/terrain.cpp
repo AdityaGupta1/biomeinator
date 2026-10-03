@@ -35,10 +35,12 @@
 #include <fstream>
 #include <limits>
 #include <cmath>
+#include <condition_variable>
 #include <deque>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -53,33 +55,104 @@ static Scene* scene;
 
 // Cached at Terrain::init. See knowledge/terrain/world_export_import.md (Cost containment).
 static bool headless{ false };
+static bool evictingRegions{ false };
+static bool validatingEviction{ false };
 
-static void task_generateTerrain(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
+// Each task pins the regions within this many chunks of its own so none of them is removed while it
+// runs. That covers every chunk the task reads or writes and, for chunks whose readiness it
+// advances, every chunk that readiness depends on, since removing a region steps those back.
+inline constexpr int generateTerrainPinRadius = 0;
+inline constexpr int checkStructureNeighborsPinRadius = 2 * static_cast<int>(structureMaxChunkRadius);
+inline constexpr int fillStructuresPinRadius = std::max(static_cast<int>(structureMaxChunkRadius), 2);
+inline constexpr int generateSegmentsPinRadius = 1;
+inline constexpr int createInstancesPinRadius = 1;
+static_assert(checkStructureNeighborsPinRadius < static_cast<int>(regionSideLength) &&
+              fillStructuresPinRadius < static_cast<int>(regionSideLength),
+              "a task pins at most 2x2 regions");
+
+// The task's chunk may be destroyed as soon as its last region is unpinned
+static void unpinRegions(const Task& task)
 {
-    chunk->generateTerrain(threadMemoryAlloc);
+    for (uint32_t i = 0; i < task.numPinnedRegions; ++i)
+    {
+        task.pinnedRegions[i]->unpin();
+    }
 }
 
-static void task_checkStructureNeighbors(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
+static void task_generateTerrain(const Task& task, ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    chunk->checkStructureNeighbors();
+    task.chunkPtr->generateTerrain(threadMemoryAlloc);
+    unpinRegions(task);
 }
 
-static void task_fillStructures(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
+static void task_checkStructureNeighbors(const Task& task, ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    chunk->fillStructuresAndDecorators();
+    task.chunkPtr->checkStructureNeighbors();
+    unpinRegions(task);
 }
 
-static void task_generateSegments(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
+static void task_fillStructures(const Task& task, ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    chunk->generateSegments(threadMemoryAlloc);
+    task.chunkPtr->fillStructuresAndDecorators();
+    unpinRegions(task);
 }
 
-static void task_createInstances(Chunk* chunk, ThreadMemoryAllocator& threadMemoryAlloc)
+static void task_generateSegments(const Task& task, ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    chunk->createInstances();
+    task.chunkPtr->generateSegments(threadMemoryAlloc);
+    unpinRegions(task);
+}
+
+static void task_createInstances(const Task& task, ThreadMemoryAllocator& threadMemoryAlloc)
+{
+    task.chunkPtr->createInstances();
+    unpinRegions(task);
 }
 
 static ThreadPool threadPool;
+
+// Destroying a region's chunks took around 100 ms, so the main thread only unlinks removed regions
+// and this thread destroys them
+static std::vector<std::unique_ptr<Region>> regionsToDelete;
+static std::mutex regionsToDeleteMutex;
+static std::condition_variable_any regionsToDeleteCv;
+static std::jthread regionDeleter;
+
+static void deleteRegions(std::stop_token stopToken)
+{
+    // See knowledge/multithreading/thread_pool.md for why background threads yield to the render thread
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+
+    std::vector<std::unique_ptr<Region>> regionsDeleting;
+    while (true)
+    {
+        {
+            std::unique_lock<std::mutex> lock(regionsToDeleteMutex);
+            if (!regionsToDeleteCv.wait(lock, stopToken, [] { return !regionsToDelete.empty(); }))
+            {
+                return;
+            }
+            regionsDeleting.swap(regionsToDelete);
+        }
+        regionsDeleting.clear();
+    }
+}
+
+static void startRegionDeleter()
+{
+    regionDeleter = std::jthread(deleteRegions);
+}
+
+// Returns once every region already handed to it is destroyed
+static void stopRegionDeleter()
+{
+    // Not started for glTF scenes, which never initialize terrain
+    if (regionDeleter.joinable())
+    {
+        regionDeleter.request_stop();
+        regionDeleter.join();
+    }
+}
 
 // Indexed by Block; filled once block assets are loaded
 static std::vector<BlockStateKind> blockStateKinds;
@@ -122,6 +195,8 @@ void init(Scene* scene)
 {
     Terrain::scene = scene;
     Terrain::headless = SettingsManager::isHeadless();
+    Terrain::evictingRegions = SettingsManager::getAsBool("evictRegions");
+    Terrain::validatingEviction = SettingsManager::getAsBool("validateEviction");
 
     // Blocks::init() assigns the texture array slice indices that TerrainMaterials::init()
     // loads textures for
@@ -141,6 +216,7 @@ void init(Scene* scene)
     ChunkGenerator::init();
 
     threadPool.init();
+    startRegionDeleter();
 }
 
 struct IVec2Hash
@@ -158,12 +234,52 @@ static glm::ivec2 cameraChunkPosition(glm::ivec3 position)
     return glmUtil::floorDiv(glm::ivec2(position.x, position.z), glm::ivec2(static_cast<int>(chunkSizeXZ)));
 }
 
-static std::deque<Chunk*> chunksToGenerateTerrain;
-static std::deque<Chunk*> chunksToGenerateGeometry;
-static std::vector<Chunk*> chunksToCreateBlas;
-static std::mutex chunksToCreateBlasMutex;
+static glm::ivec2 chunkToRegionPos(glm::ivec2 chunkPos)
+{
+    return glmUtil::floorDiv(chunkPos, glm::ivec2(regionSideLength));
+}
+
+static Chunk* findChunk(glm::ivec2 chunkPos)
+{
+    const auto regionIter = regions.find(chunkToRegionPos(chunkPos));
+    return regionIter == regions.end() ? nullptr : regionIter->second->getChunk(chunkPos);
+}
+
+static Region* getOrCreateRegion(glm::ivec2 regionPos)
+{
+    std::unique_ptr<Region>& region = regions[regionPos];
+    if (region == nullptr)
+    {
+        region = std::make_unique<Region>(regionPos);
+    }
+    return region.get();
+}
+
+static Task makePinnedTask(void (*func)(const Task&, ThreadMemoryAllocator&), Chunk* chunk, int pinRadius)
+{
+    Task task{ .func = func, .chunkPtr = chunk };
+    const glm::ivec2 minRegionPos = chunkToRegionPos(chunk->getChunkPos() - pinRadius);
+    const glm::ivec2 maxRegionPos = chunkToRegionPos(chunk->getChunkPos() + pinRadius);
+    // Created if missing: one created later would be unpinned, and could be removed while the task runs
+    for (int regionZ = minRegionPos.y; regionZ <= maxRegionPos.y; ++regionZ)
+    {
+        for (int regionX = minRegionPos.x; regionX <= maxRegionPos.x; ++regionX)
+        {
+            Region* region = getOrCreateRegion(glm::ivec2(regionX, regionZ));
+            region->pin();
+            task.pinnedRegions[task.numPinnedRegions++] = region;
+        }
+    }
+    return task;
+}
+
+static std::deque<Task> generateTerrainTasks;
+// Their instances are requested on the main thread before they are enqueued
+static std::deque<Task> createInstancesTasks;
+static std::vector<Chunk*> chunksWithNewGeometry;
+static std::mutex chunksWithNewGeometryMutex;
+// Main thread only
 static std::vector<Chunk*> chunksToDestroy;
-static std::mutex chunksToDestroyMutex;
 static std::vector<Chunk*> chunksToRevisit;
 static std::mutex chunksToRevisitMutex;
 
@@ -185,24 +301,18 @@ StreamingStats getStreamingStats()
 static std::atomic<uint32_t> expectedImportedChunks{ 0 };
 static std::atomic<uint32_t> importedChunksEnqueuedForBlas{ 0 };
 static std::atomic<bool> worldImportActive{ false };
-// Protected by chunksToCreateBlasMutex; each initial-import coordinate counts once.
+// Protected by chunksWithNewGeometryMutex; each initial-import coordinate counts once.
 static std::unordered_set<glm::ivec2, IVec2Hash> pendingImportedChunks;
 
-void addChunkToCreateBlas(Chunk* chunk)
+void addChunkWithNewGeometry(Chunk* chunk)
 {
-    std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);
-    chunksToCreateBlas.push_back(chunk);
+    std::scoped_lock<std::mutex> lock(chunksWithNewGeometryMutex);
+    chunksWithNewGeometry.push_back(chunk);
     if (headless && worldImportActive.load(std::memory_order_acquire) &&
         pendingImportedChunks.erase(chunk->getChunkPos()) != 0)
     {
         importedChunksEnqueuedForBlas.fetch_add(1, std::memory_order_relaxed);
     }
-}
-
-void addChunkToDestroy(Chunk* chunk)
-{
-    std::scoped_lock<std::mutex> lock(chunksToDestroyMutex);
-    chunksToDestroy.push_back(chunk);
 }
 
 void addChunkToRevisit(Chunk* chunk)
@@ -226,6 +336,8 @@ static glm::ivec3 voxelRenderBoundsMin_WS{ 0, 0, 0 };
 static glm::ivec3 voxelRenderBoundsMax_WS{ 0, 0, 0 };
 
 inline constexpr uint32_t maxTasksPerFrame = 512;
+// Bounds the scene's large host geometry pool, which is never freed; see knowledge/scene/instance.md
+inline constexpr uint32_t maxTerrainInstancesHoldingHostGeometry = 512;
 inline constexpr uint32_t maxNumGenerateTerrainTasksPerFrame = 96;
 
 struct ChunkScanDistances
@@ -234,6 +346,9 @@ struct ChunkScanDistances
     int createBlasDistance;
     int fillStructuresDistance;
     int generateTerrainDistance;
+    // Measured to a region's nearest chunk; see knowledge/terrain/region_system.md
+    int keepRegionDistance;
+    int evictRegionDistance;
 };
 
 static constexpr ChunkScanDistances getScanDistances(int renderDistance)
@@ -243,17 +358,149 @@ static constexpr ChunkScanDistances getScanDistances(int renderDistance)
     // see knowledge/terrain/terrain_manager.md for why fillStructuresDistance has the
     // extra structureMaxChunkRadius term (not just +1)
     const int fillStructuresDistance = createBlasDistance + 1 + static_cast<int>(structureMaxChunkRadius);
+    const int generateTerrainDistance = fillStructuresDistance + static_cast<int>(structureMaxChunkRadius);
     return {
         .renderDistance = renderDistance,
         .createBlasDistance = createBlasDistance,
         .fillStructuresDistance = fillStructuresDistance,
-        .generateTerrainDistance = fillStructuresDistance + static_cast<int>(structureMaxChunkRadius),
+        .generateTerrainDistance = generateTerrainDistance,
+        .keepRegionDistance = generateTerrainDistance + static_cast<int>(regionSideLength) / 2,
+        // Past the ring of neighbor regions the scan creates, which would otherwise be recreated
+        // and evicted again on every chunk crossing
+        .evictRegionDistance = generateTerrainDistance + static_cast<int>(regionSideLength) + 1,
     };
 }
 
 static int getCreateBlasDistance()
 {
     return getScanDistances(SettingsManager::getAsInt("renderDistance")).createBlasDistance;
+}
+
+static int chunkDistanceToRegion(const Region& region, glm::ivec2 chunkPos)
+{
+    const glm::ivec2 axisDistance =
+        glm::max(glm::max(region.regionPosChunks - chunkPos, chunkPos - region.regionMaxPosChunks), glm::ivec2(0));
+    return glm::max(axisDistance.x, axisDistance.y);
+}
+
+static void updateRegionStaging(glm::ivec2 cameraChunkPos, const ChunkScanDistances& distances)
+{
+    for (const auto& [regionPos, region] : regions)
+    {
+        const int distance = chunkDistanceToRegion(*region, cameraChunkPos);
+        if (!evictingRegions || distance <= distances.keepRegionDistance)
+        {
+            region->setIsStaged(false);
+        }
+        else if (distance > distances.evictRegionDistance)
+        {
+            region->setIsStaged(true);
+        }
+    }
+}
+
+// Final block hashes of generated chunks in evicted regions, until they are regenerated
+static std::unordered_map<glm::ivec2, uint64_t, IVec2Hash> evictedChunkHashes;
+static std::mutex evictedChunkHashesMutex;
+
+// Only generated chunks: imported ones are regenerated from the seed, which need not match
+static void recordEvictedChunkHash(const Chunk* chunk)
+{
+    if (!validatingEviction || chunk->getState() < ChunkState::HAS_ALL_BLOCKS || chunk->getHasSerializedData())
+    {
+        return;
+    }
+    const uint64_t hash = chunk->hashFinalBlocks();
+    std::scoped_lock<std::mutex> lock(evictedChunkHashesMutex);
+    evictedChunkHashes[chunk->getChunkPos()] = hash;
+}
+
+void validateRegeneratedChunk(const Chunk* chunk)
+{
+    if (!validatingEviction || chunk->getHasSerializedData())
+    {
+        return;
+    }
+    const uint64_t hash = chunk->hashFinalBlocks();
+    std::scoped_lock<std::mutex> lock(evictedChunkHashesMutex);
+    const auto hashIter = evictedChunkHashes.find(chunk->getChunkPos());
+    if (hashIter == evictedChunkHashes.end())
+    {
+        return;
+    }
+    if (hashIter->second != hash)
+    {
+        Logger::logError("eviction validation: chunk (%d, %d) regenerated with different blocks",
+                         chunk->getChunkPos().x, chunk->getChunkPos().y);
+    }
+    evictedChunkHashes.erase(hashIter);
+}
+
+// Only once nothing pins the region, so no task can touch its chunks or step any chunk whose
+// readiness depends on them, and after the completion lists its tasks pushed to were drained
+static void removeRegion(Region* region, ToFreeList& toFreeList)
+{
+    constexpr int radius = static_cast<int>(structureMaxChunkRadius);
+    for (const std::unique_ptr<Chunk>& chunkPtr : region->chunks)
+    {
+        Chunk* chunk = chunkPtr.get();
+        if (chunk == nullptr)
+        {
+            continue;
+        }
+
+        recordEvictedChunkHash(chunk);
+
+        if (chunk->getTerrainInstance() != nullptr)
+        {
+            chunk->destroyInstances(toFreeList);
+        }
+
+        for (int dirIdx = 0; dirIdx < 4; ++dirIdx)
+        {
+            const NeighborDirection dir = static_cast<NeighborDirection>(dirIdx);
+            Chunk* neighbor = chunk->getNeighbor(dir);
+            if (neighbor != nullptr && neighbor->getRegion() != region)
+            {
+                neighbor->onNeighborRemoved(oppositeNeighborDirection(dir));
+            }
+        }
+
+        for (int offsetZ = -radius; offsetZ <= radius; ++offsetZ)
+        {
+            for (int offsetX = -radius; offsetX <= radius; ++offsetX)
+            {
+                const glm::ivec2 offset(offsetX, offsetZ);
+                const glm::ivec2 neighborPos = chunk->getChunkPos() + offset;
+                if (region->containsChunk(neighborPos))
+                {
+                    continue;
+                }
+                Chunk* neighbor = findChunk(neighborPos);
+                if (neighbor != nullptr)
+                {
+                    neighbor->onStructureNeighborRemoved(-offset);
+                }
+            }
+        }
+    }
+
+    for (int dirIdx = 0; dirIdx < 4; ++dirIdx)
+    {
+        const NeighborDirection dir = static_cast<NeighborDirection>(dirIdx);
+        if (region->getNeighbor(dir) != nullptr)
+        {
+            region->clearNeighbor(dir);
+        }
+    }
+
+    const auto regionIter = regions.find(region->regionPos);
+    {
+        std::scoped_lock<std::mutex> lock(regionsToDeleteMutex);
+        regionsToDelete.push_back(std::move(regionIter->second));
+    }
+    regionsToDeleteCv.notify_one();
+    regions.erase(regionIter);
 }
 
 // The per-chunk half of the scan: queues whatever stage the chunk's state and distance call
@@ -285,7 +532,7 @@ static void scheduleChunkWork(Chunk* chunk,
         if (chunkState == ChunkState::NEEDS_TERRAIN)
         {
             chunk->advanceState(ChunkState::GENERATING_TERRAIN);
-            chunksToGenerateTerrain.push_back(chunk);
+            generateTerrainTasks.push_back(makePinnedTask(task_generateTerrain, chunk, generateTerrainPinRadius));
         }
     }
 
@@ -294,17 +541,18 @@ static void scheduleChunkWork(Chunk* chunk,
         if (chunkState == ChunkState::HAS_TERRAIN)
         {
             chunk->advanceState(ChunkState::AWAITING_STRUCTURE_NEIGHBORS);
-            tasksToEnqueue.push_back({ task_checkStructureNeighbors, chunk });
+            tasksToEnqueue.push_back(
+                makePinnedTask(task_checkStructureNeighbors, chunk, checkStructureNeighborsPinRadius));
         }
         else if (chunkState == ChunkState::NEEDS_FILL_STRUCTURES)
         {
             chunk->advanceState(ChunkState::FILLING_STRUCTURES);
-            tasksToEnqueue.push_back({ task_fillStructures, chunk });
+            tasksToEnqueue.push_back(makePinnedTask(task_fillStructures, chunk, fillStructuresPinRadius));
         }
         else if (chunkState == ChunkState::NEEDS_SEGMENTS)
         {
             chunk->advanceState(ChunkState::GENERATING_SEGMENTS);
-            tasksToEnqueue.push_back({ task_generateSegments, chunk });
+            tasksToEnqueue.push_back(makePinnedTask(task_generateSegments, chunk, generateSegmentsPinRadius));
         }
     }
 
@@ -316,7 +564,7 @@ static void scheduleChunkWork(Chunk* chunk,
         if (chunkState == ChunkState::NEEDS_GEOMETRY)
         {
             chunk->advanceState(ChunkState::GENERATING_GEOMETRY);
-            chunksToGenerateGeometry.push_back(chunk);
+            createInstancesTasks.push_back(makePinnedTask(task_createInstances, chunk, createInstancesPinRadius));
         }
     }
     else if (inLastCreateBlasDistance)
@@ -330,8 +578,8 @@ static void scheduleChunkWork(Chunk* chunk,
         }
         else if (chunkState == ChunkState::HAS_GEOMETRY)
         {
-            // Destroy this chunk immediately (later in this function)
-            addChunkToDestroy(chunk);
+            // Destroy this chunk's instances at the end of this update
+            chunksToDestroy.push_back(chunk);
         }
     }
 }
@@ -376,48 +624,43 @@ void update(ToFreeList& toFreeList)
     cameraUnderwater = false;
     cameraBiomeValid = false;
     {
-        const glm::ivec2 regionPos = glmUtil::floorDiv(currentChunkPos, glm::ivec2(regionSideLength));
-        const auto regionIter = regions.find(regionPos);
-        if (regionIter != regions.end())
+        const Chunk* cameraChunk = findChunk(currentChunkPos);
+        const bool chunkValid = cameraChunk != nullptr && cameraChunk->getState() >= ChunkState::HAS_GEOMETRY &&
+                                !cameraChunk->getIsMarkedForDestruction();
+        if (chunkValid)
         {
-            const Chunk* cameraChunk = regionIter->second->getChunk(currentChunkPos);
-            const bool chunkValid = cameraChunk != nullptr && cameraChunk->getState() >= ChunkState::HAS_GEOMETRY &&
-                                    !cameraChunk->getIsMarkedForDestruction();
-            if (chunkValid)
+            const int localX = cameraPosInt_WS.x - (currentChunkPos.x * static_cast<int>(chunkSizeXZ));
+            const int localZ = cameraPosInt_WS.z - (currentChunkPos.y /*z*/ * static_cast<int>(chunkSizeXZ));
+
+            cameraBiome = cameraChunk->getBiomes()[localX + static_cast<int>(chunkSizeXZ) * localZ];
+            cameraBiomeValid = true;
+
+            if (cameraPosInt_WS.y >= 0 && cameraPosInt_WS.y < static_cast<int>(chunkSizeY))
             {
-                const int localX = cameraPosInt_WS.x - (currentChunkPos.x * static_cast<int>(chunkSizeXZ));
-                const int localZ = cameraPosInt_WS.z - (currentChunkPos.y /*z*/ * static_cast<int>(chunkSizeXZ));
+                const glm::uvec3 cameraBlockPos_CS{
+                    static_cast<uint32_t>(localX),
+                    static_cast<uint32_t>(cameraPosInt_WS.y),
+                    static_cast<uint32_t>(localZ),
+                };
 
-                cameraBiome = cameraChunk->getBiomes()[localX + static_cast<int>(chunkSizeXZ) * localZ];
-                cameraBiomeValid = true;
-
-                if (cameraPosInt_WS.y >= 0 && cameraPosInt_WS.y < static_cast<int>(chunkSizeY))
+                Block cameraBlock;
+                const bool blockIsWater = cameraChunk->tryGetBlock(cameraBlockPos_CS, cameraBlock) &&
+                                          Blocks::getBlockData(cameraBlock).type == BlockType::WATER;
+                if (blockIsWater)
                 {
-                    const glm::uvec3 cameraBlockPos_CS{
-                        static_cast<uint32_t>(localX),
-                        static_cast<uint32_t>(cameraPosInt_WS.y),
-                        static_cast<uint32_t>(localZ),
-                    };
-
-                    Block cameraBlock;
-                    const bool blockIsWater = cameraChunk->tryGetBlock(cameraBlockPos_CS, cameraBlock) &&
-                                              Blocks::getBlockData(cameraBlock).type == BlockType::WATER;
-                    if (blockIsWater)
+                    if (cameraBlock == Block::WATER_TOP)
                     {
-                        if (cameraBlock == Block::WATER_TOP)
-                        {
-                            const glm::vec3 cameraPosFloat_WS = camera.getPosFloat_WS();
-                            const float surfaceY = 0.875f +
-                                WaterDisplacer::sampleMeshWaveOffsetY(
-                                    glm::ivec2(cameraPosInt_WS.x, cameraPosInt_WS.z),
-                                    glm::vec2(cameraPosFloat_WS.x, cameraPosFloat_WS.z),
-                                    Renderer::getWaveTime());
-                            cameraUnderwater = cameraPosFloat_WS.y < surfaceY;
-                        }
-                        else
-                        {
-                            cameraUnderwater = true;
-                        }
+                        const glm::vec3 cameraPosFloat_WS = camera.getPosFloat_WS();
+                        const float surfaceY = 0.875f +
+                            WaterDisplacer::sampleMeshWaveOffsetY(
+                                glm::ivec2(cameraPosInt_WS.x, cameraPosInt_WS.z),
+                                glm::vec2(cameraPosFloat_WS.x, cameraPosFloat_WS.z),
+                                Renderer::getWaveTime());
+                        cameraUnderwater = cameraPosFloat_WS.y < surfaceY;
+                    }
+                    else
+                    {
+                        cameraUnderwater = true;
                     }
                 }
             }
@@ -446,6 +689,8 @@ void update(ToFreeList& toFreeList)
 
     if (updateTerrain)
     {
+        updateRegionStaging(currentChunkPos, distances);
+
         const glm::ivec2 minCurrentChunkPos = currentChunkPos - distances.generateTerrainDistance;
         const glm::ivec2 maxCurrentChunkPos = currentChunkPos + distances.generateTerrainDistance;
         const glm::ivec2 minLastChunkPos = lastChunkPos - distances.createBlasDistance;
@@ -456,51 +701,36 @@ void update(ToFreeList& toFreeList)
 
         // this combined region logic will become a problem if I ever add teleportation (since the region could
         // become huge)
-        const glm::ivec2 minRegionPos = glmUtil::floorDiv(minChunkPos, glm::ivec2(regionSideLength));
-        const glm::ivec2 maxRegionPos = glmUtil::floorDiv(maxChunkPos, glm::ivec2(regionSideLength));
+        const glm::ivec2 minRegionPos = chunkToRegionPos(minChunkPos);
+        const glm::ivec2 maxRegionPos = chunkToRegionPos(maxChunkPos);
 
         for (int regionZ = minRegionPos.y; regionZ <= maxRegionPos.y; ++regionZ)
         {
             for (int regionX = minRegionPos.x; regionX <= maxRegionPos.x; ++regionX)
             {
                 const glm::ivec2 regionPos = glm::ivec2(regionX, regionZ);
+                Region& region = *getOrCreateRegion(regionPos);
 
-                const auto [regionIter, inserted] = regions.try_emplace(regionPos, nullptr);
-                std::unique_ptr<Region>& regionPtr = regionIter->second;
-                if (inserted) // region does not exist
-                {
-                    regionPtr = std::make_unique<Region>(regionPos);
-                }
-
-                if (regionPtr->getNumNeighborsSet() < 4)
+                if (region.getNumNeighborsSet() < 4)
                 {
                     for (int neighborDirIdx = 0; neighborDirIdx < 4; ++neighborDirIdx)
                     {
                         const NeighborDirection neighborDir = static_cast<NeighborDirection>(neighborDirIdx);
 
-                        if (regionPtr->getNeighbor(neighborDir) != nullptr)
+                        if (region.getNeighbor(neighborDir) != nullptr)
                         {
                             continue;
                         }
 
-                        const glm::ivec2 neighborRegionPos = regionPos + neighborOffset(neighborDir);
-
-                        const auto [neighborRegionIter, neighborInserted] =
-                            regions.try_emplace(neighborRegionPos, nullptr);
-                        std::unique_ptr<Region>& neighborRegionPtr = neighborRegionIter->second;
-                        if (neighborInserted) // neighbor region does not exist
-                        {
-                            neighborRegionPtr = std::make_unique<Region>(neighborRegionPos);
-                        }
-
-                        regionPtr->setNeighbor(neighborDir, neighborRegionPtr.get()); // also sets opposite direction
+                        Region* neighborRegion = getOrCreateRegion(regionPos + neighborOffset(neighborDir));
+                        region.setNeighbor(neighborDir, neighborRegion); // also sets opposite direction
                     }
                 }
 
-                Region& region = *regionPtr;
+                ASSERT(!region.getIsStaged(), "the scan must stay within keepRegionDistance");
 
                 const glm::ivec2 minChunkPosInRegion = glm::max(region.regionPosChunks, minChunkPos);
-                const glm::ivec2 maxChunkPosInRegion = glm::min(region.regionPosChunks + static_cast<int>(regionSideLength) - 1, maxChunkPos);
+                const glm::ivec2 maxChunkPosInRegion = glm::min(region.regionMaxPosChunks, maxChunkPos);
 
                 for (int chunkZ = minChunkPosInRegion.y; chunkZ <= maxChunkPosInRegion.y; ++chunkZ)
                 {
@@ -530,7 +760,10 @@ void update(ToFreeList& toFreeList)
     {
         for (Chunk* chunk : chunksToRevisitNow)
         {
-            scheduleChunkWork(chunk, currentChunkPos, currentChunkPos, distances);
+            if (!chunk->getRegion()->getIsStaged())
+            {
+                scheduleChunkWork(chunk, currentChunkPos, currentChunkPos, distances);
+            }
         }
     }
 
@@ -538,25 +771,34 @@ void update(ToFreeList& toFreeList)
     CpuProfiler::beginScope("enqueue");
     // Geometry goes in ahead of new terrain: the pool is FIFO, so with a deep queue the heavy
     // generateTerrain tasks would otherwise starve the chunks that are one step from visible
-    while (!chunksToGenerateGeometry.empty())
+    while (!createInstancesTasks.empty() &&
+           scene->getNumInstancesHoldingHostGeometry(HostGeometrySize::LARGE) < maxTerrainInstancesHoldingHostGeometry)
     {
-        Chunk* chunk = chunksToGenerateGeometry.front();
-        chunksToGenerateGeometry.pop_front();
+        const Task task = createInstancesTasks.front();
+        createInstancesTasks.pop_front();
 
-        Instance* terrainInstance = scene->requestNewInstance(toFreeList);
-        Instance* waterInstance = scene->requestNewInstance(toFreeList);
-        chunk->setInstances(terrainInstance, waterInstance);
-        tasksToEnqueue.push_back({ task_createInstances, chunk });
+        Instance* terrainInstance = scene->requestNewInstance(toFreeList, HostGeometrySize::LARGE);
+        Instance* waterInstance = scene->requestNewInstance(toFreeList, HostGeometrySize::SMALL);
+        task.chunkPtr->setInstances(terrainInstance, waterInstance);
+        tasksToEnqueue.push_back(task);
     }
 
-    const uint32_t numGenerateTerrainTasksThisFrame =
-        std::min(maxNumGenerateTerrainTasksPerFrame, static_cast<uint32_t>(chunksToGenerateTerrain.size()));
-    for (int i = 0; i < numGenerateTerrainTasksThisFrame; ++i)
+    uint32_t numGenerateTerrainTasksThisFrame = 0;
+    while (numGenerateTerrainTasksThisFrame < maxNumGenerateTerrainTasksPerFrame && !generateTerrainTasks.empty())
     {
-        Chunk* chunk = chunksToGenerateTerrain.front();
-        chunksToGenerateTerrain.pop_front();
+        const Task task = generateTerrainTasks.front();
+        generateTerrainTasks.pop_front();
 
-        tasksToEnqueue.push_back({ task_generateTerrain, chunk });
+        // The camera moved away while it waited; it is generated again if the region is ever needed
+        if (task.chunkPtr->getRegion()->getIsStaged())
+        {
+            task.chunkPtr->setState(ChunkState::NEEDS_TERRAIN);
+            unpinRegions(task);
+            continue;
+        }
+
+        tasksToEnqueue.push_back(task);
+        ++numGenerateTerrainTasksThisFrame;
     }
 
     if (!tasksToEnqueue.empty())
@@ -573,7 +815,7 @@ void update(ToFreeList& toFreeList)
         ThreadMemoryAllocator threadMemoryAlloc{};
         for (const Task& task : thisFrameTasks)
         {
-            task.func(task.chunkPtr, threadMemoryAlloc);
+            task.func(task, threadMemoryAlloc);
             threadMemoryAlloc.clear();
         }
 #else
@@ -588,14 +830,34 @@ void update(ToFreeList& toFreeList)
 
     CpuProfiler::endScope(); // enqueue
     CPU_PROFILE_SCOPE("blas mark, destroy");
-    std::vector<Chunk*> chunksToCreateBlasNow;
+    // Found before the completion lists are drained: a task pushes to them before it unpins, so
+    // whatever the tasks touching these regions pushed is drained below
+    std::vector<Region*> regionsToRemove;
+    for (const auto& [regionPos, region] : regions)
     {
-        std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);
-        chunksToCreateBlasNow = std::move(chunksToCreateBlas);
-        chunksToCreateBlas.clear();
+        if (region->getIsStaged() && !region->isPinned())
+        {
+            regionsToRemove.push_back(region.get());
+        }
     }
-    for (Chunk* chunk : chunksToCreateBlasNow)
+
+    std::vector<Chunk*> chunksWithNewGeometryNow;
     {
+        std::scoped_lock<std::mutex> lock(chunksWithNewGeometryMutex);
+        chunksWithNewGeometryNow = std::move(chunksWithNewGeometry);
+        chunksWithNewGeometry.clear();
+    }
+    for (Chunk* chunk : chunksWithNewGeometryNow)
+    {
+        // Advanced here rather than by the worker so that leaving range, which only the main thread
+        // detects, is always seen either as GENERATING_GEOMETRY or as HAS_GEOMETRY
+        chunk->advanceState(ChunkState::HAS_GEOMETRY);
+        if (chunk->getIsMarkedForDestruction())
+        {
+            chunk->destroyInstances(toFreeList);
+            continue;
+        }
+
         ASSERT(chunk->getTerrainInstance()->getIsGeometryFinalized());
         scene->markInstanceReadyForBlasBuild(chunk->getTerrainInstance());
 
@@ -608,15 +870,26 @@ void update(ToFreeList& toFreeList)
         }
     }
 
-    std::vector<Chunk*> chunksToDestroyNow;
-    {
-        std::scoped_lock<std::mutex> lock(chunksToDestroyMutex);
-        chunksToDestroyNow = std::move(chunksToDestroy);
-        chunksToDestroy.clear();
-    }
-    for (Chunk* chunk : chunksToDestroyNow)
+    for (Chunk* chunk : chunksToDestroy)
     {
         chunk->destroyInstances(toFreeList);
+    }
+    chunksToDestroy.clear();
+
+    if (!regionsToRemove.empty())
+    {
+        CPU_PROFILE_SCOPE("region eviction");
+        {
+            std::scoped_lock<std::mutex> lock(chunksToRevisitMutex);
+            std::erase_if(chunksToRevisit, [&](const Chunk* chunk) {
+                return std::find(regionsToRemove.begin(), regionsToRemove.end(), chunk->getRegion()) !=
+                       regionsToRemove.end();
+            });
+        }
+        for (Region* region : regionsToRemove)
+        {
+            removeRegion(region, toFreeList);
+        }
     }
 }
 
@@ -939,7 +1212,7 @@ static void applyImportedWorld(ImportedWorld&& world, const std::filesystem::pat
     const uint32_t expected = static_cast<uint32_t>(world.pendingChunks.size());
     if (headless)
     {
-        std::scoped_lock lock(chunksToCreateBlasMutex);
+        std::scoped_lock lock(chunksWithNewGeometryMutex);
         pendingImportedChunks = std::move(world.pendingChunks);
         expectedImportedChunks.store(expected, std::memory_order_relaxed);
         importedChunksEnqueuedForBlas.store(0, std::memory_order_relaxed);
@@ -994,21 +1267,23 @@ static void resetTerrainState()
     scratchToFree.freeAll();
 
     regions.clear();
+    Chunk::clearBufferPool();
 
-    chunksToGenerateTerrain.clear();
-    chunksToGenerateGeometry.clear();
+    generateTerrainTasks.clear();
+    createInstancesTasks.clear();
     {
-        std::scoped_lock<std::mutex> lock(chunksToCreateBlasMutex);
-        chunksToCreateBlas.clear();
+        std::scoped_lock<std::mutex> lock(chunksWithNewGeometryMutex);
+        chunksWithNewGeometry.clear();
         pendingImportedChunks.clear();
     }
-    {
-        std::scoped_lock<std::mutex> lock(chunksToDestroyMutex);
-        chunksToDestroy.clear();
-    }
+    chunksToDestroy.clear();
     {
         std::scoped_lock<std::mutex> lock(chunksToRevisitMutex);
         chunksToRevisit.clear();
+    }
+    {
+        std::scoped_lock<std::mutex> lock(evictedChunkHashesMutex);
+        evictedChunkHashes.clear();
     }
     tasksToEnqueue.clear();
     thisFrameTasks.clear();
@@ -1031,9 +1306,12 @@ void reimportWorld(const std::filesystem::path& worldDir)
     }
 
     threadPool.shutdown();
+    // So no region destroyed after resetTerrainState empties the chunk buffer pool refills it
+    stopRegionDeleter();
     resetTerrainState();
     applyImportedWorld(std::move(*world), worldDir);
     threadPool.init();
+    startRegionDeleter();
 }
 
 bool pollHeadlessTerrain()
@@ -1053,13 +1331,7 @@ bool pollHeadlessTerrain()
             {
                 for (int x = -createBlasDistance; x <= createBlasDistance; ++x)
                 {
-                    const glm::ivec2 pos = lastChunkPos + glm::ivec2(x, z);
-                    const auto region = regions.find(glmUtil::floorDiv(pos, glm::ivec2(regionSideLength)));
-                    if (region == regions.end())
-                    {
-                        return false;
-                    }
-                    const Chunk* chunk = region->second->getChunk(pos);
+                    const Chunk* chunk = findChunk(lastChunkPos + glm::ivec2(x, z));
                     if (chunk == nullptr || chunk->getState() < ChunkState::HAS_GEOMETRY)
                     {
                         return false;
@@ -1085,7 +1357,33 @@ bool pollHeadlessTerrain()
 void shutdown()
 {
     threadPool.shutdown();
+    stopRegionDeleter();
+    // Here rather than in static destruction, where destroying chunks would depend on the chunk
+    // buffer pool in chunk.cpp not having been destroyed yet
+    regions.clear();
+    Chunk::clearBufferPool();
     TerrainOmm::reset();
+}
+
+ResidencyStats getResidencyStats()
+{
+    ResidencyStats stats{
+        .numRegions = static_cast<uint32_t>(regions.size()),
+        .numChunks = 0,
+        .pooledChunkBufferBytes = Chunk::getPooledBufferBytes(),
+    };
+    for (const auto& [regionPos, region] : regions)
+    {
+        for (const std::unique_ptr<Chunk>& chunk : region->chunks)
+        {
+            if (chunk != nullptr)
+            {
+                ++stats.numChunks;
+                stats.chunkMemory += chunk->getMemory();
+            }
+        }
+    }
+    return stats;
 }
 
 bool isCameraUnderwater()

@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-02_
 
 # World Export / Import
 
@@ -82,18 +82,20 @@ Export gates per chunk on `state >= HAS_ALL_BLOCKS`. Anything below that — inc
 - Past `HAS_ALL_BLOCKS`, no task ever mutates a chunk's `blocks` / `biomes` / `structures` again, so the export reads stable data without any lock. A `HAS_TERRAIN` chunk could transition to `FILLING_STRUCTURES` mid-export and produce a torn read.
 - Saving only completed blocks means restored chunks can skip generation without retaining an intermediate generation stage.
 
+Export only covers resident regions: with eviction on, regions the camera left far behind are gone and are not exported (see [region_system.md](region_system.md#lifetime)).
+
 ## Early-return is correctness, not optimization
 
-Restored chunks load their data, set `hasSerializedData = true`, and **traverse the full state machine** starting at `NEEDS_TERRAIN`. This applies equally to explicit imports and future cache reloads. Each task whose data product was already serialized skips its inner data work but still runs the state advance and atomic-counter side effects:
+Restored chunks load their data, set `hasSerializedData = true`, and **traverse the full state machine** starting at `NEEDS_TERRAIN`. This applies equally to explicit imports and future cache reloads. Each task whose data product was already serialized skips its inner data work but still runs the state advance and readiness-mask side effects:
 
 | Task | If `hasSerializedData` |
 |---|---|
 | `generateTerrain` | skip generation; retain v7 masks or build the legacy approximation; advance to `HAS_TERRAIN` |
-| `checkStructureNeighbors` | unchanged (always runs — drives 3×3 counter on 9 neighbors) |
+| `checkStructureNeighbors` | unchanged (always runs — sets this chunk's bit in its 9 structure neighbors' masks) |
 | `fillStructuresAndDecorators` | skip structure fill loop AND decorator pass; advance to `HAS_ALL_BLOCKS` |
 | `generateSegments`, `createInstances` | unchanged (segments + geometry are not serialized) |
 
-The counter side effects (`numReadyStructureNeighbors`, `numNeighborsWithBlocks`) drive dependency-driven state transitions on neighbors. Skipping them strands fresh-generated boundary chunks at `HAS_TERRAIN` (need 3×3 counter) or `HAS_ALL_BLOCKS` (need 4-cardinal counter). Re-running the inner data work is also unsafe — re-stamping already-final blocks risks divergence even when individual operations look idempotent. So early-return must wrap exactly the data-mutating section, never the counter section.
+The mask side effects (`readyStructureNeighborsMask`, `neighborsWithBlocksMask`) drive dependency-driven state transitions on neighbors. Skipping them strands fresh-generated boundary chunks at `HAS_TERRAIN` (need the 3×3 mask) or `HAS_ALL_BLOCKS` (need the 4-cardinal mask). Re-running the inner data work is also unsafe — re-stamping already-final blocks risks divergence even when individual operations look idempotent. So early-return must wrap exactly the data-mutating section, never the mask section.
 
 ## `ChunkGenerator::init()` must rerun after `setWorldSeed`
 
@@ -130,7 +132,7 @@ The counter ticks on **enqueue** to the BLAS-create queue, not on GPU-side BLAS-
 
 ### Cost containment
 
-All counter mutation in `addChunkToCreateBlas` is wrapped in `if (headless && worldImportActive.load(...))` so the interactive path stays at zero extra atomic ops. `headless` is cached at `Terrain::init` from `SettingsManager::isHeadless()` (rendering tests and perf runs both await the import), mirroring how `renderer.cpp` caches its `headless`/`voxelMode` flags. Workers see the cached value via the happens-before edge from `threadPool.init()` in `Terrain::init()`.
+All counter mutation in `addChunkWithNewGeometry` is wrapped in `if (headless && worldImportActive.load(...))` so the interactive path stays at zero extra atomic ops. `headless` is cached at `Terrain::init` from `SettingsManager::isHeadless()` (rendering tests and perf runs both await the import), mirroring how `renderer.cpp` caches its `headless`/`voxelMode` flags. Workers see the cached value via the happens-before edge from `threadPool.init()` in `Terrain::init()`.
 
 ## Structure count bound
 

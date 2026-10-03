@@ -7,6 +7,7 @@
 
 #include "debug.h"
 
+#include <array>
 #include <atomic>
 #include <mutex>
 #include <queue>
@@ -14,12 +15,16 @@
 #include <vector>
 
 class Chunk;
+class Region;
 class ThreadMemoryAllocator;
 
 struct Task
 {
-    void (*func)(Chunk*, ThreadMemoryAllocator&);
+    void (*func)(const Task&, ThreadMemoryAllocator&);
     Chunk* chunkPtr;
+    // Pinned while the task is queued or running so they cannot be removed; func unpins them
+    std::array<Region*, 4> pinnedRegions{};
+    uint32_t numPinnedRegions{ 0 };
 };
 
 class ThreadPool
