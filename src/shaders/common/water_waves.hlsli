@@ -7,7 +7,6 @@
 #include "../rendering/common/common_settings.h"
 
 #include "util/FastNoiseLite.hlsli"
-#include "util/math.hlsli"
 
 // Layered wave model. Vertex displacement (waveHeight) is a pure analytic sum of sines:
 // two large-scale swells present everywhere, plus three small chop waves scaled by a
@@ -85,20 +84,23 @@ fnl_state makeNoiseState(int seed, int fractalType, int octaves)
 static const fnl_state MED_CHOP_NOISE_STATE = makeNoiseState(9001, FNL_FRACTAL_NONE, 1);
 static const fnl_state NOISE_WAVE_STATE = makeNoiseState(1337, FNL_FRACTAL_FBM, NOISE_WAVE_OCTAVES);
 
-// Weight of a band of detail seen through a pixel footprint (in blocks), fading out as the footprint
-// grows from minWavelength to maxWavelength; detail finer than a footprint only aliases into sparkle
-float waveDetailWeight(float minWavelength, float maxWavelength, float footprint)
+// ===== Shading detail fade =====
+// TODO: revisit these fades; the look of far water isn't final yet.
+// Camera distances in blocks over which each band fades out of the shading normal, finest first:
+// detail that falls below a pixel only aliases into sparkle. The swells last longest, so far water
+// still reads as waves.
+static const float2 NOISE_FADE_DISTANCES = float2(48.f, 192.f);
+static const float2 CHOP_FADE_DISTANCES = float2(128.f, 512.f);
+static const float2 SWELL_FADE_DISTANCES = float2(1024.f, 4096.f);
+
+float shadingDetailWeight(float2 fadeDistances, float cameraDistance)
 {
-    return 1.f - smoothstep(minWavelength, maxWavelength, footprint);
+    return 1.f - smoothstep(fadeDistances.x, fadeDistances.y, cameraDistance);
 }
 
-// accumulates one sine wave's height into x and its analytic XZ gradient into yz, faded out once the
-// pixel footprint (0 for none) reaches its wavelength
-void addWave(float amplitude, float2 waveVec, float speed, float2 posXZ_WS, float waveTime, float footprint,
-             inout float3 heightAndGrad)
+// accumulates one sine wave's height into x and its analytic XZ gradient into yz
+void addWave(float amplitude, float2 waveVec, float speed, float2 posXZ_WS, float waveTime, inout float3 heightAndGrad)
 {
-    const float wavelength = M_TWO_PI / length(waveVec);
-    amplitude *= waveDetailWeight(0.25f * wavelength, wavelength, footprint);
     const float phase = dot(posXZ_WS, waveVec) + speed * waveTime;
     heightAndGrad.x += amplitude * sin(phase);
     heightAndGrad.yz += amplitude * cos(phase) * waveVec;
@@ -119,15 +121,17 @@ float sineChop01(float2 posXZ_WS, float waveTime)
     return sineChop01AndGradient(posXZ_WS, waveTime).x;
 }
 
-// returns height in x, d(height)/dx in y, d(height)/dz in z, filtered to the pixel footprint
-float3 waveHeightAndGradient(float2 posXZ_WS, float waveTime, float footprint)
+// returns height in x, d(height)/dx in y, d(height)/dz in z, with the bands faded for shading at
+// cameraDistance (0 for no fade)
+float3 waveHeightAndGradient(float2 posXZ_WS, float waveTime, float cameraDistance)
 {
     float3 result = float3(0.f, 0.f, 0.f);
     [unroll]
     for (int i = 0; i < SWELL_WAVE_COUNT; i++)
     {
-        addWave(SWELL_STRENGTHS[i], SWELL_FREQS[i], SWELL_SPEEDS[i], posXZ_WS, waveTime, footprint, result);
+        addWave(SWELL_STRENGTHS[i], SWELL_FREQS[i], SWELL_SPEEDS[i], posXZ_WS, waveTime, result);
     }
+    result *= shadingDetailWeight(SWELL_FADE_DISTANCES, cameraDistance);
 
     const float3 envelope = sineChop01AndGradient(posXZ_WS, waveTime);
 
@@ -135,8 +139,9 @@ float3 waveHeightAndGradient(float2 posXZ_WS, float waveTime, float footprint)
     [unroll]
     for (int j = 0; j < CHOP_WAVE_COUNT; j++)
     {
-        addWave(CHOP_STRENGTHS[j], CHOP_FREQS[j], CHOP_SPEEDS[j], posXZ_WS, waveTime, footprint, chop);
+        addWave(CHOP_STRENGTHS[j], CHOP_FREQS[j], CHOP_SPEEDS[j], posXZ_WS, waveTime, chop);
     }
+    chop *= shadingDetailWeight(CHOP_FADE_DISTANCES, cameraDistance);
 
     // product rule: d(envelope * chop.x) = envelopeGrad * chop.x + envelope * chopGrad
     result.x += envelope.x * chop.x;
@@ -183,11 +188,9 @@ float medChop01(float2 posXZ_WS, float noiseTime)
 // noise tilt added to the shading normal via the wave gradient. Two decorrelated
 // OpenSimplex2 FBM samples give independent X and Z perturbation, scaled by a choppiness
 // factor (large-scale sine envelope * medium-scale noise envelope), floored at CHOP_FLOOR.
-float2 waveNormalPerturbation(float2 posXZ_WS, float waveTime, float noiseTime, float footprint)
+float2 waveNormalPerturbation(float2 posXZ_WS, float waveTime, float noiseTime, float cameraDistance)
 {
-    // From the finest octave's wavelength to the base octave's
-    const float baseWavelength = 1.f / NOISE_WAVE_FREQ;
-    const float weight = waveDetailWeight(baseWavelength / (1 << (NOISE_WAVE_OCTAVES - 1)), baseWavelength, footprint);
+    const float weight = shadingDetailWeight(NOISE_FADE_DISTANCES, cameraDistance);
     if (weight <= 0.f)
     {
         return float2(0.f, 0.f);
@@ -207,12 +210,12 @@ float2 waveNormalPerturbation(float2 posXZ_WS, float waveTime, float noiseTime, 
 // perturbation, flipped for backface (underwater) hits.
 // Not faded with the displacement: the shading normal keeps the wave gradient over water whose
 // geometry the distance fade has flattened, so far water still reads as waves and the fade
-// boundary shows no change in shading, only in silhouette. Instead each band fades with the pixel
-// footprint (in blocks) as it becomes too fine to resolve, the noise first and the swells last.
-float3 waveShadingNormal(float2 posXZ_WS, float waveTime, float noiseTime, bool backfaceHit, float footprint)
+// boundary shows no change in shading, only in silhouette. Instead each band fades with camera
+// distance (see SWELL_FADE_DISTANCES).
+float3 waveShadingNormal(float2 posXZ_WS, float waveTime, float noiseTime, bool backfaceHit, float cameraDistance)
 {
-    const float2 grad = waveHeightAndGradient(posXZ_WS, waveTime, footprint).yz
-                      + waveNormalPerturbation(posXZ_WS, waveTime, noiseTime, footprint);
+    const float2 grad = waveHeightAndGradient(posXZ_WS, waveTime, cameraDistance).yz
+                      + waveNormalPerturbation(posXZ_WS, waveTime, noiseTime, cameraDistance);
     const float flip = backfaceHit ? -1.f : 1.f;
     return flip * normalize(float3(-grad.x, 1.f, -grad.y));
 }
