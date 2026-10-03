@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-03_
 
 # Knowledgebase Index
 
@@ -14,7 +14,7 @@ Each subsystem has its own folder with a local `index.md` that describes its ent
 | [multithreading/](multithreading/index.md) | Thread pool, parallel chunk generation pipeline |
 | [settings/](settings/index.md) | Runtime settings and CLI argument parsing |
 | [util/](util/index.md) | Math helpers, RNG, Halton sequence, ring buffer |
-| [build/](build/index.md) | CMake configurations, third-party dependencies |
+| [build/](build/index.md) | CMake configurations, third-party dependencies, app icon |
 | [debugging/](debugging/index.md) | GPU fault diagnosis: Aftermath crash dumps and reference instrumentation to read and adapt |
 | [tests/](tests/index.md) | CPU unit tests, rendering tests, performance runs, and ad hoc CPU terrain experiments |
 | [reference/](reference/index.md) | Vendored upstream docs (DirectX-Specs) for agent reference |
