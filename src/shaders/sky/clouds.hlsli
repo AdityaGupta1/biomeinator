@@ -7,6 +7,7 @@
 #include "materials/water.hlsli"
 #include "sky/cloud_traversal.hlsli"
 #include "sky/sky_lighting.hlsli"
+#include "util/color.hlsli"
 #include "util/sampling.hlsli"
 
 // Analytic optical depth through occupied cells. Shadow-type query: travel inside the layer is
@@ -49,19 +50,11 @@ float3 cloudAmbientLight()
     return renderParams.cloudSettings.ambient * getSkyColor(float3(0.f, 1.f, 0.f));
 }
 
-// DLSS guide color for a sky ray: unshadowed cloud color blended with the sky by the segment's
+// DLSS diffuse albedo for a sky ray: white cloud blended with the tonemapped sky by the segment's
 // analytic transmittance, so the lighting sample count and RNG can never add noise to the guide.
-float3 cloudGuideColor(const float3 dir, const float3 skyColor, const float transmittance)
+float3 cloudGuideAlbedo(const float3 skyColor, const float transmittance)
 {
-    if (transmittance == 1.f)
-    {
-        return skyColor;
-    }
-    const CloudSettings c = renderParams.cloudSettings;
-    const float3 sunDir = getSunDir_WS();
-    const float3 sunLight = getAttenuatedSunIlluminance(sunDir, c.baseHeight + 0.5f * c.thickness);
-    const float3 unshadowedColor = cloudAmbientLight() + sunLight * cloudSunScattering(dot(dir, sunDir), 0.f);
-    return lerp(unshadowedColor, skyColor, transmittance);
+    return lerp(1.f, applyReinhard(skyColor), transmittance);
 }
 
 struct CloudResult
