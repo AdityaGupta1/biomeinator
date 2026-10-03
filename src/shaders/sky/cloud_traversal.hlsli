@@ -135,3 +135,24 @@ bool cloudSurfaceDistance(const float3 origin_WS, const float3 dir, const float 
     surfaceDistance = interval.y;
     return true;
 }
+
+// Normal of the cloud box face nearest to a point on a cloud boundary, facing back along the ray.
+float3 cloudSurfaceNormal(const float3 pos_WS, const float3 dir)
+{
+    const CloudSettings c = renderParams.cloudSettings;
+    const float3 p = cloudPosition(pos_WS);
+    const float2 cellFrac = frac(p.xz / c.cellSize);
+    const float2 sideDistance = min(cellFrac, 1.f - cellFrac) * c.cellSize;
+    const float layerDistance = min(abs(p.y - c.baseHeight), abs(p.y - (c.baseHeight + c.thickness)));
+
+    float3 normal = float3(0.f, 1.f, 0.f);
+    if (sideDistance.x < layerDistance && sideDistance.x <= sideDistance.y)
+    {
+        normal = float3(1.f, 0.f, 0.f);
+    }
+    else if (sideDistance.y < layerDistance)
+    {
+        normal = float3(0.f, 0.f, 1.f);
+    }
+    return dot(normal, dir) > 0.f ? -normal : normal;
+}
