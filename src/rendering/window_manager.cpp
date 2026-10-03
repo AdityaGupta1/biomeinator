@@ -408,8 +408,7 @@ void init()
                            nullptr,
                            nullptr);
 
-    // Render-to-file runs never show the window; other runs are brought to the front by the renderer once init
-    // finishes
+    // Render-to-file runs stay hidden; others are brought to the front by the renderer once init finishes
     if (!SettingsManager::isRenderToFileMode())
     {
         ShowWindow(hwnd, SW_SHOWNOACTIVATE);
