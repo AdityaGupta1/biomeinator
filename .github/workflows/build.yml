@@ -1,0 +1,43 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      LFS_BUILD_INPUTS: external/**/*.lib,external/dxc/bin/**
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch build submodules
+        run: git submodule update --init --recursive --depth 1 -- external
+
+      - name: List LFS build inputs
+        shell: bash
+        run: git lfs ls-files --long --include="${{ env.LFS_BUILD_INPUTS }}" > lfs-external.txt
+
+      - uses: actions/cache@v4
+        with:
+          path: .git/lfs/objects
+          key: lfs-external-${{ hashFiles('lfs-external.txt') }}
+
+      - name: Fetch LFS build inputs
+        run: git lfs pull --include="${{ env.LFS_BUILD_INPUTS }}"
+
+      - name: Configure
+        run: cmake -S . -B build
+
+      - name: Build
+        run: cmake --build build --config RelWithDebInfo --parallel
+
+      - name: Run unit tests
+        run: ctest --test-dir build -C RelWithDebInfo -L unit --output-on-failure
