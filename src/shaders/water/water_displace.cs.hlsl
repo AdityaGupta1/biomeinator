@@ -64,10 +64,10 @@ void csMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float displacement = waveHeight(restPos_WS.xz, waveTime) * fade;
     vert.pos_OS.y = restY + displacement;
     // Side faces run v = 0 at their cell's top edge; following the moved vertex keeps a textured side face
-    // (a waterline band) still in world space instead of stretching it
+    // (a waterline band) still in world space
     if (abs(octDecode(vert.packedNor).y) < 0.5f)
     {
-        vert.uv.y = (1.f - 0.875f) - displacement;
+        vert.uv.y = ceil(restY) - vert.pos_OS.y;
     }
     vertsOut[vertIdx] = vert;
 }

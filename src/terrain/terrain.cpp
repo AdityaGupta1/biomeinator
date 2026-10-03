@@ -542,8 +542,7 @@ void update(ToFreeList& toFreeList)
 
         Instance* terrainInstance = scene->requestNewInstance(toFreeList);
         Instance* waterInstance = scene->requestNewInstance(toFreeList);
-        Instance* waterlineInstance = scene->requestNewInstance(toFreeList);
-        chunk->setInstances(terrainInstance, waterInstance, waterlineInstance);
+        chunk->setInstances(terrainInstance, waterInstance);
         tasksToEnqueue.push_back({ task_createInstances, chunk });
     }
 
@@ -598,6 +597,7 @@ void update(ToFreeList& toFreeList)
         scene->markInstanceReadyForBlasBuild(chunk->getTerrainInstance());
 
         chunk->cleanUnusedInstances(toFreeList);
+        chunk->createWaterlineInstance(scene, toFreeList);
 
         for (Instance* instance : chunk->getDeformableInstances())
         {

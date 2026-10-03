@@ -133,7 +133,8 @@ void RayGeneration()
 
     Payload payload;
     payload.materialIdx = MATERIAL_IDX_INVALID;
-    payload.flags = (sceneParams.cameraMedium << PAYLOAD_MEDIUM_SHIFT) | PAYLOAD_FLAG_IS_GBUFFER;
+    payload.flags = PAYLOAD_FLAG_IS_GBUFFER;
+    setPayloadMedium(payload, sceneParams.cameraMedium);
     payload.rng = initRng(constantParams.rngSeed, 123909203, linearPixelIdx, renderParams.frameNumber);
     payload.waterEntryT = RAY_DEFAULT_TMAX;
     payload.waterExitT = RAY_DEFAULT_TMAX;

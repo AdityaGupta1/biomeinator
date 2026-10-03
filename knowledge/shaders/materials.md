@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-02_
 
 # Material Model and BSDFs
 
@@ -118,9 +118,9 @@ The Fresnel table's sampling and evaluation agree only up to table accuracy: sam
 with the true average while evaluation uses the tabulated one. The table's below-1 half measures its
 angle axis from the critical angle (`ggxCriticalCosAxis`), because interpolating between IOR slices
 whose ramps sit at different angles blurs the ramp badly; with that, the error at the ice interfaces is
-at most about 0.04, confined to a few degrees around the critical angle. The glossy lobe itself is
-exact. Comparing `--samplingMode=0` against MIS on voxel scenes cannot isolate this: naive sampling
-converges much more slowly on the sun and comes out darker even on scenes without ice.
+at most about 0.03, confined to a few degrees around the critical angle. The glossy lobe itself is
+exact. The table's IOR axis stops at a ratio of about 2.5 (`GGX_FRESNEL_TABLE_MAX_Z`) and clamps beyond
+it; raise the generator's `MAX_Z` before giving a scattering surface a denser neighbor.
 
 ## Procedural color
 

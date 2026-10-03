@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-02_
 
 # Mesh Generation
 
@@ -6,7 +6,7 @@ _Last edited: 2026-09-30_
 
 ## Three Instances Per Chunk
 
-Terrain and water are separate `Instance` objects with independent BLAS. Water gets `FACE_FLAG_IS_WATER` on all triangles so the path tracer can handle it differently. A third, the waterline instance, holds only the split side faces described below. Water and waterline instances are freed in `cleanUnusedInstances` when they end up with no faces.
+Terrain and water are separate `Instance` objects with independent BLAS. Water gets `FACE_FLAG_IS_WATER` on all triangles so the path tracer can handle it differently. If no water faces are generated, the water instance is freed in `cleanUnusedInstances`. A third, the waterline instance, holds only the split side faces described below. Few chunks have any, so unlike the other two it is not requested up front: the worker meshes the bands into chunk-owned vectors, and `createWaterlineInstance` makes the instance on the main thread when the chunk is queued for its BLAS, only if there are bands.
 
 ## Face Media
 
@@ -35,10 +35,11 @@ face, so the texture stays fixed in world space and only the split line slides o
 carry no `FACE_FLAG_IS_WATER_TOP`, so the G-buffer reports camera-only motion for them, which is
 correct for a world-locked texture.
 
-**Unresolved:** an emissive volume block next to a water top would register its bands as area
-lights, but per-frame displacement never rebuilds the light sampling structure, so their triangle
-areas (and NEE's light pdf) would go stale. No emissive volume block exists yet; the fix is left
-open.
+**Unresolved:** waterline bands are never registered as area lights, so an emissive volume block
+next to a water top would light the world through its bands by BSDF sampling only. Registering them
+is not just a matter of adding them: per-frame displacement never rebuilds the light sampling
+structure, so their triangle areas (and NEE's light pdf) would go stale. No emissive volume block
+exists yet; the fix is left open.
 
 ## Crack Prevention
 

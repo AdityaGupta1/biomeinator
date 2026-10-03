@@ -5,6 +5,8 @@
 #ifndef COMMON_STRUCTS_H
 #define COMMON_STRUCTS_H
 
+#include "common_media.h"
+
 #ifdef __cplusplus
 #include <DirectXMath.h>
 
@@ -109,8 +111,7 @@ struct InstanceData
 // auxTextureId is a packed aux texture: r = emissive strength (color comes from the
 // base color texture, whose diffuse is zero wherever r > 0), g = biome tint mask.
 #define MATERIAL_FLAG_PACKED_AUX (1 << 4)
-// Rough glossy reflection over diffuse evaluates Fresnel per microfacet instead of at the shading normal,
-// leaving the diffuse lobe what the visible microfacets don't reflect on average (see glossyReflectionProbability)
+// Rough glossy reflection over diffuse evaluates Fresnel per microfacet instead of at the shading normal
 #define MATERIAL_FLAG_MICROFACET_FRESNEL (1 << 5)
 
 #define MATERIAL_FLAGS_DIFFUSE_OR_GLOSSY_TRANSMISSION (MATERIAL_FLAG_DIFFUSE | MATERIAL_FLAG_GLOSSY_TRANSMISSION)
@@ -314,14 +315,6 @@ static_assert(sizeof(PackedTerrainVertex) == 12, "PackedTerrainVertex must be 12
 // Faces of a scattering medium, approximated as a surface: glossy reflection over a diffuse lobe
 // that transmits part of its light (see applyScatteringMaterial)
 #define FACE_FLAG_IS_SCATTERING (1 << 7)
-
-// Media that fill voxel cells. Each terrain face records the medium in front of it (the side its
-// normal points to) and behind it; equal media mean the face is not a medium boundary.
-#define MEDIUM_AIR 0
-#define MEDIUM_WATER 1
-#define MEDIUM_ICE 2
-#define MEDIUM_GLASS 3
-#define MEDIUM_COUNT 4
 
 #define FACE_MEDIUM_BITS 3
 #define FACE_MEDIUM_MASK ((1u << FACE_MEDIUM_BITS) - 1u)

@@ -150,12 +150,9 @@ void applyGlassMaterial(inout Material material, const float2 uv, const TexSampl
 // back out of the side it entered
 static const float scatteringDiffuseTransmission = 0.85f;
 
-// Turns the hit's material into a surface standing in for a scattering medium (ice), for faces
-// flagged FACE_FLAG_IS_SCATTERING: light that gets past the untinted glossy reflection scatters
-// inside and leaves through either side, approximated by a diffuse lobe that transmits part of it.
-// Roughness comes from the packed aux b channel, as for glass. Fresnel is per microfacet: the
-// near index-matched ice-water face total-internally-reflects within a few degrees of grazing, which
-// a shading-normal Fresnel would turn into a hard mirror line across the ice underside.
+// Turns the hit's material into a surface standing in for a scattering medium (ice), for faces flagged
+// FACE_FLAG_IS_SCATTERING: untinted glossy reflection over a diffuse lobe that transmits part of its light.
+// Roughness comes from the packed aux b channel, as for glass.
 void applyScatteringMaterial(inout Material material, const float2 uv, const TexSampleCtx texCtx)
 {
     material.flags |= MATERIAL_FLAG_GLOSSY_REFLECTION | MATERIAL_FLAG_MICROFACET_FRESNEL;
@@ -191,11 +188,9 @@ float3 calculateDlssSpecularAlbedo(const float3 glossyReflectionTint, const floa
     return mad(glossyReflectionTint, max(0, scale), max(0, bias));
 }
 
-// Probability of choosing the glossy reflection lobe in sampleBsdf, and the share of light the diffuse
-// lobe beneath it doesn't get. With shading-normal Fresnel it is also the Fresnel weight applied to the
-// glossy lobe, so it cancels out of the sampling weight. With microfacet Fresnel the glossy lobe instead
-// carries F at its half vector and this is that F's average over the visible microfacets, tabulated, so
-// sampleBsdf's per-microfacet choice picks diffuse with (up to table error) one minus this probability.
+// Probability of choosing the glossy reflection lobe in sampleBsdf, and the share of light the diffuse lobe
+// beneath it doesn't get. With shading-normal Fresnel it is also the glossy lobe's Fresnel weight, so it
+// cancels out of the sampling weight; with microfacet Fresnel it is the visible microfacets' average Fresnel.
 // sampleBsdf and evaluateBsdf must use the exact same value or MIS breaks silently.
 float glossyReflectionProbability(const Material material, const float3 wo_WS, const float3 surfShadingNor_WS)
 {
@@ -210,15 +205,21 @@ float glossyReflectionProbability(const Material material, const float3 wo_WS, c
     const float cosThetaWo = cosTheta(wo_WS, surfShadingNor_WS);
     if (material.hasMicrofacetFresnel() && material.roughness > 0.f)
     {
-        return ggxFresnelAlbedo(material.roughness, saturate(cosThetaWo), material.ior);
+        // No microfacet is visible from behind the shading normal, so all light goes to the diffuse lobe
+        return (cosThetaWo > 0.f) ? ggxFresnelAlbedo(material.roughness, cosThetaWo, material.ior) : 0.f;
     }
     return walterFresnel(material.ior, cosThetaWo);
+}
+
+float microfacetFresnel(const Material material, const float3 wo_WS, const float3 h_WS)
+{
+    return walterFresnel(material.ior, dot(wo_WS, h_WS));
 }
 
 // Fresnel weight of the rough glossy reflection lobe for the microfacet h_WS
 float glossyReflectionFresnel(const Material material, const float3 wo_WS, const float3 h_WS, const float fresnelReflectance)
 {
-    return material.hasMicrofacetFresnel() ? walterFresnel(material.ior, dot(wo_WS, h_WS)) : fresnelReflectance;
+    return material.hasMicrofacetFresnel() ? microfacetFresnel(material, wo_WS, h_WS) : fresnelReflectance;
 }
 
 // Terms shared by the value and pdf of the dielectric lobe (glossy reflection + glossy transmission, i.e. glass).
@@ -532,10 +533,11 @@ BsdfSample sampleBsdf(const Material material,
         return sampleDielectricBsdf(material, uv, wo_WS, surfShadingNor_WS, texCtx, rng);
     }
 
-    const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfShadingNor_WS);
     const float alpha = material.roughness * material.roughness;
     // Microfacet Fresnel picks the lobe per sampled microfacet, as the dielectric does
     const bool sampleMicrofacetFirst = material.hasMicrofacetFresnel() && material.roughness > 0.f;
+    const float fresnelReflectance =
+        sampleMicrofacetFirst ? 0.f : glossyReflectionProbability(material, wo_WS, surfShadingNor_WS);
     // A mapped normal can face away from wo even when its mirror reflection is
     // above the geometric surface. GGX has no visible microfacets from that side;
     // evaluating such a sample would give value = pdf = 0 and poison accumulation.
@@ -544,12 +546,12 @@ BsdfSample sampleBsdf(const Material material,
     bool chooseReflect;
     if (sampleMicrofacetFirst)
     {
-        if (woFacesAway)
+        chooseReflect = false;
+        if (!woFacesAway)
         {
-            return deadBsdfSample(surfShadingNor_WS);
+            h_WS = sampleGgxVndf(wo_WS, surfShadingNor_WS, alpha, rng);
+            chooseReflect = rng.nextFloat() < microfacetFresnel(material, wo_WS, h_WS);
         }
-        h_WS = sampleGgxVndf(wo_WS, surfShadingNor_WS, alpha, rng);
-        chooseReflect = rng.nextFloat() < walterFresnel(material.ior, dot(wo_WS, h_WS));
     }
     else
     {
@@ -648,12 +650,16 @@ Material getMaterialFromPayload(const Payload payload, const PerFaceData perFace
     if (perFaceData.hasFlag(FACE_FLAG_IS_GLASS))
         applyGlassMaterial(material, payload.hitInfo.uv, texCtx);
     if (perFaceData.hasFlag(FACE_FLAG_IS_SCATTERING))
+    {
         applyScatteringMaterial(material, payload.hitInfo.uv, texCtx);
+    }
     material.roughness = getMaterialRoughness(material, payload.hitInfo.uv, texCtx);
     if (perFaceData.hasFlag(FACE_FLAG_DIFFUSE_TRANSMISSION))
         material.diffuseTransmission = foliageDiffuseTransmission;
     if (perFaceData.isMediumBoundary())
+    {
         material.ior = mediumIors[perFaceData.getBackMedium()] / mediumIors[perFaceData.getFrontMedium()];
+    }
 
     if (bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT))
     {

@@ -65,7 +65,7 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
                                 const float3 surfGeoNor_WS,
                                 const RayCone rayCone,
                                 const bool canPassthrough,
-                                const bool startUnderwater,
+                                const uint2 surfMedia,
                                 const bool acceptsBacksideLight,
                                 inout RandomNumberGenerator rng)
 {
@@ -96,7 +96,8 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
     domeLightPayload.flags = canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0;
     domeLightPayload.pathWeight = float3(1.f, 1.f, 1.f);
     domeLightPayload.rng = rng;
-    domeLightPayload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;
+    domeLightPayload.waterEntryT =
+        isShadowRayStartUnderwater(surfMedia, wi_WS, surfGeoNor_WS) ? 0.f : RAY_DEFAULT_TMAX;
     domeLightPayload.waterExitT = RAY_DEFAULT_TMAX;
     domeLightPayload.rayCone = rayCone;
 

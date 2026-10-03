@@ -5,7 +5,7 @@
 
 #include "block_ids.h"
 #include "block_orientation.h"
-#include "rendering/common/common_structs.h"
+#include "rendering/common/common_media.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -142,7 +142,10 @@ constexpr bool blockFaceVisible(BlockType type, BlockShape shape, BlockType neig
                face == BlockFace::X_POS || face == BlockFace::Z_POS || face == BlockFace::Y_POS;
     case BlockType::GLASS:
     case BlockType::SCATTERING:
-        if (neighborType == type || neighborType == BlockType::SOLID) return false;
+        if (neighborType == type || neighborType == BlockType::SOLID)
+        {
+            return false;
+        }
         // Two different volume blocks share one interface face, owned like a cutout boundary.
         return !isVolumeType(neighborType) ||
                face == BlockFace::X_POS || face == BlockFace::Z_POS || face == BlockFace::Y_POS;

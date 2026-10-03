@@ -375,19 +375,19 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 // sample area lights
                 // ------------------------------
 
-                const bool isUnderwater = getPayloadMedium(payload) == MEDIUM_WATER;
+                const uint2 surfMedia = uint2(getPayloadMedium(payload), getFarSideMedium(payload, perFaceData));
 
                 DirectLightingSample lightSample;
                 if (useRtsl)
                 {
                     lightSample = sampleDirectLightingRtsl(
-                        surfPos_WS, surfShadingNor_WS, surfGeoNor_WS, payload.rayCone, canPassthrough, isUnderwater,
+                        surfPos_WS, surfShadingNor_WS, surfGeoNor_WS, payload.rayCone, canPassthrough, surfMedia,
                         surfMaterial.acceptsBacksideLight(), payload.rng);
                 }
                 else
                 {
                     lightSample =
-                        sampleDirectLightingUniform(surfPos_WS, surfGeoNor_WS, payload.rayCone, canPassthrough, isUnderwater,
+                        sampleDirectLightingUniform(surfPos_WS, surfGeoNor_WS, payload.rayCone, canPassthrough, surfMedia,
                             surfMaterial.acceptsBacksideLight(), payload.rng);
                 }
 
@@ -416,7 +416,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 if (sceneParams.voxelMode == 1)
                 {
                     DomeLightSample domeLightSample = sampleDomeLight(surfPos_WS, surfShadingNor_WS, surfGeoNor_WS, payload.rayCone,
-                        canPassthrough, isUnderwater, surfMaterial.acceptsBacksideLight(), payload.rng);
+                        canPassthrough, surfMedia, surfMaterial.acceptsBacksideLight(), payload.rng);
                     if (domeLightSample.didReachDomeLight)
                     {
                         // no need to consider area light pdf because area light sampling can't hit dome light
@@ -497,7 +497,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 payload.pathWeight *= absCosTheta(surfBsdfSample.wi_WS, surfShadingNor_WS);
             }
 
-            if (dot(surfBsdfSample.wi_WS, surfShadingNor_WS) < 0.f)
+            if (dot(surfBsdfSample.wi_WS, surfGeoNor_WS) < 0.f)
             {
                 transmitThroughFace(payload, perFaceData);
             }

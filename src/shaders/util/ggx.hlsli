@@ -68,7 +68,6 @@ float3 sampleGgxVndf(const float3 wo_WS, const float3 surfShadingNor_WS, const f
 
 static const uint GGX_TABLE_SIZE = 32u; // per axis of ggxETable / ggxEavgTable
 static const uint GGX_GLASS_TABLE_SIZE = 16u; // per axis of the ggxGlass*Table set
-static const uint3 GGX_FRESNEL_TABLE_SIZE = uint3(16u, 32u, 32u); // roughness, cosThetaV, z axes of ggxFresnel*Table
 
 // Maps a [0, 1] table coordinate to the bracketing indices of a size-wide axis and returns the lerp factor between
 // them; clamped like Cycles' lookup_table_read
@@ -106,45 +105,32 @@ float ggxTableZ(const float ior, out bool useInverseTable)
     return sqrt((tableIor - 1.f) / (tableIor + 1.f));
 }
 
-static const uint GGX_TABLE_GLASS_E = 0u;
-static const uint GGX_TABLE_GLASS_INV_E = 1u;
-static const uint GGX_TABLE_FRESNEL_E = 2u;
-static const uint GGX_TABLE_FRESNEL_INV_E = 3u;
-
-float ggxTable3DRead(const uint table, const uint idx)
+// Corner indices and lerp weights of a trilinear lookup in a table indexed [z][cosThetaV][roughness]
+struct Table3DTaps
 {
-    switch (table)
+    uint idx[8]; // corner (x, y, z) at x + 2y + 4z
+    float3 t;
+};
+
+// size holds the roughness, cosThetaV and z axis lengths
+Table3DTaps ggxTable3DTaps(const uint3 size, const float roughness, const float cosThetaV, const float z)
+{
+    uint x[2], y[2], zs[2];
+    Table3DTaps taps;
+    taps.t = float3(tableAxis(roughness, size.x, x[0], x[1]), tableAxis(cosThetaV, size.y, y[0], y[1]),
+                    tableAxis(z, size.z, zs[0], zs[1]));
+    [unroll] for (uint i = 0; i < 8; ++i)
     {
-    case GGX_TABLE_GLASS_E:
-        return ggxGlassETable[idx];
-    case GGX_TABLE_GLASS_INV_E:
-        return ggxGlassInvETable[idx];
-    case GGX_TABLE_FRESNEL_E:
-        return ggxFresnelETable[idx];
-    default:
-        return ggxFresnelInvETable[idx];
+        taps.idx[i] = (zs[i >> 2] * size.y + y[(i >> 1) & 1]) * size.x + x[i & 1];
     }
+    return taps;
 }
 
-// Trilinear lookup of a table indexed [z][cosThetaV][roughness]; size holds the roughness, cosThetaV and z
-// axis lengths
-float ggxTable3DLookup(const uint table, const uint3 size, const float roughness, const float cosThetaV, const float z)
+float ggxTable3DBlend(const float v[8], const float3 t)
 {
-    uint x0, x1, y0, y1, z0, z1;
-    const float tx = tableAxis(roughness, size.x, x0, x1);
-    const float ty = tableAxis(cosThetaV, size.y, y0, y1);
-    const float tz = tableAxis(z, size.z, z0, z1);
-
-    const uint sliceSize = size.x * size.y;
-    const uint row00 = z0 * sliceSize + y0 * size.x;
-    const uint row01 = z0 * sliceSize + y1 * size.x;
-    const uint row10 = z1 * sliceSize + y0 * size.x;
-    const uint row11 = z1 * sliceSize + y1 * size.x;
-    const float e00 = lerp(ggxTable3DRead(table, row00 + x0), ggxTable3DRead(table, row00 + x1), tx);
-    const float e01 = lerp(ggxTable3DRead(table, row01 + x0), ggxTable3DRead(table, row01 + x1), tx);
-    const float e10 = lerp(ggxTable3DRead(table, row10 + x0), ggxTable3DRead(table, row10 + x1), tx);
-    const float e11 = lerp(ggxTable3DRead(table, row11 + x0), ggxTable3DRead(table, row11 + x1), tx);
-    return lerp(lerp(e00, e01, ty), lerp(e10, e11, ty), tz);
+    const float4 alongX = lerp(float4(v[0], v[2], v[4], v[6]), float4(v[1], v[3], v[5], v[7]), t.x);
+    const float2 alongY = lerp(alongX.xz, alongX.yw, t.y);
+    return lerp(alongY.x, alongY.y, t.z);
 }
 
 float ggxGlassEavgTableRead(const bool useInverseTable, const uint idx)
@@ -156,8 +142,14 @@ float ggxGlassDirectionalAlbedo(const float roughness, const float cosThetaV, co
 {
     bool useInverseTable;
     const float z = ggxTableZ(ior, useInverseTable);
-    return ggxTable3DLookup(useInverseTable ? GGX_TABLE_GLASS_INV_E : GGX_TABLE_GLASS_E,
-        uint3(GGX_GLASS_TABLE_SIZE, GGX_GLASS_TABLE_SIZE, GGX_GLASS_TABLE_SIZE), roughness, cosThetaV, z);
+    const Table3DTaps taps = ggxTable3DTaps(uint3(GGX_GLASS_TABLE_SIZE, GGX_GLASS_TABLE_SIZE, GGX_GLASS_TABLE_SIZE),
+                                            roughness, cosThetaV, z);
+    float v[8];
+    [unroll] for (uint i = 0; i < 8; ++i)
+    {
+        v[i] = useInverseTable ? ggxGlassInvETable[taps.idx[i]] : ggxGlassETable[taps.idx[i]];
+    }
+    return ggxTable3DBlend(v, taps.t);
 }
 
 // Angle axis of the inverse Fresnel table: the critical angle's cosine maps to the axis midpoint, so the total
@@ -175,8 +167,15 @@ float ggxFresnelAlbedo(const float roughness, const float cosThetaV, const float
 {
     bool useInverseTable;
     const float z = ggxTableZ(ior, useInverseTable);
-    return ggxTable3DLookup(useInverseTable ? GGX_TABLE_FRESNEL_INV_E : GGX_TABLE_FRESNEL_E, GGX_FRESNEL_TABLE_SIZE,
-        roughness, useInverseTable ? ggxCriticalCosAxis(cosThetaV, ior) : cosThetaV, z);
+    const Table3DTaps taps = ggxTable3DTaps(GGX_FRESNEL_TABLE_SIZE, roughness,
+        useInverseTable ? ggxCriticalCosAxis(cosThetaV, ior) : cosThetaV, z / GGX_FRESNEL_TABLE_MAX_Z);
+    const uint base = useInverseTable ? GGX_FRESNEL_INV_TABLE_OFFSET : 0u;
+    float v[8];
+    [unroll] for (uint i = 0; i < 8; ++i)
+    {
+        v[i] = ggxFresnelETable[base + taps.idx[i]];
+    }
+    return ggxTable3DBlend(v, taps.t);
 }
 
 float ggxGlassAverageAlbedo(const float roughness, const float ior)

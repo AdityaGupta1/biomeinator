@@ -42,15 +42,27 @@ float getSegmentVolumeDistance(const Payload payload, const float3 rayOrigin, co
         : getDistanceToVoxelBounds(rayOrigin, rayDir);
 }
 
-// A path transmitting through a medium boundary enters the medium on the face's far side. Thin sheets
-// (foliage, alpha passthrough) have the same medium on both sides and leave it unchanged.
+// The medium on the far side of the hit face, which a transmitted path enters. Thin sheets (foliage, alpha
+// passthrough) have the same medium on both sides.
+uint getFarSideMedium(const Payload payload, const PerFaceData perFaceData)
+{
+    if (!perFaceData.isMediumBoundary())
+    {
+        return getPayloadMedium(payload);
+    }
+    return bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT) ? perFaceData.getFrontMedium() : perFaceData.getBackMedium();
+}
+
 void transmitThroughFace(inout Payload payload, const PerFaceData perFaceData)
 {
-    if (perFaceData.isMediumBoundary())
-    {
-        const bool wasBackfaceHit = bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT);
-        setPayloadMedium(payload, wasBackfaceHit ? perFaceData.getFrontMedium() : perFaceData.getBackMedium());
-    }
+    setPayloadMedium(payload, getFarSideMedium(payload, perFaceData));
+}
+
+// surfMedia holds the medium on the side of the surface the path arrived from (which surfGeoNor_WS faces)
+// and on the far side; a shadow ray starts in whichever it leaves into.
+bool isShadowRayStartUnderwater(const uint2 surfMedia, const float3 wi_WS, const float3 surfGeoNor_WS)
+{
+    return ((dot(wi_WS, surfGeoNor_WS) >= 0.f) ? surfMedia.x : surfMedia.y) == MEDIUM_WATER;
 }
 
 float3 computeSegmentAbsorption(const Payload payload, const float3 rayOrigin, const float3 rayDir)

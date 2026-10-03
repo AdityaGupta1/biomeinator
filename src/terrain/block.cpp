@@ -174,7 +174,9 @@ BlockData readBlockJson(const std::filesystem::path& jsonPath)
             data.medium = parseNamedValue(mediaByName, blockJson["medium"], "medium");
         }
         if ((data.type == BlockType::WATER || isVolumeType(data.type)) != (data.medium != MEDIUM_AIR))
+        {
             throw std::runtime_error("water, glass and scattering blocks need a medium; other types must not set one");
+        }
         if (blockJson.contains("blockState"))
         {
             data.stateKind = parseNamedValue(blockStateKindsByName, blockJson["blockState"], "blockState");
