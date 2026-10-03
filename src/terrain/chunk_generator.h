@@ -25,8 +25,10 @@ struct LodColumn
     int waterLevel;
     Biome biome;
     Block topBlock;
-    // Shown by cliffs below the top block
-    Block sideBlock;
+    // Shown by cliffs: soilBlock for the first soilDepth blocks below the top, rockBlock under it
+    Block soilBlock;
+    int soilDepth;
+    Block rockBlock;
 };
 
 // Samples numSamplesXZ^2 columns cellSize blocks apart starting at originXZ_WS, x-innermost

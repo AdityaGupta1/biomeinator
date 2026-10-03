@@ -166,6 +166,20 @@ struct SnowData
     static constexpr float hollowScale = 4.f;
     static constexpr float hollowBias = 0.4f;
 
+    // Coverage of a top block at topY before the hollowness bias: the altitude line's fade or the
+    // cold-climate cover, whichever is more
+    static float coverage(float lineY, float topY, float coldCover)
+    {
+        return glm::max(glm::smoothstep(lineY, lineY + fadeDepth, topY), coldCover);
+    }
+
+    // Layers rest only on full cubes
+    static bool acceptsLayer(const BlockData& block)
+    {
+        return block.shape == BlockShape::CUBE &&
+               (block.type == BlockType::SOLID || block.type == BlockType::TRANSPARENT_CUTOUT);
+    }
+
     std::vector<float> lineY{};
     // Coverage that applies at any height, from cold climate alone
     std::vector<float> coldCover{};

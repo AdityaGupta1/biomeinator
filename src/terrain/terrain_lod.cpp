@@ -35,10 +35,10 @@ inline constexpr int maxCellsPerSideLog2 = 6;
 // A tile is replaced by its children within this many of its own widths of the camera, so a cell spans
 // about the same angle wherever its level is shown
 inline constexpr int subdivideDistanceTiles = 2;
-// Tiles entirely within the render distance are only placeholders until their chunks are ready. Below
+// Tiles entirely within the chunk distance are only placeholders until their chunks are ready. Below
 // this level there are too many of them to be worth generating, so their parents stand in.
 inline constexpr int minPlaceholderLevel = 2;
-// Tiles within this many chunks of the render distance's edge keep their geometry even where chunks
+// Tiles within this many chunks of the chunk distance's edge keep their geometry even where chunks
 // cover them: moving away needs them as soon as the chunks leave, sooner than they could be generated
 inline constexpr int keepGeometryMarginChunks = 4;
 // Cliffs on a tile's edges reach this many cells below the lower of the two sides, so the different
@@ -261,9 +261,19 @@ void LodTile::createGeometry(ThreadMemoryAllocator& threadMemoryAlloc)
                 {
                     continue;
                 }
-                addQuad(terrainGeometry, face, vec3(x * cellSizeF, bottomY, z * cellSizeF),
-                        vec3((x + 1) * cellSizeF, topY, (z + 1) * cellSizeF),
-                        blockFaceData(columnAt(cellPos).sideBlock, face), cornerTint);
+                const ChunkGenerator::LodColumn& column = columnAt(cellPos);
+                const auto addWall = [&](float wallBottomY, float wallTopY, Block block)
+                {
+                    if (wallBottomY < wallTopY)
+                    {
+                        addQuad(terrainGeometry, face, vec3(x * cellSizeF, wallBottomY, z * cellSizeF),
+                                vec3((x + 1) * cellSizeF, wallTopY, (z + 1) * cellSizeF), blockFaceData(block, face),
+                                cornerTint);
+                    }
+                };
+                const float soilBottomY = std::max(topY - static_cast<float>(column.soilDepth), bottomY);
+                addWall(soilBottomY, topY, column.soilBlock);
+                addWall(bottomY, soilBottomY, column.rockBlock);
             }
         }
     }
@@ -354,7 +364,7 @@ static std::vector<ivec2> prevDisplayedChunkPositions;
 struct UpdateContext
 {
     ivec2 cameraChunkPos;
-    int renderDistance;
+    int chunkDistance;
     Chunk* (*findChunk)(ivec2 chunkPos);
 
     // Chebyshev distances in chunks from the camera's chunk to the tile's nearest and farthest chunks
@@ -447,7 +457,7 @@ static bool visitNeededTile(LodTile& tile, const UpdateContext& ctx)
     tile.isMarkedForDestruction = false;
 
     const int distance = ctx.distanceTo(tile);
-    tile.subdivides = distance <= ctx.renderDistance ||
+    tile.subdivides = distance <= ctx.chunkDistance ||
                       (tile.level > 0 && distance < (subdivideDistanceTiles << tile.level));
 
     bool childrenRenderable = false;
@@ -474,13 +484,15 @@ static bool visitNeededTile(LodTile& tile, const UpdateContext& ctx)
     }
     tile.childrenRenderable = childrenRenderable;
 
-    const bool deepInRenderDistance =
-        ctx.farthestDistanceTo(tile) <= ctx.renderDistance - keepGeometryMarginChunks;
-    tile.needsGeometry = !(deepInRenderDistance && (tile.level < minPlaceholderLevel || childrenRenderable));
+    const bool deepInChunkDistance =
+        ctx.farthestDistanceTo(tile) <= ctx.chunkDistance - keepGeometryMarginChunks;
+    tile.needsGeometry = !(deepInChunkDistance && (tile.level < minPlaceholderLevel || childrenRenderable));
     if (tile.needsGeometry && tile.state == LodTileState::NEEDS_GEOMETRY)
     {
-        // Distance in tile widths, so the whole area gets coarse tiles before any of it is refined
-        const float priority = static_cast<float>(distance) / static_cast<float>(tile.getSideChunks());
+        // Distance over level, as Distant Horizons orders it: coarse tiles go first while the area is
+        // covered, but not so far ahead that tiles next to the chunks wait on the whole horizon, which
+        // leaves the coarse ancestors standing in for them right by the camera
+        const float priority = static_cast<float>(distance) / static_cast<float>(tile.level + 1);
         generationCandidates.emplace_back(priority, &tile);
     }
 
@@ -699,7 +711,7 @@ void getCoveredChunkBounds(ivec2 cameraChunkPos, int lodDistance, ivec2& outMinC
 }
 
 void update(ivec2 cameraChunkPos,
-            int renderDistance,
+            int chunkDistance,
             int lodDistance,
             Chunk* (*findChunk)(ivec2 chunkPos),
             ToFreeList& toFreeList,
@@ -711,7 +723,7 @@ void update(ivec2 cameraChunkPos,
 
     const UpdateContext ctx{
         .cameraChunkPos = cameraChunkPos,
-        .renderDistance = renderDistance,
+        .chunkDistance = chunkDistance,
         .findChunk = findChunk,
     };
 

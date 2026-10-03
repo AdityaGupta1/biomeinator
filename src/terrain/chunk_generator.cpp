@@ -174,6 +174,7 @@ static FN::SmartNode<FN::Generator> fnGroundPatch;
 inline constexpr uint swampShoreSeedSalt = 190283475;
 inline constexpr uint snowLineSeedSalt = 748120365;
 inline constexpr uint groundPatchSeedSalt = 520938417;
+inline constexpr uint snowLayerPatchSeedSalt = 309184627;
 
 static uint worldSeed;
 static ivec2 noiseOffsetXZ;
@@ -580,6 +581,48 @@ static float snowLineYAt(float temperature, float humidity, float lineNoise)
     return climateLineY(snowLineBaseY, snowLineTemperatureRange, snowLineAridityLift, temperature, humidity, lineNoise);
 }
 
+static float snowLayerLineYAt(float temperature, float humidity, float lineNoise)
+{
+    return climateLineY(snowLayerLineBaseY, snowLayerLineTemperatureRange, snowLayerLineAridityLift, temperature,
+                        humidity, lineNoise);
+}
+
+static float snowColdCover(float temperature)
+{
+    return 1.f - smoothstep(snowLayerColdCoverColdTemperature, snowLayerColdCoverWarmTemperature, temperature);
+}
+
+// The [0, 1] value a column's snow coverage must exceed, from the snow layer patch noise
+static float snowPatchFromNoise(float noise)
+{
+    return clamp(noise * 0.5f + 0.5f, 0.f, 1.f);
+}
+
+// A cold column's water surface freezes where its snow patch value is below this
+static float seaIceCover(float coldCover, float inland)
+{
+    return coldCover * smoothstep(seaIceInlandOpen, seaIceInlandFrozen, inland);
+}
+
+// The cold-climate cover left for snow on top of sea ice
+static float snowCoverOnSeaIce(float coldCover, float inland)
+{
+    return coldCover * smoothstep(seaIceSnowInlandBare, seaIceSnowInlandCovered, inland);
+}
+
+// 0 to 1: how much a Tianzi formation thins the topsoil
+static float formationSoilWeight(const BiomeNoiseFields::NaturalTerrain& naturalTerrain)
+{
+    return smoothstep(0.f, 0.25f, naturalTerrain.regimeWeights[TerrainRegime::TIANZI]) *
+           smoothstep(0.f, 6.f, naturalTerrain.formationHeight);
+}
+
+// Blocks of the topsoil stamp (top block, then mid blocks) below a column's top
+static uint topsoilDepth(float formationSoil)
+{
+    return static_cast<uint>(round(mix(5.f, 2.f, formationSoil)));
+}
+
 // Keeps a reference to shape.natural
 static SurfaceMaterials::Column makeSurfaceMaterials(const ColumnShape& shape, ivec2 blockPosXZ_WS)
 {
@@ -665,10 +708,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     fillChunkColumnNoise(swampShoreNoise, fnSwampShore, swampShoreSeedSalt);
     fillChunkColumnNoise(snowLineNoise, fnSnowLine, snowLineSeedSalt);
     fillChunkColumnNoise(groundPatchNoise, fnGroundPatch, groundPatchSeedSalt);
-    fillChunkColumnNoise(this->snow.patch.data(), fnSnowLayerPatch, 309184627);
+    fillChunkColumnNoise(this->snow.patch.data(), fnSnowLayerPatch, snowLayerPatchSeedSalt);
     for (float& patch : this->snow.patch)
     {
-        patch = clamp(patch * 0.5f + 0.5f, 0.f, 1.f);
+        patch = snowPatchFromNoise(patch);
     }
 
     int terrainNoiseMinY = chunkSizeY;
@@ -1328,17 +1371,14 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const float temperature = biomeNoiseGrids.temperature[columnIdx];
             const float humidity = biomeNoiseGrids.humidity[columnIdx];
             const float snowLineY = snowLineYAt(temperature, humidity, snowLineNoise[columnIdx]);
-            this->snow.lineY[columnIdx] = climateLineY(snowLayerLineBaseY, snowLayerLineTemperatureRange,
-                snowLayerLineAridityLift, temperature, humidity, snowLineNoise[columnIdx]);
-            this->snow.coldCover[columnIdx] = 1.f -
-                smoothstep(snowLayerColdCoverColdTemperature, snowLayerColdCoverWarmTemperature, temperature);
+            this->snow.lineY[columnIdx] = snowLayerLineYAt(temperature, humidity, snowLineNoise[columnIdx]);
+            this->snow.coldCover[columnIdx] = snowColdCover(temperature);
 
             if (topBlockY != 0)
             {
                 const float ledgeVegetation = hasTianziFormation ?
                     TerrainFormations::valueNoise(vec2(blockPosXZ_WS) / 19.f, worldSeed ^ 0x61EDu) : 0.f;
-                const float formationSoil = smoothstep(0.f, 0.25f, tianziWeight) *
-                                            smoothstep(0.f, 6.f, naturalTerrain.formationHeight);
+                const float formationSoil = formationSoilWeight(naturalTerrain);
                 const bool bareFormationCliff = hasTianziFormation &&
                     shape.slope > mix(5.f,
                         mix(2.f, 4.f, smoothstep(-0.3f, 0.5f, ledgeVegetation)), formationSoil);
@@ -1375,12 +1415,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     // The snow band lies inside the ice band, so snow never lands past the ice.
                     const float coldCover = this->snow.coldCover[columnIdx];
                     const float inland = biomeNoiseGrids.inland[columnIdx];
-                    if (this->snow.patch[columnIdx] < coldCover * smoothstep(seaIceInlandOpen, seaIceInlandFrozen, inland))
+                    if (this->snow.patch[columnIdx] < seaIceCover(coldCover, inland))
                     {
                         this->blocks[baseBlockIdx + waterLevel] = Block::ICE;
                     }
-                    this->snow.coldCover[columnIdx] =
-                        coldCover * smoothstep(seaIceSnowInlandBare, seaIceSnowInlandCovered, inland);
+                    this->snow.coldCover[columnIdx] = snowCoverOnSeaIce(coldCover, inland);
                 }
                 const bool topBlockAboveSnowLine =
                     !topBlockUnderwater && static_cast<float>(topBlockY) >= snowLineY;
@@ -1393,7 +1432,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 const Block landformRock = surfaceMaterials.rock(static_cast<int>(topBlockY));
                 this->snow.exposedRock[columnIdx] = (landformRock != Block::AIR) ? landformRock : Block::STONE;
 
-                const uint soilDepth = bareFormationCliff ? 0 : static_cast<uint>(round(mix(5.f, 2.f, formationSoil)));
+                const uint soilDepth = bareFormationCliff ? 0 : topsoilDepth(formationSoil);
                 for (uint y = topBlockY; y > topBlockY - soilDepth; --y)
                 {
                     const uint blockIdx = baseBlockIdx + y;
@@ -1621,9 +1660,11 @@ void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numS
     float* swampShoreNoise = threadMemoryAlloc.request<float>(numSamples);
     float* snowLineNoise = threadMemoryAlloc.request<float>(numSamples);
     float* groundPatchNoise = threadMemoryAlloc.request<float>(numSamples);
+    float* snowLayerPatchNoise = threadMemoryAlloc.request<float>(numSamples);
     fillColumnNoise(swampShoreNoise, fnSwampShore, originXZ_WS, numSamplesXZ, stepBlocks, swampShoreSeedSalt);
     fillColumnNoise(snowLineNoise, fnSnowLine, originXZ_WS, numSamplesXZ, stepBlocks, snowLineSeedSalt);
     fillColumnNoise(groundPatchNoise, fnGroundPatch, originXZ_WS, numSamplesXZ, stepBlocks, groundPatchSeedSalt);
+    fillColumnNoise(snowLayerPatchNoise, fnSnowLayerPatch, originXZ_WS, numSamplesXZ, stepBlocks, snowLayerPatchSeedSalt);
 
     ColumnShape* columnShapes = threadMemoryAlloc.request<ColumnShape>(numSamples);
     float lowestSurface = std::numeric_limits<float>::max();
@@ -1709,54 +1750,86 @@ void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numS
         const TopBlocks& topBlocks = Biomes::getBiomeData(biome).topBlocks;
 
         SurfaceMaterials::Column surfaceMaterials = makeSurfaceMaterials(shape, blockPosXZ_WS);
-        const Block landformRock = surfaceMaterials.rock(topBlockY);
-        const Block rock = (landformRock != Block::AIR) ? landformRock : Block::STONE;
-        const bool underwater = topBlockY < shape.waterLevel;
-
-        Block topBlock = rock;
-        Block sideBlock = rock;
-        if (topBlocks.top != Block::AIR && !SurfaceMaterials::isQuartz(rock))
+        const auto rockAt = [&](int y)
         {
-            topBlock = topBlocks.top;
-            if (topBlock == Block::GRASS_BLOCK)
-            {
-                const bool onShore = !underwater &&
-                    isOnShore(topBlocks, topBlockY, shape.waterLevel, swampShoreNoise[sampleIdx]);
-                topBlock = resolveGrassTop(topBlocks, underwater, onShore, groundPatchNoise[sampleIdx]);
-            }
-            if (topBlocks.mid != Block::AIR)
-            {
-                sideBlock = topBlocks.mid;
-            }
+            const Block landformRock = surfaceMaterials.rock(y);
+            return (landformRock != Block::AIR) ? landformRock : Block::STONE;
+        };
+        const Block exposedRock = rockAt(topBlockY);
+        const bool underwater = topBlockY < shape.waterLevel;
+        const float temperature = biomeNoiseGrids.temperature[sampleIdx];
+        const float humidity = biomeNoiseGrids.humidity[sampleIdx];
 
-            const float snowLineY = snowLineYAt(biomeNoiseGrids.temperature[sampleIdx],
-                biomeNoiseGrids.humidity[sampleIdx], snowLineNoise[sampleIdx]);
-            if (!underwater && static_cast<float>(topBlockY) >= snowLineY)
-            {
-                // Central differences over the neighboring samples, one-sided at the grid's edges
-                const ivec2 samplePos(sampleIdx % numSamplesXZ, sampleIdx / numSamplesXZ);
-                const auto gradientAlong = [&](ivec2 axis)
-                {
-                    const ivec2 highPos = glm::min(samplePos + axis, ivec2(numSamplesXZ - 1));
-                    const ivec2 lowPos = glm::max(samplePos - axis, ivec2(0));
-                    const int distance = (highPos.x - lowPos.x + highPos.y - lowPos.y) * cellSize;
-                    const int rise = topBlockYs[highPos.x + numSamplesXZ * highPos.y] -
-                                     topBlockYs[lowPos.x + numSamplesXZ * lowPos.y];
-                    return distance > 0 ? static_cast<float>(rise) / static_cast<float>(distance) : 0.f;
-                };
-                const vec2 gradient(gradientAlong(ivec2(1, 0)), gradientAlong(ivec2(0, 1)));
-                const bool tooSteep = dot(gradient, gradient) > SnowData::capSteepGradient * SnowData::capSteepGradient;
-                topBlock = tooSteep ? rock : Block::SNOW;
-                sideBlock = rock;
-            }
-        }
+        // Central differences over the neighboring samples, one-sided at the grid's edges
+        const ivec2 samplePos(sampleIdx % numSamplesXZ, sampleIdx / numSamplesXZ);
+        const auto gradientAlong = [&](ivec2 axis)
+        {
+            const ivec2 highPos = glm::min(samplePos + axis, ivec2(numSamplesXZ - 1));
+            const ivec2 lowPos = glm::max(samplePos - axis, ivec2(0));
+            const int distance = (highPos.x - lowPos.x + highPos.y - lowPos.y) * cellSize;
+            const int rise = topBlockYs[highPos.x + numSamplesXZ * highPos.y] -
+                             topBlockYs[lowPos.x + numSamplesXZ * lowPos.y];
+            return distance > 0 ? static_cast<float>(rise) / static_cast<float>(distance) : 0.f;
+        };
+        const vec2 gradient(gradientAlong(ivec2(1, 0)), gradientAlong(ivec2(0, 1)));
+        const float slopeSquared = dot(gradient, gradient);
 
-        outColumns[sampleIdx] = {
+        LodColumn column{
             .topBlockY = topBlockY,
             .waterLevel = shape.waterLevel,
             .biome = biome,
-            .topBlock = topBlock,
-            .sideBlock = sideBlock,
+            .topBlock = exposedRock,
+            .soilBlock = exposedRock,
+            .soilDepth = 0,
+            .rockBlock = exposedRock,
         };
+        if (topBlocks.top != Block::AIR && !SurfaceMaterials::isQuartz(exposedRock))
+        {
+            column.topBlock = topBlocks.top;
+            if (column.topBlock == Block::GRASS_BLOCK)
+            {
+                const bool onShore = !underwater &&
+                    isOnShore(topBlocks, topBlockY, shape.waterLevel, swampShoreNoise[sampleIdx]);
+                column.topBlock = resolveGrassTop(topBlocks, underwater, onShore, groundPatchNoise[sampleIdx]);
+            }
+            if (topBlocks.mid != Block::AIR)
+            {
+                column.soilBlock = topBlocks.mid;
+            }
+            column.soilDepth = static_cast<int>(topsoilDepth(formationSoilWeight(shape.natural)));
+            column.rockBlock = rockAt(topBlockY - column.soilDepth);
+
+            if (!underwater && static_cast<float>(topBlockY) >= snowLineYAt(temperature, humidity, snowLineNoise[sampleIdx]))
+            {
+                const bool tooSteep = slopeSquared >= SnowData::capSteepGradient * SnowData::capSteepGradient;
+                column.topBlock = tooSteep ? exposedRock : Block::SNOW;
+            }
+        }
+
+        const float snowPatch = snowPatchFromNoise(snowLayerPatchNoise[sampleIdx]);
+        float coldCover = snowColdCover(temperature);
+        bool frozen = false;
+        if (underwater)
+        {
+            const float inland = biomeNoiseGrids.inland[sampleIdx];
+            frozen = snowPatch < seaIceCover(coldCover, inland);
+            coldCover = snowCoverOnSeaIce(coldCover, inland);
+        }
+        if (frozen)
+        {
+            column.topBlockY = shape.waterLevel;
+            column.topBlock = column.soilBlock = column.rockBlock = Block::ICE;
+        }
+
+        // As Chunk::placeSnowLayers, without the hollowness bias, which needs finer heights than coarse cells have
+        const bool holdsLayer = frozen || (!underwater && slopeSquared < SnowData::layerSteepGradient * SnowData::layerSteepGradient);
+        const float coverage = SnowData::coverage(snowLayerLineYAt(temperature, humidity, snowLineNoise[sampleIdx]),
+                                                  static_cast<float>(column.topBlockY), coldCover);
+        if (holdsLayer && SnowData::acceptsLayer(Blocks::getBlockData(column.topBlock)) && snowPatch < coverage)
+        {
+            column.topBlock = Block::SNOW_LAYER;
+        }
+
+        outColumns[sampleIdx] = column;
     }
 }

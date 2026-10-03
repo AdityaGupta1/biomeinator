@@ -20,9 +20,9 @@ namespace TerrainLod
 void init(Scene* scene);
 
 // Main thread. Decides which tiles and chunks are shown, owning chunk visibility, and appends the
-// tile generation tasks to enqueue.
+// tile generation tasks to enqueue. Chunks within chunkDistance replace tiles once they are ready.
 void update(glm::ivec2 cameraChunkPos,
-            int renderDistance,
+            int chunkDistance,
             int lodDistance,
             Chunk* (*findChunk)(glm::ivec2 chunkPos),
             ToFreeList& toFreeList,

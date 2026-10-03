@@ -494,9 +494,7 @@ void Chunk::placeSnowLayers()
         }
 
         Block& topBlock = this->blocks[baseBlockIdx + topY];
-        const BlockData& topBlockData = Blocks::getBlockData(topBlock);
-        if (topBlockData.shape != BlockShape::CUBE ||
-            (topBlockData.type != BlockType::SOLID && topBlockData.type != BlockType::TRANSPARENT_CUTOUT))
+        if (!SnowData::acceptsLayer(Blocks::getBlockData(topBlock)))
         {
             continue;
         }
@@ -505,8 +503,7 @@ void Chunk::placeSnowLayers()
             continue;
         }
 
-        float coverage = max(smoothstep(lineY, lineY + SnowData::fadeDepth, static_cast<float>(topY)),
-                             this->snow.coldCover[columnIdx]);
+        float coverage = SnowData::coverage(lineY, static_cast<float>(topY), this->snow.coldCover[columnIdx]);
         const float partialness = 4.f * coverage * (1.f - coverage);
         if (partialness > 0.f)
         {

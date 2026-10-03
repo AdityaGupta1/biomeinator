@@ -894,7 +894,7 @@ void update(ToFreeList& toFreeList)
     if (lodsEnabled)
     {
         std::vector<Task> lodTasks;
-        TerrainLod::update(currentChunkPos, distances.renderDistance, SettingsManager::getAsInt("lodDistance"),
+        TerrainLod::update(currentChunkPos, distances.createBlasDistance, SettingsManager::getAsInt("lodDistance"),
                            findChunk, toFreeList, lodTasks);
         // Ahead of the chunk backlog: LOD tiles are few and cheap, and the coarse ones are what covers
         // the world while it loads
