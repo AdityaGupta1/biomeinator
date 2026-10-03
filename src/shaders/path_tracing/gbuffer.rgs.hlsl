@@ -94,7 +94,7 @@ void outputGuideBuffers(const Payload payload, const RayDesc ray)
     const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
         ? distance(ray.Origin, payload.hitInfo.hitPos_WS) : renderParams.cloudSettings.drawDistance;
     float cloudDistance;
-    if (cloudSurfaceDistance(ray.Origin, ray.Direction, segmentDistance, cloudDistance))
+    if (findCloudSurface(ray.Origin, ray.Direction, segmentDistance, cloudDistance))
     {
         motionHitPos_WS = evalRayPos(ray, cloudDistance);
         prevMotionHitPos_WS = motionHitPos_WS;

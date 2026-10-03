@@ -113,7 +113,7 @@ bool nextCloudInterval(inout CloudTraversal state, out float2 interval)
 // First cloud boundary along the ray, for the G-buffer's depth and motion vectors. Starting
 // inside a cloud, it is the exit boundary, which may be the top or bottom of the layer; a
 // geometry endpoint or the draw distance is never reported as a surface.
-bool cloudSurfaceDistance(const float3 origin_WS, const float3 dir, const float maxDistance, out float surfaceDistance)
+bool findCloudSurface(const float3 origin_WS, const float3 dir, const float maxDistance, out float surfaceDistance)
 {
     surfaceDistance = 0.f;
     CloudTraversal state = beginCloudTraversal(origin_WS, dir, maxDistance, cloudUnboundedDistance, true);
