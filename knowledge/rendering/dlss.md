@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-02_
 
 # DLSS
 
@@ -46,11 +46,12 @@ upscales to viewport resolution. When DLSS is off, render = viewport.
 
 ## Cloud Albedo
 
-Block-cloud sky albedo reuses analytic occupied-cell transmittance to blend unshadowed
-cloud color with sky color, including first perfect-specular sky reflections. It must
-not use sampled lighting or cloud self-shadowing; guide noise is reproduced as detail
-by reconstruction. Opacity is independent of the lighting sample count and RNG, so no
-separate guide march is needed. See [clouds.md](clouds.md#dlss-albedo).
+Block-cloud sky albedo reuses analytic occupied-cell transmittance to blend a white
+cloud with sky color, including first perfect-specular sky reflections. It must not
+carry any lighting: a lit cloud color disagrees with the dark self-shadowed faces and
+causes stripes, and sampled lighting would add noise that reconstruction keeps as detail.
+Opacity is independent of the lighting sample count and RNG, so no separate guide march
+is needed. See [clouds.md](clouds.md#dlss-guides).
 
 Primary cloud hits override depth and motion with the first occupied boundary, without
 an opacity threshold. Wind displacement is reversed using the actual animation-time
@@ -148,7 +149,7 @@ Both features read one `depthTarget` holding post-projection depth, tagged as `k
 DLSS-RR would also accept view-space Z under `kBufferTypeLinearDepth`, but the ray *distance* the
 G-buffer naturally produces is neither, so the earlier linear depth target was subtly off-spec and
 was dropped once frame generation needed NDC depth anyway. The projection is standard non-reversed
-Z with a 0.1 / 10000 near/far ratio, so distant depth is coarse; DLSS only uses depth for
+Z with a 0.1 / 100000 near/far ratio, so distant depth is coarse; DLSS only uses depth for
 disocclusion and history rejection, but if distant RR quality ever suffers, reversed-Z with
 `depthInverted` set is the fix.
 
