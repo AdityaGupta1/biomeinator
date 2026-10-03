@@ -31,7 +31,7 @@ using namespace glm;
 // A tile at level L covers 2^L x 2^L chunks with at most 2^maxCellsPerSideLog2 cells per side, so cells
 // are single blocks up to the level where that many cells span the tile and double in size every
 // level above it
-inline constexpr int maxCellsPerSideLog2 = 6;
+inline constexpr int maxCellsPerSideLog2 = 7;
 // A tile is replaced by its children within this many of its own widths of the camera, so a cell spans
 // about the same angle wherever its level is shown
 inline constexpr int subdivideDistanceTiles = 2;
@@ -41,9 +41,11 @@ inline constexpr int minPlaceholderLevel = 2;
 // Tiles within this many chunks of the chunk distance's edge keep their geometry even where chunks
 // cover them: moving away needs them as soon as the chunks leave, sooner than they could be generated
 inline constexpr int keepGeometryMarginChunks = 4;
-// Cliffs on a tile's edges reach this many cells below the lower of the two sides, so the different
-// surface of a neighbor at another level never leaves a gap to see through
+// Skirts reach this many cells below a tile's edges
 inline constexpr int edgeSkirtDepthCells = 4;
+// Steeper cells show their slope's material rather than their top block: block terrain this steep shows
+// as much side as top
+inline constexpr float maxTopGradient = 1.f;
 inline constexpr uint32_t maxGeneratingTiles = 16;
 
 static int cellSizeLog2(int level)
@@ -137,43 +139,56 @@ static std::mutex tilesWithNewGeometryMutex;
 
 } // namespace TerrainLod
 
-// One face of the box [boxMin, boxMax], each corner tinted by cornerTint(its local XZ)
-template<typename CornerTint>
-static void addQuad(HostGeometry& geometry,
-                    BlockFace face,
-                    vec3 boxMin,
-                    vec3 boxMax,
-                    const PerFaceData& faceData,
-                    const CornerTint& cornerTint)
+// Appends a vertex and returns its index
+static uint32_t addVertex(HostGeometry& geometry, vec3 pos, vec3 normal, uint32_t tint)
 {
-    const uint32_t faceIdx = blockFaceIndex(face);
-    const ivec3* corners = cubeFaceVertPositions + 4 * faceIdx;
-    const vec3 normal(blockFaceBases[faceIdx].normal);
     const DirectX::XMFLOAT3 normalDx{ normal.x, normal.y, normal.z };
-    const uint32_t normalOct = Util::octEncode(normalDx);
+    const PackedLodTerrainVertex packed = Util::packLodTerrainVertex({ pos.x, pos.y, pos.z }, normalDx, tint);
+    geometry.packedTerrainVerts.push_back(std::bit_cast<PackedTerrainVertex>(packed));
+    // Only the position feeds the BLAS, decoded so the traced and shaded surfaces agree
+    geometry.verts.push_back({ Util::unpackLodTerrainPos(packed), Util::octEncode(normalDx), { 0.f, 0.f } });
+    return static_cast<uint32_t>(geometry.verts.size() - 1);
+}
 
-    const uint32_t baseVertIdx = static_cast<uint32_t>(geometry.verts.size());
-    for (uint32_t i = 0; i < 4; ++i)
-    {
-        const vec3 pos = boxMin + vec3(corners[i]) * (boxMax - boxMin);
-        const PackedLodTerrainVertex packed =
-            Util::packLodTerrainVertex({ pos.x, pos.y, pos.z }, normalDx, cornerTint(vec2(pos.x, pos.z)));
-        geometry.packedTerrainVerts.push_back(std::bit_cast<PackedTerrainVertex>(packed));
-        // Only the position feeds the BLAS, decoded so the traced and shaded surfaces agree
-        geometry.verts.push_back({ Util::unpackLodTerrainPos(packed), normalOct, { 0.f, 0.f } });
-    }
+// Two triangles over four corners in winding order, split along corners 0 and 2, as one face
+static void addFace(HostGeometry& geometry, const std::array<uint32_t, 4>& corners, const PerFaceData& faceData)
+{
     for (const uint32_t cornerIdx : { 0u, 1u, 2u, 0u, 2u, 3u })
     {
-        geometry.idxs.push_back(baseVertIdx + cornerIdx);
+        geometry.idxs.push_back(corners[cornerIdx]);
     }
     geometry.perFaceDatas.push_back(faceData);
+}
+
+// One face of the box [boxMin, boxMax], each corner tinted by cornerTint(its local XZ)
+template<typename CornerTint>
+static void addBoxFace(HostGeometry& geometry,
+                       BlockFace face,
+                       vec3 boxMin,
+                       vec3 boxMax,
+                       const PerFaceData& faceData,
+                       const CornerTint& cornerTint)
+{
+    const uint32_t faceIdx = blockFaceIndex(face);
+    const ivec3* boxCorners = cubeFaceVertPositions + 4 * faceIdx;
+    const vec3 normal(blockFaceBases[faceIdx].normal);
+    std::array<uint32_t, 4> corners;
+    for (uint32_t i = 0; i < 4; ++i)
+    {
+        const vec3 pos = boxMin + vec3(boxCorners[i]) * (boxMax - boxMin);
+        corners[i] = addVertex(geometry, pos, normal, cornerTint(vec2(pos.x, pos.z)));
+    }
+    addFace(geometry, corners, faceData);
 }
 
 static PerFaceData blockFaceData(Block block, BlockFace face, uint32_t extraFlags = 0)
 {
     const BlockData& blockData = Blocks::getBlockData(block);
-    const uint32_t texSliceIdx = blockData.texSlices[std::max(static_cast<int>(blockFaceIndex(face)) - 3, 0)];
-    return TerrainMaterials::makeBlockFaceData(blockData, texSliceIdx, extraFlags);
+    const int faceIdx = static_cast<int>(blockFaceIndex(face));
+    const uint32_t texSliceIdx = blockData.texSlices[std::max(faceIdx - 3, 0)];
+    const bool isSide = faceIdx < blockFaceIndex(BlockFace::Y_POS);
+    return TerrainMaterials::makeBlockFaceData(blockData, texSliceIdx,
+                                               extraFlags | (isSide ? FACE_FLAG_SIDE_PROJECTION : 0u));
 }
 
 // Calls emit(startX, endX, z) for each run of cells in a row that canMerge(runStart, cell) accepts
@@ -202,26 +217,29 @@ void LodTile::createGeometry(ThreadMemoryAllocator& threadMemoryAlloc)
     const ivec2 originXZ_WS = this->getMinChunkPos() * static_cast<int>(chunkSizeXZ);
     const float cellSizeF = static_cast<float>(cellSize);
 
-    // A one-sample margin gives the cliffs on the tile's edges the heights outside it
-    const int numSamplesXZ = numCells + 2;
+    // Samples sit on cell corners. A margin of one before the first and two past the last gives every
+    // corner, including the far edges', both neighbors for its normal, and the ice slabs their neighbors.
+    const int numSamplesXZ = numCells + 3;
     ChunkGenerator::LodColumn* columns = threadMemoryAlloc.request<ChunkGenerator::LodColumn>(numSamplesXZ * numSamplesXZ);
     ChunkGenerator::LodRockStrata rockStrata;
-    ChunkGenerator::sampleLodColumns(originXZ_WS - cellSize, cellSize, numSamplesXZ, edgeSkirtDepthCells * cellSize,
-                                     columns, rockStrata, threadMemoryAlloc);
-    const auto sampleIdxAt = [&](ivec2 cellPos)
+    ChunkGenerator::sampleLodColumns(originXZ_WS - cellSize, cellSize, numSamplesXZ, columns, rockStrata,
+                                     threadMemoryAlloc);
+    const auto sampleIdxAt = [&](ivec2 cornerPos)
     {
-        return static_cast<uint32_t>((cellPos.x + 1) + numSamplesXZ * (cellPos.y + 1));
+        return static_cast<uint32_t>((cornerPos.x + 1) + numSamplesXZ * (cornerPos.y + 1));
     };
-    const auto columnAt = [&](ivec2 cellPos) -> const ChunkGenerator::LodColumn&
+    const auto columnAt = [&](ivec2 cornerPos) -> const ChunkGenerator::LodColumn&
     {
-        return columns[sampleIdxAt(cellPos)];
+        return columns[sampleIdxAt(cornerPos)];
     };
-    const auto surfaceY = [&](ivec2 cellPos)
+    // Half a block above where the density crosses zero, so the surface runs midway up the steps of the
+    // chunks' block tops
+    const auto heightAt = [&](ivec2 cornerPos)
     {
-        return static_cast<float>(columnAt(cellPos).topBlockY + 1);
+        return columnAt(cornerPos).surfaceHeight + 0.5f;
     };
 
-    // Cell corners sit on samples, so each corner takes the tint of the biome sampled there
+    // Each corner takes the tint of the biome sampled there
     const auto cornerTint = [&](vec2 localXZ)
     {
         const glm::vec3& tint = Biomes::getBiomeData(columnAt(ivec2(round(localXZ / cellSizeF))).biome).grassTint;
@@ -231,140 +249,204 @@ void LodTile::createGeometry(ThreadMemoryAllocator& threadMemoryAlloc)
     HostGeometry& terrainGeometry = this->terrainInstance->hostGeometry;
     HostGeometry& waterGeometry = this->waterInstance->hostGeometry;
 
-    // Tinted tops are not merged: a merged run would only carry the tints at its ends
-    forEachRowRun(numCells,
-        [&](ivec2 runStartPos, ivec2 cellPos)
+    // One shared vertex per corner for the gentle cells, with the normal of the surface through its neighbors
+    const int numCornersXZ = numCells + 1;
+    for (int z = 0; z < numCornersXZ; ++z)
+    {
+        for (int x = 0; x < numCornersXZ; ++x)
         {
-            const ChunkGenerator::LodColumn& runStart = columnAt(runStartPos);
-            const ChunkGenerator::LodColumn& column = columnAt(cellPos);
-            return column.topBlockY == runStart.topBlockY && column.topBlock == runStart.topBlock &&
-                   !(blockFaceData(column.topBlock, BlockFace::Y_POS).getFlags() & FACE_FLAG_BIOME_TINT);
-        },
-        [&](int startX, int endX, int z)
-        {
-            const float topY = surfaceY(ivec2(startX, z));
-            addQuad(terrainGeometry, BlockFace::Y_POS, vec3(startX * cellSizeF, topY, z * cellSizeF),
-                    vec3(endX * cellSizeF, topY, (z + 1) * cellSizeF),
-                    blockFaceData(columnAt(ivec2(startX, z)).topBlock, BlockFace::Y_POS), cornerTint);
-        });
+            const ivec2 cornerPos(x, z);
+            const vec3 normal = normalize(vec3(heightAt(cornerPos - ivec2(1, 0)) - heightAt(cornerPos + ivec2(1, 0)),
+                                               2.f * cellSizeF,
+                                               heightAt(cornerPos - ivec2(0, 1)) - heightAt(cornerPos + ivec2(0, 1))));
+            addVertex(terrainGeometry, vec3(x * cellSizeF, heightAt(cornerPos), z * cellSizeF), normal,
+                      cornerTint(vec2(cornerPos) * cellSizeF));
+        }
+    }
+    const auto cornerVertIdx = [&](ivec2 cornerPos)
+    {
+        return static_cast<uint32_t>(cornerPos.x + numCornersXZ * cornerPos.y);
+    };
 
+    // What a cell shows: its top block where the slope is gentle enough for block terrain to show mostly
+    // tops, otherwise the side of its top block where the slope stays within the topsoil, else rock
+    PerFaceData* cellFaceDatas = threadMemoryAlloc.request<PerFaceData>(numCells * numCells);
     for (int z = 0; z < numCells; ++z)
     {
         for (int x = 0; x < numCells; ++x)
         {
             const ivec2 cellPos(x, z);
-            const float topY = surfaceY(cellPos);
-            for (uint8_t faceIdx = 0; faceIdx < 4; ++faceIdx)
-            {
-                const BlockFace face = static_cast<BlockFace>(faceIdx);
-                const ivec2 neighborPos = cellPos + ivec2(blockFaceBases[faceIdx].normal.x, blockFaceBases[faceIdx].normal.z);
-                const float neighborTopY = surfaceY(neighborPos);
-                const bool isTileEdge = glm::any(glm::lessThan(neighborPos, ivec2(0))) ||
-                                        glm::any(glm::greaterThanEqual(neighborPos, ivec2(numCells)));
-                const float bottomY = std::max(
-                    isTileEdge ? std::min(topY, neighborTopY) - edgeSkirtDepthCells * cellSizeF : neighborTopY, 0.f);
-                if (bottomY >= topY)
-                {
-                    continue;
-                }
-                const ChunkGenerator::LodColumn& column = columnAt(cellPos);
-                const auto addWall = [&](float wallBottomY, float wallTopY, Block block)
-                {
-                    if (wallBottomY < wallTopY)
-                    {
-                        addQuad(terrainGeometry, face, vec3(x * cellSizeF, wallBottomY, z * cellSizeF),
-                                vec3((x + 1) * cellSizeF, wallTopY, (z + 1) * cellSizeF), blockFaceData(block, face),
-                                cornerTint);
-                    }
-                };
-                // The top block's own side, then the rest of the topsoil, then rock
-                const float topBlockBottomY = std::max(topY - 1.f, bottomY);
-                const float soilBottomY = std::clamp(topY - static_cast<float>(column.soilDepth), bottomY, topBlockBottomY);
-                addWall(topBlockBottomY, topY, column.topSideBlock);
-                addWall(soilBottomY, topBlockBottomY, column.soilBlock);
+            const float h00 = heightAt(cellPos);
+            const float h10 = heightAt(cellPos + ivec2(1, 0));
+            const float h01 = heightAt(cellPos + ivec2(0, 1));
+            const float h11 = heightAt(cellPos + ivec2(1, 1));
+            const vec2 gradient = vec2((h10 - h00) + (h11 - h01), (h01 - h00) + (h11 - h10)) / (2.f * cellSizeF);
+            const float minHeight = std::min({ h00, h10, h01, h11 });
+            const float maxHeight = std::max({ h00, h10, h01, h11 });
+            const ChunkGenerator::LodColumn& column = columnAt(cellPos);
 
-                // Rock in runs of equal strata
-                const uint32_t sampleIdx = sampleIdxAt(cellPos);
-                float runBottomY = bottomY;
-                for (int level = rockStrata.levelOf(static_cast<int>(bottomY)); runBottomY < soilBottomY; ++level)
+            PerFaceData& faceData = cellFaceDatas[x + numCells * z];
+            const bool isSteep = dot(gradient, gradient) >= maxTopGradient * maxTopGradient;
+            if (!isSteep)
+            {
+                faceData = blockFaceData(column.topBlock, BlockFace::Y_POS);
+            }
+            else if (maxHeight - minHeight <= static_cast<float>(column.soilDepth))
+            {
+                faceData = blockFaceData(column.topSideBlock, BlockFace::X_POS);
+            }
+            else
+            {
+                faceData = blockFaceData(rockStrata.atHeight(sampleIdxAt(cellPos), 0.5f * (minHeight + maxHeight)),
+                                         BlockFace::X_POS);
+            }
+
+            // In winding order, split along the first and third corners: the diagonal with less height change,
+            // so ridges and valleys stay creased along their length rather than across it
+            std::array<ivec2, 4> corners{ cellPos + ivec2(1, 1), cellPos + ivec2(1, 0), cellPos, cellPos + ivec2(0, 1) };
+            if (std::abs(h11 - h00) > std::abs(h10 - h01))
+            {
+                std::rotate(corners.begin(), corners.begin() + 1, corners.end());
+            }
+
+            if (!isSteep)
+            {
+                addFace(terrainGeometry,
+                        { cornerVertIdx(corners[0]), cornerVertIdx(corners[1]), cornerVertIdx(corners[2]),
+                          cornerVertIdx(corners[3]) },
+                        faceData);
+                continue;
+            }
+
+            // Steep cells are faceted: on a cliff, a smooth normal averaged with the ground above and below
+            // strays far from the long thin triangles' own, which streaks their shading and shadows
+            const vec3 upward(-gradient.x, 1.f, -gradient.y);
+            for (const std::array<int, 3>& triangle : { std::array<int, 3>{ 0, 1, 2 }, std::array<int, 3>{ 0, 2, 3 } })
+            {
+                std::array<vec3, 3> positions;
+                for (int i = 0; i < 3; ++i)
                 {
-                    const float levelTopY = std::min(static_cast<float>(rockStrata.levelBottomY(level + 1)), soilBottomY);
-                    const Block block = rockStrata.at(sampleIdx, level);
-                    if (levelTopY >= soilBottomY || rockStrata.at(sampleIdx, level + 1) != block)
-                    {
-                        addWall(runBottomY, levelTopY, block);
-                        runBottomY = levelTopY;
-                    }
+                    const ivec2 cornerPos = corners[triangle[i]];
+                    positions[i] = vec3(cornerPos.x * cellSizeF, heightAt(cornerPos), cornerPos.y * cellSizeF);
+                }
+                vec3 normal = normalize(cross(positions[1] - positions[0], positions[2] - positions[0]));
+                if (dot(normal, upward) < 0.f)
+                {
+                    normal = -normal;
+                }
+                for (int i = 0; i < 3; ++i)
+                {
+                    terrainGeometry.idxs.push_back(addVertex(terrainGeometry, positions[i], normal,
+                                                             cornerTint(vec2(corners[triangle[i]]) * cellSizeF)));
                 }
             }
+            terrainGeometry.perFaceDatas.push_back(faceData);
+        }
+    }
+
+    // Skirts hang below the tile's edges so a neighbor at another level never leaves a gap to see through
+    const float skirtDepth = edgeSkirtDepthCells * cellSizeF;
+    for (uint8_t faceIdx = 0; faceIdx < 4; ++faceIdx)
+    {
+        const ivec2 outward(blockFaceBases[faceIdx].normal.x, blockFaceBases[faceIdx].normal.z);
+        const ivec2 along(abs(outward.y), abs(outward.x));
+        // The edge's first corner: the far side for +x and +z, the near side for -x and -z
+        const ivec2 edgeStart = max(outward, ivec2(0)) * numCells;
+        for (int i = 0; i < numCells; ++i)
+        {
+            const ivec2 cornerA = edgeStart + along * i;
+            const ivec2 cornerB = cornerA + along;
+            const ivec2 cellPos = min(cornerA, ivec2(numCells - 1));
+            const auto addSkirtVertex = [&](ivec2 cornerPos, float yOffset)
+            {
+                const float y = std::max(heightAt(cornerPos) + yOffset, 0.f);
+                const vec3 pos(cornerPos.x * cellSizeF, y, cornerPos.y * cellSizeF);
+                return addVertex(terrainGeometry, pos, vec3(outward.x, 0.f, outward.y),
+                                 cornerTint(vec2(cornerPos) * cellSizeF));
+            };
+            addFace(terrainGeometry,
+                    { addSkirtVertex(cornerA, 0.f), addSkirtVertex(cornerB, 0.f), addSkirtVertex(cornerB, -skirtDepth),
+                      addSkirtVertex(cornerA, -skirtDepth) },
+                    cellFaceDatas[cellPos.x + numCells * cellPos.y]);
         }
     }
 
     const float waterTopHeight = blockShapeTopHeight(Blocks::getBlockData(Block::WATER_TOP).shape);
     const PerFaceData waterFaceData =
         blockFaceData(Block::WATER_TOP, BlockFace::Y_POS, FACE_FLAG_IS_WATER | FACE_FLAG_IS_WATER_TOP);
-    // Water, or the ice slab over it, sits on the cell's own terrain, so the floor stays under the ice
-    const auto hasWaterTop = [&](ivec2 cellPos, Block waterTopBlock)
+    // A cell holds water, or the ice slab over it, wherever any of its corners is underwater, so the surface
+    // reaches the shore and covers the part of the cell's slope below the waterline. Terrain above the water
+    // level shows through it. Returns null for a dry cell.
+    const auto cellWaterColumn = [&](ivec2 cellPos) -> const ChunkGenerator::LodColumn*
     {
-        const ChunkGenerator::LodColumn& column = columnAt(cellPos);
-        return column.topBlockY < column.waterLevel && column.waterTopBlock == waterTopBlock;
+        for (const ivec2 cornerOffset : { ivec2(0, 0), ivec2(1, 0), ivec2(0, 1), ivec2(1, 1) })
+        {
+            const ChunkGenerator::LodColumn& column = columnAt(cellPos + cornerOffset);
+            if (column.topBlockY < column.waterLevel)
+            {
+                return &column;
+            }
+        }
+        return nullptr;
     };
-    const auto isFrozen = [&](ivec2 cellPos)
+    const auto isLiquid = [&](ivec2 cellPos)
     {
-        const ChunkGenerator::LodColumn& column = columnAt(cellPos);
-        return column.topBlockY < column.waterLevel && column.waterTopBlock != Block::WATER_TOP;
+        const ChunkGenerator::LodColumn* column = cellWaterColumn(cellPos);
+        return column != nullptr && column->waterTopBlock == Block::WATER_TOP;
     };
     forEachRowRun(numCells,
         [&](ivec2 runStartPos, ivec2 cellPos)
         {
-            const ChunkGenerator::LodColumn& runStart = columnAt(runStartPos);
-            const ChunkGenerator::LodColumn& column = columnAt(cellPos);
-            return hasWaterTop(runStartPos, runStart.waterTopBlock) && hasWaterTop(cellPos, runStart.waterTopBlock) &&
-                   column.waterLevel == runStart.waterLevel;
+            const ChunkGenerator::LodColumn* runStart = cellWaterColumn(runStartPos);
+            const ChunkGenerator::LodColumn* column = cellWaterColumn(cellPos);
+            return runStart != nullptr && column != nullptr && column->waterTopBlock == runStart->waterTopBlock &&
+                   column->waterLevel == runStart->waterLevel;
         },
         [&](int startX, int endX, int z)
         {
-            const ChunkGenerator::LodColumn& column = columnAt(ivec2(startX, z));
-            if (column.topBlockY >= column.waterLevel)
+            const ChunkGenerator::LodColumn* waterColumn = cellWaterColumn(ivec2(startX, z));
+            if (waterColumn == nullptr)
             {
                 return;
             }
+            const ChunkGenerator::LodColumn& column = *waterColumn;
             const vec3 runMin(startX * cellSizeF, static_cast<float>(column.waterLevel), z * cellSizeF);
             const vec3 runMax(endX * cellSizeF, static_cast<float>(column.waterLevel), (z + 1) * cellSizeF);
             if (column.waterTopBlock == Block::WATER_TOP)
             {
                 const vec3 waterOffset(0.f, waterTopHeight, 0.f);
-                addQuad(waterGeometry, BlockFace::Y_POS, runMin + waterOffset, runMax + waterOffset, waterFaceData,
+                addBoxFace(waterGeometry, BlockFace::Y_POS, runMin + waterOffset, runMax + waterOffset, waterFaceData,
                         cornerTint);
             }
             else
             {
                 const vec3 slabOffset(0.f, 1.f, 0.f);
-                addQuad(terrainGeometry, BlockFace::Y_POS, runMin + slabOffset, runMax + slabOffset,
+                addBoxFace(terrainGeometry, BlockFace::Y_POS, runMin + slabOffset, runMax + slabOffset,
                         blockFaceData(column.waterTopBlock, BlockFace::Y_POS), cornerTint);
             }
         });
 
-    // Ice slabs show their one-block edges wherever the neighbor's surface is lower
+    // Ice slabs show their one-block edges over open water
     for (int z = 0; z < numCells; ++z)
     {
         for (int x = 0; x < numCells; ++x)
         {
             const ivec2 cellPos(x, z);
-            if (!isFrozen(cellPos))
+            const ChunkGenerator::LodColumn* waterColumn = cellWaterColumn(cellPos);
+            if (waterColumn == nullptr || waterColumn->waterTopBlock == Block::WATER_TOP)
             {
                 continue;
             }
-            const float slabBottomY = static_cast<float>(columnAt(cellPos).waterLevel);
+            const float slabBottomY = static_cast<float>(waterColumn->waterLevel);
             for (uint8_t faceIdx = 0; faceIdx < 4; ++faceIdx)
             {
                 const BlockFace face = static_cast<BlockFace>(faceIdx);
                 const ivec2 neighborPos = cellPos + ivec2(blockFaceBases[faceIdx].normal.x, blockFaceBases[faceIdx].normal.z);
-                if (isFrozen(neighborPos) || surfaceY(neighborPos) > slabBottomY)
+                if (!isLiquid(neighborPos))
                 {
                     continue;
                 }
-                addQuad(terrainGeometry, face, vec3(x * cellSizeF, slabBottomY, z * cellSizeF),
+                addBoxFace(terrainGeometry, face, vec3(x * cellSizeF, slabBottomY, z * cellSizeF),
                         vec3((x + 1) * cellSizeF, slabBottomY + 1.f, (z + 1) * cellSizeF),
                         blockFaceData(Block::ICE, face), cornerTint);
             }

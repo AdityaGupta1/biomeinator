@@ -94,11 +94,12 @@ Vertex unpackTerrainVertex(const PackedTerrainVertex packed)
     return vert;
 }
 
-// Texture tiles repeat once per block, oriented as on the matching faces of a chunk's blocks
-float2 lodTerrainUv(const float3 pos_OS, const float3 nor)
+// Texture tiles repeat once per block, oriented as on the matching faces of a chunk's blocks: projected
+// from above unless the face shows a block's side, else from the horizontal axis nearest the normal
+float2 lodTerrainUv(const float3 pos_OS, const float3 nor, const bool sideProjection)
 {
     const float3 absNor = abs(nor);
-    if (absNor.y >= absNor.x && absNor.y >= absNor.z)
+    if (!sideProjection)
     {
         return float2(pos_OS.z, -pos_OS.x);
     }
@@ -128,8 +129,21 @@ Vertex unpackLodTerrainVertex(const PackedLodTerrainVertex packed)
                          float(packed.packedPosXZ >> 16) / PACKED_LOD_TERRAIN_POS_XZ_SCALE);
     const int2 norSnorm8 = int2(packed.packedPosYNor << 8, packed.packedPosYNor) >> 24;
     vert.packedNor = packSnorm2ToUint(clamp(norSnorm8 / 127.f, -1.f, 1.f));
-    vert.uv = lodTerrainUv(vert.pos_OS, octDecode(vert.packedNor));
+    // Set per triangle by setLodTerrainUvs
+    vert.uv = float2(0.f, 0.f);
     return vert;
+}
+
+// The side axis is chosen from the triangle's own normal: smooth vertex normals could pick different
+// axes at one triangle's corners
+void setLodTerrainUvs(const PerFaceData perFaceData, inout Vertex v0, inout Vertex v1, inout Vertex v2)
+{
+    const float3 geoNor = cross(v1.pos_OS - v0.pos_OS, v2.pos_OS - v0.pos_OS);
+    const float3 nor = dot(geoNor, octDecode(v0.packedNor)) < 0.f ? -geoNor : geoNor;
+    const bool sideProjection = perFaceData.hasFlag(FACE_FLAG_SIDE_PROJECTION);
+    v0.uv = lodTerrainUv(v0.pos_OS, nor, sideProjection);
+    v1.uv = lodTerrainUv(v1.pos_OS, nor, sideProjection);
+    v2.uv = lodTerrainUv(v2.pos_OS, nor, sideProjection);
 }
 
 float3 unpackLodTerrainTint(const PackedLodTerrainVertex packed)
@@ -151,12 +165,21 @@ Vertex loadVert(const InstanceData instanceData, const uint vertIdx)
     return verts[idx];
 }
 
-void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
+void loadTriangleVerts(const InstanceData instanceData, const uint triIdx, const uint3 indices,
+                       out Vertex v0, out Vertex v1, out Vertex v2)
 {
-    const uint3 indices = getTriangleVertexIndices(instanceData, triIdx);
     v0 = loadVert(instanceData, indices.x);
     v1 = loadVert(instanceData, indices.y);
     v2 = loadVert(instanceData, indices.z);
+    if (instanceData.vertexFormat == VERTEX_FORMAT_PACKED_LOD_TERRAIN)
+    {
+        setLodTerrainUvs(loadPerFaceData(instanceData, triIdx), v0, v1, v2);
+    }
+}
+
+void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
+{
+    loadTriangleVerts(instanceData, triIdx, getTriangleVertexIndices(instanceData, triIdx), v0, v1, v2);
 }
 
 // Ctx for surface shading at a hit; samples the biome map and the procedural color ramp once here
@@ -302,9 +325,8 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const uint materialIdx = instanceData.materialIdx;
 
     const uint3 vertexIndices = getTriangleVertexIndices(instanceData, PrimitiveIndex());
-    const Vertex v0 = loadVert(instanceData, vertexIndices.x);
-    const Vertex v1 = loadVert(instanceData, vertexIndices.y);
-    const Vertex v2 = loadVert(instanceData, vertexIndices.z);
+    Vertex v0, v1, v2;
+    loadTriangleVerts(instanceData, PrimitiveIndex(), vertexIndices, v0, v1, v2);
 
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);

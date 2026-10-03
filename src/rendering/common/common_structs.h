@@ -321,6 +321,9 @@ static_assert(sizeof(PackedTerrainVertex) == 12, "PackedTerrainVertex must be 12
 #define FACE_FLAG_PROCEDURAL_COLOR (1 << 5)
 // The terrain texture array slice has a normal map.
 #define FACE_FLAG_NORMAL_MAP (1 << 6)
+// LOD terrain faces showing a block's side: their texture projects horizontally whatever the triangle's
+// slope, so a side texture keeps its top edge up (see lodTerrainUv)
+#define FACE_FLAG_SIDE_PROJECTION (1 << 7)
 
 #define FACE_FLAGS_BITS 16
 #define FACE_FLAGS_MASK ((1u << FACE_FLAGS_BITS) - 1u)

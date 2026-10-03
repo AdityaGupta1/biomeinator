@@ -2,7 +2,7 @@ _Last edited: 2026-10-03_
 
 # Terrain LODs
 
-`src/terrain/terrain_lod.h/cpp` shows terrain out to `--lodDistance` chunks as heightfield tiles, and
+`src/terrain/terrain_lod.h/cpp` shows terrain out to `--lodDistance` chunks as smooth heightfield tiles, and
 `ChunkGenerator::sampleLodColumns` samples their columns. LODs are off in headless runs, so goldens never
 see them.
 
@@ -15,9 +15,22 @@ cost is that tiles only know what the noise knows before any chunk pass runs: no
 structures, decorators or swamp/oasis water shaping. Surface blocks follow the chunk rules (grass
 resolution, shore band, snow cap and its steepness test, topsoil depth, sea ice, snow layers) through
 helpers the chunk generator shares, so the two agree at the seam. Snow layers skip the hollowness bias,
-which needs finer heights than coarse cells have. Cliffs show the top block's own side for one block
-(snowy grass under a snow layer, so snowy slopes of one-block steps read white as they do in chunks),
-the topsoil's mid block down to the topsoil depth, and the landform rock below it. Rock comes from
+which needs finer heights than coarse cells have.
+
+## Smooth surface, block materials
+
+Tiles are a grid with one shared vertex per sample, at the sub-block height where the density crosses
+zero (as chunks' `terrainSurfaceHeight`), not boxes per block. Stepped boxes left a sub-pixel staircase of
+edges and dark walls on every distant slope, which aliased badly, and cost about six times the geometry.
+Each cell splits along its flatter diagonal so ridges and valleys stay creased along their length.
+Gentle cells share smooth vertex normals; steep cells are faceted with their triangles' own normals. A
+heightfield turns a cliff into long thin triangles, and a smooth normal averaged with the ground above
+and below strays so far from theirs that it streaked their shading and shadows into spikes.
+
+A cell still shows one block, chosen as block terrain at that slope would mostly look: its top block
+where the slope is gentle (under 45 degrees, where block terrain shows more top than side); where it is
+steeper, the side of its top block if the cell drops no more than the topsoil depth (snowy grass under a
+snow layer, so snowy slopes read white as they do in chunks), else rock. Rock comes from
 `LodRockStrata`, sampled by height on a world-aligned grid as fine as the cells: landform rock is banded
 by height (Mesa terracotta, Tianzi strata), and taking each column's rock at its own top turned the bands
 into vertical stripes across columns.
@@ -28,8 +41,8 @@ surface cave. That keeps the seam with full-resolution chunks small for the near
 
 ## Quadtree and selection
 
-A tile at level L covers 2^L × 2^L chunks with at most 64 cells per side, so cells are one block up to
-level 2 and double each level after. A tile subdivides when the camera is within two of its widths,
+A tile at level L covers 2^L × 2^L chunks with at most 128 cells per side, so cells are one block up to
+level 3 and double each level after. A tile subdivides when the camera is within two of its widths,
 which keeps a cell's angular size roughly constant, or when it reaches into the chunk distance (the
 BLAS distance, since every chunk with a BLAS can be shown); a level-0 tile's only child is its chunk.
 Selection is by distance on the CPU rather than screen-space error: secondary rays see terrain behind
@@ -65,20 +78,27 @@ geometry is freed, except within `keepGeometryMarginChunks` of the edge (see abo
 
 ## Gotchas
 
-- Tile edges carry skirts four cells deep below the lower side, so a neighbor at another level never
-  leaves a gap to see through. Inside a tile, cliffs stop at the lower neighbor.
+- Tile edges carry skirts four cells deep, so where a neighbor at another level meets the edge at a
+  different height there is no gap to see through. Stitching the edges exactly would mean remeshing a
+  tile whenever a neighbor changes level.
 - Tiles have their own 12-byte vertex format (`PackedLodTerrainVertex`), sharing the packed terrain vertex
   buffer: tiles are far wider than the packed terrain vertex's local range. UVs are derived from
-  position and normal rather than stored, since textures repeat once per block on world-aligned axes.
+  position rather than stored, since textures repeat once per block on world-aligned axes. The projection
+  follows each triangle's own normal (`setLodTerrainUvs`), not the vertices' smooth normals, which could
+  pick different projections at one triangle's corners. Faces showing a block's side carry
+  `FACE_FLAG_SIDE_PROJECTION` and always project horizontally: a cell picks its material from its average
+  slope, and projecting by each triangle's slope instead laid side textures flat on cells near the
+  threshold, turning the grass edge sideways.
 - The biome tint map only covers the render distance, so tiles bake each corner's biome tint into its
   vertices. The closest-hit shader interpolates it into `HitInfo::packedVertexTint`, which overrides
-  the map for tinted faces. Tinted tops are not merged into runs, since a run only carries the tints
-  at its ends.
+  the map for tinted faces.
 - Tiles are never emissive. That keeps them out of the area-light structures, whose bounds assume
   everything lies within the render distance.
-- LOD water is a static top surface with no walls. Sea ice is a one-block slab over the cell's own
-  floor, with edges only where the neighbor's surface is lower; drawing it as a column down to the
-  floor showed through the clear water beside it as ice pillars.
+- LOD water is a static top surface with no walls, covering every cell with any corner underwater so it
+  reaches the shore; terrain above the water level shows through it. A cell taking water only from its
+  own sample left the slope below the waterline uncovered along every shore, which showed as a dark
+  outline around ice. Sea ice is a one-block slab over the cell's floor, with edges only over open water;
+  drawing it as a column down to the floor showed through the clear water beside it as ice pillars.
 - With LODs on, the voxel bounds that water absorption and fog use for rays that miss everything cover
   the root tiles, not just the render distance. Underwater surfaces in LOD tiles otherwise got no
   absorption on their sky light, which showed as a line in the water at the render distance.

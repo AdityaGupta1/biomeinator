@@ -553,6 +553,17 @@ struct ColumnShape
     }
 };
 
+// Where terrain density (surface value minus noise) crosses zero between a column's top block and the
+// air above it, or the middle of the top block where it doesn't
+static float subBlockSurfaceHeight(int topBlockY, float densityTop, float densityAbove)
+{
+    if (densityTop > 0.f && densityAbove <= 0.f)
+    {
+        return static_cast<float>(topBlockY) + densityTop / (densityTop - densityAbove);
+    }
+    return static_cast<float>(topBlockY) + 0.5f;
+}
+
 // A voxel is terrain where the terrain noise is below this
 static float terrainSurfaceVal(float detailedHeight, float surfaceMultiplier, float y)
 {
@@ -1393,10 +1404,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         terrainSurfaceValAt(topBlockY) - terrainNoise[baseTerrainNoiseIdx + topNoiseY];
                     const float densityAbove =
                         terrainSurfaceValAt(topBlockY + 1) - terrainNoise[baseTerrainNoiseIdx + topNoiseY + 1];
-                    if (densityTop > 0.f && densityAbove <= 0.f)
-                    {
-                        surfaceHeight = static_cast<float>(topBlockY) + densityTop / (densityTop - densityAbove);
-                    }
+                    surfaceHeight = subBlockSurfaceHeight(static_cast<int>(topBlockY), densityTop, densityAbove);
                 }
                 this->terrainSurfaceHeight[columnIdx] =
                     static_cast<uint16_t>(round(surfaceHeight * terrainSurfaceHeightScale));
@@ -1642,9 +1650,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     }
 }
 
-void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numSamplesXZ, int strataDepth,
-                                      LodColumn* outColumns, LodRockStrata& outRockStrata,
-                                      ThreadMemoryAllocator& threadMemoryAlloc)
+void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numSamplesXZ, LodColumn* outColumns,
+                                      LodRockStrata& outRockStrata, ThreadMemoryAllocator& threadMemoryAlloc)
 {
     const uint numSamples = numSamplesXZ * numSamplesXZ;
     const float stepBlocks = static_cast<float>(cellSize);
@@ -1703,6 +1710,7 @@ void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numS
                                     terrainNoiseDownsample, latticeStepXZ, latticeStepXZ, shapeNoiseSeed());
 
     int* topBlockYs = threadMemoryAlloc.request<int>(numSamples);
+    float* surfaceHeights = threadMemoryAlloc.request<float>(numSamples);
     for (uint sampleIdx = 0; sampleIdx < numSamples; ++sampleIdx)
     {
         const ColumnShape& shape = columnShapes[sampleIdx];
@@ -1724,23 +1732,38 @@ void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numS
 
         // Below noiseMinY the column is terrain whatever the noise
         int topBlockY = std::max(noiseMinY - 1, 0);
+        float surfaceHeight = static_cast<float>(topBlockY) + 0.5f;
+        bool hasDensityAbove = false;
+        float densityAbove = 0.f;
         for (int y = std::min(static_cast<int>(std::ceil(shape.highestSurface())), noiseMaxY) - 1; y >= noiseMinY; --y)
         {
             const uint gridY = static_cast<uint>(y - noiseMinY) / terrainNoiseDownsample;
             const float ty = static_cast<float>((y - noiseMinY) % terrainNoiseDownsample) / terrainNoiseDownsample;
             const float noise = glm::mix(samplePlane(gridY), samplePlane(gridY + 1), ty);
-            if (noise < terrainSurfaceVal(shape.baseHeight, shape.surfaceMultiplier, static_cast<float>(y)))
+            const float density = terrainSurfaceVal(shape.baseHeight, shape.surfaceMultiplier, static_cast<float>(y)) - noise;
+            if (density > 0.f)
             {
                 topBlockY = y;
+                if (hasDensityAbove)
+                {
+                    surfaceHeight = subBlockSurfaceHeight(y, density, densityAbove);
+                }
+                else
+                {
+                    surfaceHeight = static_cast<float>(y) + 0.5f;
+                }
                 break;
             }
+            hasDensityAbove = true;
+            densityAbove = density;
         }
         topBlockYs[sampleIdx] = topBlockY;
+        surfaceHeights[sampleIdx] = surfaceHeight;
     }
 
-    // Vertical steps as wide as the cells, aligned in world y so neighboring tiles of a level agree
+    // Vertical steps as tall as the cells are wide, aligned in world y so neighboring tiles of a level agree
     const auto [lowestTopY, highestTopY] = std::minmax_element(topBlockYs, topBlockYs + numSamples);
-    const int strataMinY = MathUtil::floorDiv(std::max(*lowestTopY - strataDepth, 0), cellSize) * cellSize;
+    const int strataMinY = MathUtil::floorDiv(*lowestTopY, cellSize) * cellSize;
     const uint numStrataLevels = static_cast<uint>((*highestTopY - strataMinY) / cellSize + 1);
     Block* strataBlocks = threadMemoryAlloc.request<Block>(numSamples * numStrataLevels);
     outRockStrata = {
@@ -1773,7 +1796,7 @@ void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numS
         {
             // Each step takes the rock at its middle
             strataBlocks[sampleIdx * numStrataLevels + level] =
-                rockAt(outRockStrata.levelBottomY(static_cast<int>(level)) + cellSize / 2);
+                rockAt(strataMinY + static_cast<int>(level) * cellSize + cellSize / 2);
         }
         const bool underwater = topBlockY < shape.waterLevel;
         const float temperature = biomeNoiseGrids.temperature[sampleIdx];
@@ -1795,12 +1818,12 @@ void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numS
 
         LodColumn column{
             .topBlockY = topBlockY,
+            .surfaceHeight = surfaceHeights[sampleIdx],
             .waterLevel = shape.waterLevel,
             .waterTopBlock = Block::WATER_TOP,
             .biome = biome,
             .topBlock = exposedRock,
             .topSideBlock = exposedRock,
-            .soilBlock = exposedRock,
             .soilDepth = 0,
         };
         if (topBlocks.top != Block::AIR && !SurfaceMaterials::isQuartz(exposedRock))
@@ -1811,10 +1834,6 @@ void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numS
                 const bool onShore = !underwater &&
                     isOnShore(topBlocks, topBlockY, shape.waterLevel, swampShoreNoise[sampleIdx]);
                 column.topBlock = resolveGrassTop(topBlocks, underwater, onShore, groundPatchNoise[sampleIdx]);
-            }
-            if (topBlocks.mid != Block::AIR)
-            {
-                column.soilBlock = topBlocks.mid;
             }
             column.soilDepth = static_cast<int>(topsoilDepth(formationSoilWeight(shape.natural)));
 

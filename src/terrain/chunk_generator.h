@@ -7,6 +7,8 @@
 
 #include <glm/glm.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 
 class ThreadMemoryAllocator;
@@ -22,6 +24,8 @@ void init();
 struct LodColumn
 {
     int topBlockY;
+    // Sub-block height where the terrain density crosses zero above the top block, as chunks keep it
+    float surfaceHeight;
     int waterLevel;
     // WATER_TOP, or what covers frozen water (ICE, or a snow layer on it)
     Block waterTopBlock;
@@ -29,14 +33,14 @@ struct LodColumn
     // What the top face shows; its sides show topSideBlock, which differs where a snow layer covers it
     Block topBlock;
     Block topSideBlock;
-    // Shown by cliffs below the top block down to soilDepth blocks below the top, LodRockStrata under it
-    Block soilBlock;
+    // Slopes too steep for the top block show topSideBlock where they drop no more than soilDepth blocks,
+    // and LodRockStrata where they drop further
     int soilDepth;
 };
 
-// The rock each column's cliffs show by height, sampled every stepBlocks blocks on a world-aligned grid
-// from minY. Landform rock (Mesa terracotta, Tianzi strata) is banded by height, so a cliff taking one
-// rock at its own top would turn the bands vertical across columns.
+// The rock each column's slopes show by height, sampled every stepBlocks blocks on a world-aligned grid
+// from minY up to the highest top. Landform rock (Mesa terracotta, Tianzi strata) is banded by height,
+// so taking each column's rock at its own top would turn the bands vertical across columns.
 struct LodRockStrata
 {
     int minY;
@@ -44,25 +48,17 @@ struct LodRockStrata
     uint32_t numLevels;
     const Block* blocks; // numLevels per sample
 
-    int levelOf(int y) const
+    Block atHeight(uint32_t sampleIdx, float y) const
     {
-        return (y - minY) / stepBlocks;
-    }
-
-    int levelBottomY(int level) const
-    {
-        return minY + level * stepBlocks;
-    }
-
-    Block at(uint32_t sampleIdx, int level) const
-    {
+        const int level = std::clamp(static_cast<int>(std::floor((y - minY) / stepBlocks)), 0,
+                                     static_cast<int>(numLevels) - 1);
         return blocks[sampleIdx * numLevels + level];
     }
 };
 
 // Samples numSamplesXZ^2 columns cellSize blocks apart starting at originXZ_WS, x-innermost. The rock strata
-// reach strataDepth blocks below the lowest top, and live in threadMemoryAlloc.
-void sampleLodColumns(glm::ivec2 originXZ_WS, int cellSize, uint32_t numSamplesXZ, int strataDepth,
-                      LodColumn* outColumns, LodRockStrata& outRockStrata, ThreadMemoryAllocator& threadMemoryAlloc);
+// live in threadMemoryAlloc.
+void sampleLodColumns(glm::ivec2 originXZ_WS, int cellSize, uint32_t numSamplesXZ, LodColumn* outColumns,
+                      LodRockStrata& outRockStrata, ThreadMemoryAllocator& threadMemoryAlloc);
 
 }; // namespace ChunkGenerator
