@@ -82,7 +82,7 @@ void initStreamline()
 
     sl::Preferences prefs = {};
     prefs.showConsole = false;
-    prefs.logLevel = renderState.headless ? sl::LogLevel::eOff : sl::LogLevel::eDefault;
+    prefs.logLevel = renderState.automatedRun ? sl::LogLevel::eOff : sl::LogLevel::eDefault;
 
     if (SettingsManager::getAsBool("verboseLogging"))
     {
@@ -115,9 +115,9 @@ namespace
 // Frame generation is optional, so a missing feature only disables it rather than failing startup
 void initFrameGenSupport(const sl::AdapterInfo& adapterInfo)
 {
-    // Generated frames would corrupt rendering test screenshots, so a rendering test run stays on the
+    // Generated frames would corrupt render-to-file screenshots, so a render-to-file run stays on the
     // pre-frame-generation code path. Perf runs keep it so they measure what the game does.
-    if (renderState.renderingTestMode)
+    if (renderState.renderToFileMode)
     {
         return;
     }
@@ -170,7 +170,7 @@ void loadFrameGenPlugin(bool active)
     const std::string message = reason + "\nUpdate your graphics driver and try again. If this persists, use a GPU and "
                                          "driver that support these features.";
     Logger::logError("%s", message.c_str());
-    if (!renderState.headless)
+    if (!renderState.automatedRun)
     {
         const std::wstring wideMessage = Util::to_wstring(message.c_str());
         MessageBoxW(hwnd, wideMessage.c_str(), L"Biomeinator - unsupported GPU capabilities", MB_OK | MB_ICONERROR);

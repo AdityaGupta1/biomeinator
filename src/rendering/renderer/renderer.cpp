@@ -51,8 +51,8 @@ void init()
 {
     const auto initStart = std::chrono::steady_clock::now();
 
-    renderState.renderingTestMode = SettingsManager::isRenderingTestMode();
-    renderState.headless = SettingsManager::isHeadless();
+    renderState.renderToFileMode = SettingsManager::isRenderToFileMode();
+    renderState.automatedRun = SettingsManager::isAutomatedRun();
     renderState.voxelMode = SettingsManager::getAsBool("voxelMode");
     renderState.animTime = SettingsManager::getAsFloat("animTime");
 
@@ -120,7 +120,7 @@ void init()
     }
 
     // Perf runs come to the front too: fullscreen presentation needs an unoccluded window
-    if (!renderState.renderingTestMode)
+    if (!renderState.renderToFileMode)
     {
         SetForegroundWindow(hwnd);
     }
@@ -660,7 +660,8 @@ void render()
     const double animTimeDelta = renderState.animTime - renderState.prevAnimTime;
     renderState.prevAnimTime = renderState.animTime;
 
-    const bool waitingForTerrain = renderState.headless && renderState.voxelMode && !Terrain::pollHeadlessTerrain();
+    const bool waitingForTerrain =
+        renderState.automatedRun && renderState.voxelMode && !Terrain::pollAutomatedRunTerrain();
 
     perfRunUpdate(renderState.scene.hasTlas() && !waitingForTerrain, didSceneChange);
 
@@ -675,9 +676,9 @@ void render()
         {
             renderState.stopAccumulating = true;
 
-            if (renderState.renderingTestMode)
+            if (renderState.renderToFileMode)
             {
-                queueScreenshot(true /*useRenderingTestOutputPath*/);
+                queueScreenshot(true /*useRenderToFilePath*/);
             }
         }
     }
@@ -1133,7 +1134,7 @@ void render()
     {
         finalizeQueuedScreenshot(); // this calls flush()
 
-        if (renderState.renderingTestMode)
+        if (renderState.renderToFileMode)
         {
             Renderer::destroy();
             exit(0);

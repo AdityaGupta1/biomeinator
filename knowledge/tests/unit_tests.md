@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-03_
 
 # CPU Unit Tests
 
@@ -33,7 +33,7 @@ trip alone can agree while breaking shader compatibility. Explicit absolute tole
 Catch2's default relative epsilon so large coordinates cannot silently relax precision bounds;
 UV checks separately allow the float rounding in their non-power-of-two decode.
 
-Settings tests exercise the non-terminating parser, including dependent defaults, headless
+Settings tests exercise the non-terminating parser, including dependent defaults, automated-run
 overrides, validation failures, and runtime mutation. Camera tests target the extracted pure math:
 split-position normalization and large-coordinate precision, direction-basis orthonormality, and
 frustum-plane symmetry. Keeping this math outside `Camera` avoids pulling D3D or renderer globals

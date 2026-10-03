@@ -45,9 +45,9 @@ TEST_CASE("SettingsManager installs documented defaults", "[unit][settings_manag
     CHECK_FALSE(SettingsManager::getAsBool("voxelMode"));
     CHECK(SettingsManager::getAsUint("antialiasingMode") == static_cast<uint32_t>(AntialiasingMode::NONE));
     CHECK(SettingsManager::getWorldSeed() == 1738);
-    CHECK_FALSE(SettingsManager::isRenderingTestMode());
+    CHECK_FALSE(SettingsManager::isRenderToFileMode());
     CHECK_FALSE(SettingsManager::isPerfMode());
-    CHECK_FALSE(SettingsManager::isHeadless());
+    CHECK_FALSE(SettingsManager::isAutomatedRun());
 }
 
 TEST_CASE("SettingsManager parses overrides and keeps the cached world seed synchronized", "[unit][settings_manager]")
@@ -121,14 +121,14 @@ TEST_CASE("SettingsManager applies mode-dependent defaults without overriding ex
     }
 }
 
-TEST_CASE("SettingsManager applies and permits overriding headless defaults", "[unit][settings_manager]")
+TEST_CASE("SettingsManager applies and permits overriding automated-run defaults", "[unit][settings_manager]")
 {
-    SECTION("test runs receive deterministic defaults")
+    SECTION("render-to-file runs receive deterministic defaults")
     {
-        requireSuccess({ "Biomeinator", "--renderingTestOutput=result.png" });
-        CHECK(SettingsManager::isRenderingTestMode());
+        requireSuccess({ "Biomeinator", "--renderToFile=result.png" });
+        CHECK(SettingsManager::isRenderToFileMode());
         CHECK_FALSE(SettingsManager::isPerfMode());
-        CHECK(SettingsManager::isHeadless());
+        CHECK(SettingsManager::isAutomatedRun());
         CHECK_FALSE(SettingsManager::getAsBool("sharc"));
         CHECK(SettingsManager::getAsBool("lockCamera"));
         CHECK_FALSE(SettingsManager::getAsBool("showGui"));
@@ -136,7 +136,7 @@ TEST_CASE("SettingsManager applies and permits overriding headless defaults", "[
         CHECK_FALSE(SettingsManager::getAsBool("useVsync"));
     }
 
-    SECTION("explicit values win over headless defaults")
+    SECTION("explicit values win over automated-run defaults")
     {
         requireSuccess({ "Biomeinator",
                          "--perfOutput=result.json",
@@ -145,9 +145,9 @@ TEST_CASE("SettingsManager applies and permits overriding headless defaults", "[
                          "--showGui=true",
                          "--animTimePaused=false",
                          "--useVsync=true" });
-        CHECK_FALSE(SettingsManager::isRenderingTestMode());
+        CHECK_FALSE(SettingsManager::isRenderToFileMode());
         CHECK(SettingsManager::isPerfMode());
-        CHECK(SettingsManager::isHeadless());
+        CHECK(SettingsManager::isAutomatedRun());
         CHECK(SettingsManager::getAsBool("sharc"));
         CHECK_FALSE(SettingsManager::getAsBool("lockCamera"));
         CHECK(SettingsManager::getAsBool("showGui"));
@@ -163,9 +163,9 @@ TEST_CASE("SettingsManager reports help and invalid command lines without exitin
     CHECK(help.message.find("Real-time path traced voxel engine") != std::string::npos);
 
     const std::vector<std::pair<std::vector<std::string>, std::string>> invalidCases{
-        { { "Biomeinator", "--renderingTestOutput=result.jpg" }, "--renderingTestOutput must be a .png" },
+        { { "Biomeinator", "--renderToFile=result.jpg" }, "--renderToFile must be a .png" },
         { { "Biomeinator", "--perfOutput=result.txt" }, "--perfOutput must be a .json" },
-        { { "Biomeinator", "--renderingTestOutput=result.png", "--perfOutput=result.json" }, "mutually exclusive" },
+        { { "Biomeinator", "--renderToFile=result.png", "--perfOutput=result.json" }, "mutually exclusive" },
         { { "Biomeinator", "--renderDistance=0" }, "renderDistance" },
         { { "Biomeinator", "--renderDistance=-1" }, "renderDistance" },
         { { "Biomeinator", "--samplingMode=3" }, "samplingMode" },
