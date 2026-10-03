@@ -53,7 +53,7 @@ causes stripes, and sampled lighting would add noise that reconstruction keeps a
 Opacity is independent of the lighting sample count and RNG, so no separate guide march
 is needed. See [clouds.md](clouds.md#dlss-guides).
 
-Primary cloud hits override depth and motion with the first occupied boundary, without
+Primary cloud hits override depth, motion and normal with the first occupied boundary, without
 an opacity threshold. Wind displacement is reversed using the actual animation-time
 delta to project that point into the previous frame. Geometry in front still wins.
 
@@ -149,7 +149,8 @@ Both features read one `depthTarget` holding post-projection depth, tagged as `k
 DLSS-RR would also accept view-space Z under `kBufferTypeLinearDepth`, but the ray *distance* the
 G-buffer naturally produces is neither, so the earlier linear depth target was subtly off-spec and
 was dropped once frame generation needed NDC depth anyway. The projection is standard non-reversed
-Z with a 0.1 / 100000 near/far ratio, so distant depth is coarse; DLSS only uses depth for
+Z with a 0.1 / 100000 near/far ratio (the far plane matches the default cloud draw distance, so
+cloud depth stays inside the frustum), so distant depth is coarse; DLSS only uses depth for
 disocclusion and history rejection, but if distant RR quality ever suffers, reversed-Z with
 `depthInverted` set is the fix.
 

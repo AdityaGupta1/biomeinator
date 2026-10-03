@@ -56,12 +56,10 @@ existing rays. This is where clouds shadow the ground.
 
 ## DLSS guides
 
-The G-buffer overrides depth and motion with the first cloud boundary in front of the
-endpoint regardless of opacity, and un-applies wind for the previous position so pausing
+The G-buffer overrides depth, motion and normal with the first cloud boundary in front of
+the endpoint regardless of opacity, and un-applies wind for the previous position so pausing
 animation freezes wind motion but not camera motion. Starting inside a cloud, the exit
 boundary is used; a geometry endpoint or the draw distance is never reported as a surface.
-
-Cloud pixels also get the camera-facing box face normal and roughness 1.
 
 Sky misses (and first perfect-specular sky reflections) blend a white cloud albedo with the
 tonemapped sky using the segment's analytic transmittance (`cloudGuideAlbedo`). White, not a
