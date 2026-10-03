@@ -463,6 +463,16 @@ static float computeFogSigmaS(const float animTime)
 
 void render()
 {
+    // A minimized window has an empty client area, which DLSS rejects, and nothing to present to.
+    // Checked by size rather than IsIconic, which restoring clears before the client area regrows.
+    RECT clientRect;
+    GetClientRect(hwnd, &clientRect);
+    if (IsRectEmpty(&clientRect))
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        return;
+    }
+
     // From here so the Reflex sleep is a scope of this frame rather than of none
     CpuProfiler::beginFrame();
 
