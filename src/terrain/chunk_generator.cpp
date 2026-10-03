@@ -42,6 +42,19 @@ inline constexpr int terrainDetailDownsampleXZ = 2;
 inline constexpr int terrainDetailDownsampleY = 4;
 inline constexpr int caveShapeNoiseDownsample = 2;
 
+// Per-column offset on climate cell lookups, which rags cell borders like the climate jitter does
+// for tier and regime borders
+inline constexpr float climateCellJitterBlocks = 3.5f;
+
+static vec2 climateCellLookupPos(ivec2 blockPosXZ_WS, uint32_t worldSeed)
+{
+    RandomNumberGenerator rng = initRng(worldSeed ^ hash(551023987),
+        static_cast<uint>(blockPosXZ_WS.x), static_cast<uint>(blockPosXZ_WS.y /*z*/));
+    const float jitterX = rng.nextFloatAbs(climateCellJitterBlocks);
+    const float jitterZ = rng.nextFloatAbs(climateCellJitterBlocks);
+    return vec2(blockPosXZ_WS) + vec2(jitterX, jitterZ);
+}
+
 inline constexpr float caveWorleyBoundFraction = 0.4f;
 inline constexpr float caveSimplexBoundFraction = 0.6f;
 // caves are fully suppressed by altitude squash well before this height
@@ -155,6 +168,8 @@ inline constexpr float seaIceSnowInlandCovered = -0.02f;
 
 static FN::SmartNode<FN::Generator> fnSnowLine;
 static FN::SmartNode<FN::Generator> fnSnowLayerPatch;
+// Drives the biomes' top-block patches (TopBlocks::patches), e.g. podzol through grass
+static FN::SmartNode<FN::Generator> fnGroundPatch;
 
 static uint worldSeed;
 static ivec2 noiseOffsetXZ;
@@ -257,6 +272,21 @@ void init()
         fnFractal->SetOctaveCount(3);
 
         fnSnowLayerPatch = fnFractal;
+    }
+
+    {
+        // Patches of mixed size, roughly 15-40 blocks across like vanilla's surface noise. Source
+        // range keeps the octave sum near [-1, 1], the range TopBlockPatch::minNoise is set against.
+        auto fnSimplex = FN::New<FN::Simplex>();
+        fnSimplex->SetSeedOffset(830194572);
+        fnSimplex->SetScale(48.0f);
+        fnSimplex->SetOutputMin(-0.55f);
+        fnSimplex->SetOutputMax(0.55f);
+        auto fnFractal = FN::New<FN::FractalFBm>();
+        fnFractal->SetSource(fnSimplex);
+        fnFractal->SetOctaveCount(3);
+
+        fnGroundPatch = fnFractal;
     }
 
     {
@@ -541,6 +571,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* swampWarpFineZNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* swampShoreNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* snowLineNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
+    float* groundPatchNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     const auto fillColumnNoise = [&](float* data, const FN::SmartNode<FN::Generator>& fn, uint seedSalt)
     {
         fn->GenUniformGrid2D(data,
@@ -558,6 +589,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     fillColumnNoise(swampWarpFineZNoise, fnSwampWarpFine, 412093871);
     fillColumnNoise(swampShoreNoise, fnSwampShore, 190283475);
     fillColumnNoise(snowLineNoise, fnSnowLine, 748120365);
+    fillColumnNoise(groundPatchNoise, fnGroundPatch, 520938417);
     fillColumnNoise(this->snow.patch.data(), fnSnowLayerPatch, 309184627);
     for (float& patch : this->snow.patch)
     {
@@ -577,6 +609,9 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     SwampShaping::ChunkContext swampContext =
         SwampShaping::makeChunkContext(chunkPosBlocksXZ_WS, static_cast<int>(chunkSizeXZ));
     const auto oasisContext = OasisShaping::makeContext(chunkPosBlocksXZ_WS, ivec2(chunkSizeXZ));
+    // Covers the chunk's columns plus their cell lookup jitter
+    const BiomeNoiseFields::ClimateCellContext climateCellContext(vec2(chunkPosBlocksXZ_WS) - climateCellJitterBlocks,
+        vec2(chunkPosBlocksXZ_WS + ivec2(chunkSizeXZ)) + climateCellJitterBlocks);
 
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
     {
@@ -588,7 +623,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const BiomeNoise biomeNoise = BiomeNoiseFields::noiseAt(biomeNoiseGrids, columnIdx);
             const BiomeNoise jitteredBiomeNoise = BiomeNoise::randomOffset(biomeNoise, rng);
             const auto oasis = OasisShaping::sample(vec2(blockPosXZ_WS), oasisContext);
-            const Biome biome = oasis.vegetation ? Biome::OASIS : BiomeNoiseFields::biomeFromNoise(jitteredBiomeNoise);
+            const Biome biome = oasis.vegetation
+                ? Biome::OASIS
+                : BiomeNoiseFields::biomeFromNoise(
+                      jitteredBiomeNoise, &climateCellContext, climateCellLookupPos(blockPosXZ_WS, worldSeed));
             this->biomes[columnIdx] = biome;
             biomeSet.insert(biome);
 
@@ -1335,6 +1373,10 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         {
                             newBlock = topBlocks.shoreTop;
                         }
+                        else
+                        {
+                            newBlock = topBlocks.patchedTop(groundPatchNoise[columnIdx]);
+                        }
                     }
                     // Outside the grass rules, not an arm of them: the cap has to replace stone
                     // and sand tops too, which never enter that branch.
@@ -1516,8 +1558,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     const ivec3 candidatePos_WS = ivec3(candidatePosXZ_WS.x, candidateGroundHeight + 1, candidatePosXZ_WS.y /*z*/);
                     RandomNumberGenerator variantRng =
                         initRng(worldSeed ^ hash(1946793319), candidatePosXZ_WS.x, candidatePosXZ_WS.y /*z*/, gridSalt);
-                    ASSERT(this->structures.size() < maxGridStructuresPerChunk);
-                    this->structures.emplace_back(structureGen.pickVariant(variantRng), candidatePos_WS);
+                    if (const std::optional<StructureType> type = structureGen.pickVariant(variantRng))
+                    {
+                        ASSERT(this->structures.size() < maxGridStructuresPerChunk);
+                        this->structures.emplace_back(*type, candidatePos_WS);
+                    }
                 }
             }
         }

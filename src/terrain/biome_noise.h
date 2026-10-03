@@ -8,6 +8,8 @@
 #include <glm/glm.hpp>
 
 #include <array>
+#include <optional>
+#include <vector>
 
 // The surface biome noise fields (temperature/humidity/peak/inland/erosion) and biome classification from
 // them. Independent of chunk generation, rendering, and settings so tools (e.g. BiomeScanner) can
@@ -146,12 +148,64 @@ bool isHighland(const BiomeNoise& noise);
 // reach the ocean.
 float computeFloodFactor(const BiomeNoise& biomeNoise);
 
-// The first terrain regime that claims the column, otherwise the closest climate candidate.
-Biome biomeFromNoise(const BiomeNoise& biomeNoise);
+// Resolves climate cell lookups within one region (a chunk, a map tile). Everything a lookup needs
+// that is shared between nearby columns (candidate cell sites, the warp noise lattices, site
+// climates) is computed once per region instead of per column. Lookups give the same answer
+// whichever region they are made from. Not thread-safe: site climates are computed lazily.
+class ClimateCellContext
+{
+public:
+    // Supports lookups at positions within [minXZ_WS, maxXZ_WS]
+    ClimateCellContext(glm::vec2 minXZ_WS, glm::vec2 maxXZ_WS);
+
+    ClimateTarget climateAt(glm::vec2 lookupPosXZ_WS) const;
+    // A hash of the cell's id, for tools that visualize the cells themselves
+    uint32_t cellHashAt(glm::vec2 lookupPosXZ_WS) const;
+
+private:
+    struct Lattice
+    {
+        glm::ivec2 minCorner{};
+        int width{ 0 };
+        int height{ 0 };
+        std::vector<float> values{};
+
+        Lattice(glm::vec2 minPos, glm::vec2 maxPos, uint32_t seed);
+        float sample(glm::vec2 pos) const;
+    };
+
+    struct Site
+    {
+        glm::vec2 posXZ_WS;
+        float weight;
+        ClimateTarget climateOffset;
+        mutable std::optional<ClimateTarget> climate;
+    };
+
+    // One lattice per warp octave and axis, in octave order with x before z
+    std::array<Lattice, 4> warpLattices;
+    glm::ivec2 minCell{};
+    int numCellsX{ 0 };
+    int numCellsZ{ 0 };
+    std::vector<Site> sites{};
+
+    const Site& findSite(glm::vec2 lookupPosXZ_WS, glm::ivec2* outCellId = nullptr) const;
+};
+
+// The first terrain regime that claims the column, otherwise the closest climate candidate. Climate
+// targets are matched on one climate per cell, that of the cell containing cellLookupPosXZ_WS; pass
+// the column position, plus any per-column jitter that should rag cell borders. A null cellContext
+// matches on the column's own climate instead, for tools comparing against it.
+Biome biomeFromNoise(const BiomeNoise& biomeNoise, const ClimateCellContext* cellContext, glm::vec2 cellLookupPosXZ_WS);
 
 // Batch-evaluates the surface biome noise on a uniform XZ grid (one sample per texel center,
 // texelSizeBlocks blocks apart) and writes the closest biome per texel, x-innermost. Skips the
-// per-column jitter chunk generation applies, so results are the macro biome field.
-void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels, uint32_t texelSizeBlocks);
+// per-column jitter chunk generation applies, so results are the macro biome field. Without
+// climateCells, matches each texel on its own climate (see biomeFromNoise).
+void fillBiomeRect(Biome* outBiomes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels, uint32_t texelSizeBlocks,
+                   bool climateCells = true);
+// Same grid as fillBiomeRect, writing a hash of each texel's climate cell, for visualizing the cells
+void fillClimateCellHashRect(uint32_t* outHashes, glm::ivec2 originBlocksXZ_WS, glm::uvec2 numTexels,
+                             uint32_t texelSizeBlocks);
 
 } // namespace BiomeNoiseFields

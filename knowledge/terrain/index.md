@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-02_
 
 # Terrain Knowledgebase
 
@@ -7,7 +7,7 @@ Procedural voxel world: chunk lifecycle, noise generation, biomes, structures, a
 | Entry | Description |
 |---|---|
 | [terrain_manager.md](terrain_manager.md) | Top-level Terrain class, render distance, chunk creation/destruction |
-| [region_system.md](region_system.md) | Region: 32×32 chunk spatial grouping, neighbor lookups |
+| [region_system.md](region_system.md) | Region: 32×32 chunk spatial grouping, neighbor lookups, eviction and task pins |
 | [chunk_state_machine.md](chunk_state_machine.md) | Multi-stage ChunkState, transitions, parallelism constraints |
 | [chunk_segments.md](chunk_segments.md) | 4×8×4 ChunkSegment subdivision, AIR/SOLID_SURROUNDED/MIXED culling |
 | [chunk_generator.md](chunk_generator.md) | FastNoise2-based height maps, cave carving, coarse cave fields, biome allocation |
@@ -24,4 +24,4 @@ Procedural voxel world: chunk lifecycle, noise generation, biomes, structures, a
 | [terrain_omm.md](terrain_omm.md) | Opacity micromap baking for cutout tiles, exactness argument, build ordering |
 | [world_export_import.md](world_export_import.md) | Serialize/restore terrain to disk; early-return invariant, import-side gotchas |
 | [swamp_generation.md](swamp_generation.md) | Cellular pond/dam design, window stability, cave sealing |
-| [biome_scanner.md](biome_scanner.md) | BiomeScanner web tool, biome_noise module extraction rationale |
+| [biome_scanner.md](biome_scanner.md) | BiomeScanner web tool and coverage mode, biome_noise module extraction rationale |

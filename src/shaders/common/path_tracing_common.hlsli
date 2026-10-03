@@ -364,17 +364,15 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     if (isWaterTop)
     {
         const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
-        shadingNor_WS = waveShadingNormal(posXZ_WS, renderParams.waveTime, renderParams.animTime, WorldRayDirection(),
-                                   bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
+        shadingNor_WS = waveShadingNormal(posXZ_WS, renderParams.waveTime, renderParams.animTime,
+                                          bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
     }
-    else
+
+    // Glossy lobes need reflections to stay above the geometric surface. Use Cycles' bump-map
+    // correction (ensure_valid_specular_reflection; see util/shading_normal.hlsli).
+    if (hasGlossy)
     {
-        // Glossy lobes need reflections to stay above the geometric surface. Use Cycles' bump-map
-        // correction (ensure_valid_specular_reflection; see util/shading_normal.hlsli).
-        if (hasGlossy)
-        {
-            shadingNor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, shadingNor_WS);
-        }
+        shadingNor_WS = ensureValidSpecularReflection(geoNor_WS, wo_WS, shadingNor_WS);
     }
     payload.hitInfo.hitShadingNor_WS = shadingNor_WS;
 }

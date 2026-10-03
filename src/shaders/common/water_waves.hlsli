@@ -185,33 +185,13 @@ float2 waveNormalPerturbation(float2 posXZ_WS, float waveTime, float noiseTime)
 
 // Shading normal for a water top-surface hit: the analytic wave gradient plus the noise
 // perturbation, flipped for backface (underwater) hits.
-//
-// At grazing incidence, the perturbed normal can reflect rays into this or a neighboring
-// wave, where they return almost no light (mostly lost to volume absorption), showing as
-// flickering black pixels. Clamp the reflection direction to a margin above the unperturbed
-// surface's horizon (enough to clear neighboring waves) and rebuild the normal as the
-// view/reflection half vector, which also keeps the normal in the viewer's hemisphere.
 // Deliberately unfaded: the shading normal keeps the full wave gradient over water whose
 // geometry the distance fade has flattened, so far water still reads as waves and the fade
 // boundary shows no change in shading, only in silhouette
-float3 waveShadingNormal(float2 posXZ_WS, float waveTime, float noiseTime, float3 rayDir_WS, bool backfaceHit)
+float3 waveShadingNormal(float2 posXZ_WS, float waveTime, float noiseTime, bool backfaceHit)
 {
-    const float2 baseGrad = waveHeightAndGradient(posXZ_WS, waveTime).yz;
-    const float2 grad = baseGrad + waveNormalPerturbation(posXZ_WS, waveTime, noiseTime);
+    const float2 grad = waveHeightAndGradient(posXZ_WS, waveTime).yz
+                      + waveNormalPerturbation(posXZ_WS, waveTime, noiseTime);
     const float flip = backfaceHit ? -1.f : 1.f;
-    const float3 baseNor_WS = flip * normalize(float3(-baseGrad.x, 1.f, -baseGrad.y));
-    float3 waveNor_WS = flip * normalize(float3(-grad.x, 1.f, -grad.y));
-
-    const float minReflectedDotBase = 0.05f;
-    const float3 reflected_WS = reflect(rayDir_WS, waveNor_WS);
-    const float reflectedDotBase = dot(reflected_WS, baseNor_WS);
-    if (reflectedDotBase < minReflectedDotBase)
-    {
-        const float3 clampedReflected_WS = normalize(reflected_WS + baseNor_WS * (minReflectedDotBase - reflectedDotBase));
-        const float3 halfVec_WS = clampedReflected_WS - rayDir_WS; // view + clamped reflection
-        // the half vector degenerates when the clamped reflection points back along the
-        // ray; fall back to the unperturbed normal
-        waveNor_WS = dot(halfVec_WS, halfVec_WS) > 1e-6f ? normalize(halfVec_WS) : baseNor_WS;
-    }
-    return waveNor_WS;
+    return flip * normalize(float3(-grad.x, 1.f, -grad.y));
 }

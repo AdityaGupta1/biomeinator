@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-10-02_
 
 # Thread Pool
 
@@ -6,7 +6,7 @@ _Last edited: 2026-09-21_
 
 ## Task Model
 
-Tasks are `{function pointer, Chunk*}` pairs — not general-purpose lambdas. Every task operates on a chunk and receives the worker's `ThreadMemoryAllocator` as a second argument. This fixed signature avoids heap allocation per task.
+Tasks are plain structs — a function pointer, a `Chunk*`, and the regions the task pins — not general-purpose lambdas. Every task operates on a chunk, receives itself and the worker's `ThreadMemoryAllocator`, and unpins its regions as the last thing it does. This fixed signature avoids heap allocation per task.
 
 ## Local Task Batching
 

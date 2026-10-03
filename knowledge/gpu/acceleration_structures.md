@@ -1,4 +1,4 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-10-02_
 
 # Acceleration Structures
 
@@ -43,7 +43,7 @@ vertex and index data uses two more committed buffers.
 ## Build Inputs Need Not Stay Resident
 
 An acceleration structure holds its own copy of the geometry, so the vertex buffer a build reads
-is only needed until the build has run. Instances with `host_packedTerrainVerts` exploit this:
+is only needed until the build has run. Instances with `hostGeometry.packedTerrainVerts` exploit this:
 the build reads fp32 positions straight from the section in `sharedVertsUploadBuffer` (an
 upload heap is permanently `GENERIC_READ`, which covers the required
 `NON_PIXEL_SHADER_RESOURCE` state, and the section lives on through the free list for the

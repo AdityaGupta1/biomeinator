@@ -1,0 +1,7 @@
+{
+    "textures": "yuushya/rose_bush_top",
+    "type": "transparent_cutout",
+    "shape": "x_shaped",
+    "randomJitter": true,
+    "translucent": true
+}

@@ -787,11 +787,11 @@
                 "--voxelMode",
                 "--worldSeed=101",
                 "--renderDistance=5",
-                "--cameraX=-189.951",
-                "--cameraY=169.574",
-                "--cameraZ=371.084",
-                "--cameraYaw=240.229",
-                "--cameraPitch=-31.352"
+                "--cameraX=-19.222",
+                "--cameraY=161.713",
+                "--cameraZ=-565.586",
+                "--cameraYaw=-44.141",
+                "--cameraPitch=-89"
             ],
             "golden": "voxel/grass_biome_blend/golden.png",
             "threshold": 0.01

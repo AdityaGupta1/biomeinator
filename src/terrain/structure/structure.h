@@ -25,6 +25,15 @@ enum class StructureType : uint8_t
     PINE_TREE,
     PINE_SHRUB,
 
+    FIR_TREE,
+    CHERRY_TREE,
+    BOREAL_PINE_TREE,
+    BOREAL_BIRCH_TREE,
+    AUTUMN_BIRCH_TREE,
+    TALL_AUTUMN_BIRCH_TREE,
+    GIANT_OAK_TREE,
+    REDWOOD_TREE,
+
     COUNT
 };
 
@@ -92,6 +101,9 @@ struct StructureGen
     // between candidates in adjacent cells.
     uint32_t gridCellPadding;
     uint32_t flags;
+    // Weight of rolling no structure at all, alongside the variants' weights. Thins a grid without
+    // widening it, which would also spread its other variants further apart. Grid placement only.
+    float emptyWeight{ 0.f };
     // Unset: the ordinary one-candidate-per-XZ-cell ground grid. Set: inspect
     // actual exposed surfaces, including lower ledges, and fit/thin them in 3D.
     std::optional<StructureSurfacePlacement> surfacePlacement{};
@@ -102,7 +114,7 @@ struct StructureGen
                  uint32_t gridCellPadding = 0,
                  uint32_t flags = 0);
 
-    StructureType pickVariant(RandomNumberGenerator& rng) const;
+    std::optional<StructureType> pickVariant(RandomNumberGenerator& rng) const;
     // Distinguishes this gen's candidate grid from other gens over the same cells.
     uint32_t gridSalt() const;
 };

@@ -102,6 +102,12 @@ The `randomJitter` JSON flag opts either X-shaped or custom decorator models int
 deterministic ±0.2-block tangent-plane offset. It defaults off so every block that
 wants displacement must declare it explicitly.
 
+Two-tall plants are a pair of ordinary X-shaped blocks; the lower one's `upperHalf` names the
+upper. It's a block property rather than a decorator entry so a pair is defined once and can't be
+mismatched per biome. `Blocks::init()` registers every id before parsing any JSON, since the
+upper half usually sorts after the lower. X-shaped jitter is hashed from world XZ only, which is
+what keeps the halves aligned.
+
 `LIQUID_TOP` is a cube with the +Y face lowered by 1/8 block, creating the "not quite full block" water surface look.
 
 `LAYER` is the opposite: a 1/8-block slab along the bottom of the cell (snow layers). Nothing treats

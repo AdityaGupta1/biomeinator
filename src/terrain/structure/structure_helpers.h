@@ -13,12 +13,22 @@
 namespace StructureHelpers
 {
 
+// First placed wins, so a structure whose wood must stay continuous through its own foliage places
+// all of its logs before any leaves
 inline void tryPlaceStructureBlock(std::vector<Block>& blocks, uint32_t blockIdx, Block newBlock, bool canReplaceWater = true)
 {
     Block& block = blocks[blockIdx];
     if (block == Block::AIR || (canReplaceWater && (block == Block::WATER || block == Block::WATER_TOP)))
     {
         block = newBlock;
+    }
+}
+
+inline void tryPlaceStructureBlock(std::vector<Block>& blocks, glm::ivec3 pos_CS, Block newBlock, bool canReplaceWater = true)
+{
+    if (Chunk::isInChunk(pos_CS))
+    {
+        tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), newBlock, canReplaceWater);
     }
 }
 
@@ -55,12 +65,32 @@ struct DiscWobble
     uint32_t detailSeed{ 0 };
 };
 
+// Continues a structure block at pos_CS for up to rootDepth blocks along rootStepY through air and
+// water, seating it on local ground instead of leaving it floating where the surface drops away
+inline void placeStructureRoot(std::vector<Block>& blocks, glm::ivec3 pos_CS, Block block, int rootStepY, int rootDepth)
+{
+    for (int depth = 1; depth <= rootDepth; ++depth)
+    {
+        const glm::ivec3 rootPos_CS(pos_CS.x, pos_CS.y + rootStepY * depth, pos_CS.z);
+        if (!Chunk::isInChunk(rootPos_CS))
+        {
+            break;
+        }
+        const uint32_t rootBlockIdx = Chunk::blockPosToIdx(glm::uvec3(rootPos_CS));
+        const Block rootBlock = blocks[rootBlockIdx];
+        if (rootBlock != Block::AIR && rootBlock != Block::WATER && rootBlock != Block::WATER_TOP)
+        {
+            break;
+        }
+        blocks[rootBlockIdx] = block;
+    }
+}
+
 // One horizontal disc of `block` centered on centerPos_CS, its radius perturbed per column so the
 // silhouette isn't a clean circle. The perturbation is hashed from world position rather than drawn
 // from a structure's RNG, which is what lets each chunk fill only the columns it owns without
 // desynchronising the stream (see knowledge/terrain/structure_system.md). Cells that land in the
-// disc are rooted rootDepth blocks along rootStepY, seating a shape on local ground instead of
-// leaving its rim floating where the surface drops away; pass rootDepth 0 to skip that.
+// disc are rooted (see placeStructureRoot); pass rootDepth 0 to skip that.
 inline void placeWobbledDisc(std::vector<Block>& blocks,
                              glm::ivec3 centerPos_CS,
                              glm::ivec2 chunkPosXZ_WS,
@@ -102,22 +132,7 @@ inline void placeWobbledDisc(std::vector<Block>& blocks,
             }
 
             tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block);
-
-            for (int depth = 1; depth <= rootDepth; ++depth)
-            {
-                const glm::ivec3 rootPos_CS(pos_CS.x, pos_CS.y + rootStepY * depth, pos_CS.z);
-                if (!Chunk::isInChunk(rootPos_CS))
-                {
-                    break;
-                }
-                const uint32_t rootBlockIdx = Chunk::blockPosToIdx(glm::uvec3(rootPos_CS));
-                const Block rootBlock = blocks[rootBlockIdx];
-                if (rootBlock != Block::AIR && rootBlock != Block::WATER && rootBlock != Block::WATER_TOP)
-                {
-                    break;
-                }
-                blocks[rootBlockIdx] = block;
-            }
+            placeStructureRoot(blocks, pos_CS, block, rootStepY, rootDepth);
         }
     }
 }
@@ -158,10 +173,7 @@ inline void fillLine(std::vector<Block>& blocks, glm::ivec3 startPos_CS, glm::iv
 
     for (int i = 0; i <= dm; ++i)
     {
-        if (Chunk::isInChunk(pos))
-        {
-            tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos)), block);
-        }
+        tryPlaceStructureBlock(blocks, pos, block);
 
         if (err1 > 0)
         {
@@ -274,10 +286,7 @@ inline void placeLeafCap(std::vector<Block>& blocks,
                 for (int dy = -droopDepth; dy <= 0; ++dy)
                 {
                     const glm::ivec3 pos_CS(centerPos_CS.x + dx, y + dy, centerPos_CS.z + dz);
-                    if (Chunk::isInChunk(pos_CS))
-                    {
-                        tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block, false /*canReplaceWater*/);
-                    }
+                    tryPlaceStructureBlock(blocks, pos_CS, block, false /*canReplaceWater*/);
                 }
             }
         }
@@ -293,37 +302,6 @@ inline void placeLeafCap(std::vector<Block>& blocks,
                   Block block)
 {
     placeLeafCap(blocks, centerPos_CS, minRadius, maxRadius, maxHeight, rng, block, 0.f /*droopChance*/, {});
-}
-
-// Roughly spherical blob of leaves, slightly squashed in y, radius jittered ±10%
-inline void placeLeafBlob(std::vector<Block>& blocks, glm::ivec3 centerPos_CS, float radius, RandomNumberGenerator& rng, Block block)
-{
-    const float r = radius * rng.nextFloat(0.9f, 1.1f);
-    constexpr float ySquash = 0.75f;
-    const float r2 = r * r;
-    const int radiusCeilXZ = (int)glm::ceil(r);
-    const int radiusCeilY = (int)glm::ceil(r * ySquash);
-
-    for (int dy = -radiusCeilY; dy <= radiusCeilY; ++dy)
-    {
-        const float scaledDy = dy / ySquash;
-        for (int dz = -radiusCeilXZ; dz <= radiusCeilXZ; ++dz)
-        {
-            for (int dx = -radiusCeilXZ; dx <= radiusCeilXZ; ++dx)
-            {
-                if (dx * dx + scaledDy * scaledDy + dz * dz >= r2)
-                {
-                    continue;
-                }
-                const glm::ivec3 pos_CS = centerPos_CS + glm::ivec3(dx, dy, dz);
-                if (!Chunk::isInChunk(pos_CS))
-                {
-                    continue;
-                }
-                tryPlaceStructureBlock(blocks, Chunk::blockPosToIdx(glm::uvec3(pos_CS)), block, false /*canReplaceWater*/);
-            }
-        }
-    }
 }
 
 } // namespace StructureHelpers

@@ -60,7 +60,7 @@ void ThreadPool::worker()
         const auto batchStart = std::chrono::steady_clock::now();
         for (int i = 0; i < numLocalTasks; ++i)
         {
-            localTasks[i].func(localTasks[i].chunkPtr, threadMemoryAlloc);
+            localTasks[i].func(localTasks[i], threadMemoryAlloc);
             threadMemoryAlloc.clear();
             this->numPendingTasks.fetch_sub(1, std::memory_order_relaxed);
         }
