@@ -42,11 +42,11 @@ Gotchas:
 
 ## Automated Runs
 
-`--renderToFile` (screenshot for rendering tests and agents) and `--perfOutput` (timing report) both make the run
-*automated*: Streamline logging is suppressed and in voxel mode the world import is awaited
-before anything counts. `renderState.automatedRun` gates
-those shared behaviours, and `SettingsManager` defaults the camera lock, GUI, animation pause
-and vsync for both (see [settings → settings_manager.md](../settings/settings_manager.md)).
+`--renderToFile` (screenshot for rendering tests and agents) and `--perfOutput` (timing report)
+both make the run *automated*: Streamline logging is suppressed and in voxel mode the world
+import is awaited before anything counts. `renderState.automatedRun` gates those shared
+behaviours, and `SettingsManager` defaults the camera lock, GUI, animation pause, vsync and
+SHaRC for both (see [settings → settings_manager.md](../settings/settings_manager.md)).
 `renderState.renderToFileMode` gates the render-to-file exit, where accumulation runs to
 `maxAccumulatedFrames` then auto-captures a screenshot and exits, plus the things only a
 render-to-file run gives up: frame generation and a visible window. The window is created but

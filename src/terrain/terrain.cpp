@@ -1150,7 +1150,7 @@ static std::optional<ImportedWorld> readWorld(const std::filesystem::path& world
         ImportedWorld world;
         world.seed = worldJson["worldSeed"].get<uint32_t>();
         world.renderDistance = automatedRun ? worldJson["renderDistance"].get<int>() :
-                                         SettingsManager::getAsInt("renderDistance");
+                                             SettingsManager::getAsInt("renderDistance");
         const auto& cameraJson = worldJson["camera"];
         world.cameraPosInt = { cameraJson["posInt"][0].get<int>(), cameraJson["posInt"][1].get<int>(),
                                cameraJson["posInt"][2].get<int>() };
