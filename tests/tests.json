@@ -732,6 +732,32 @@
             "threshold": 0.005
         },
         {
+            "name": "ice_top_and_side",
+            "world": "voxel/ice_top_and_side",
+            "args": [
+                "--width=480",
+                "--height=270",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=16384",
+                "--maxPathDepth=8"
+            ],
+            "golden": "voxel/ice_top_and_side/golden.png",
+            "threshold": 0.02
+        },
+        {
+            "name": "ice_bottom",
+            "world": "voxel/ice_bottom",
+            "args": [
+                "--width=480",
+                "--height=270",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=16384",
+                "--maxPathDepth=8"
+            ],
+            "golden": "voxel/ice_bottom/golden.png",
+            "threshold": 0.03
+        },
+        {
             "name": "fog_haze",
             "world": "voxel/fog_haze",
             "args": [
