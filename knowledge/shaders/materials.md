@@ -171,9 +171,16 @@ per bounce for the BSDF-hit emission MIS weight. Forward selection and pdf evalu
 same value or the MIS weights disagree. Rough glass is not passthrough: the anyhit shader lets
 `PAYLOAD_FLAG_REFRACTION_PASSTHROUGH` rays through `isDeltaTransmission()` materials only.
 
-`trySplitMaterial` only splits at roughness 0 for now (#372). Rough glass could never be split
-this way, since a split on the macro-normal Fresnel would mis-weight lobes whose Fresnel is per
-microfacet; other rough glossy materials simply aren't split yet.
+`trySplitMaterial` splits macro-normal Fresnel only at roughness 0 for now (#372). Rough glass could
+never be split this way, since a split on the macro-normal Fresnel would mis-weight lobes whose
+Fresnel is per microfacet; other rough macro-Fresnel materials simply aren't split yet. Rough
+microfacet-Fresnel materials (scattering surfaces) are split: split 0 is the diffuse lobe exactly as
+it lies under the glossy one, folded into a scaled diffuse-only lobe (front hemisphere weighted by one
+minus the average Fresnel, thin-wall back hemisphere unweighted, so the transmission share is
+reweighted too), and split 1 is the glossy lobe alone carrying `F(h)`, whose pdf then has no Fresnel
+selection term. This matters most for the ice-water face beyond its critical angle, where almost
+every unsplit sample reflects into dark water and the few diffuse ones carry the whole glow. The
+reflection half's specular guide uses the average Fresnel, not its lone-lobe probability of 1.
 
 ## Shading normal
 

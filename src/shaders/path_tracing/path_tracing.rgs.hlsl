@@ -103,7 +103,11 @@ FirstBounceAlbedos computeFirstBounceAlbedos(const Material material,
                                              const TexSampleCtx texCtx,
                                              const float3 weight)
 {
-    const float fresnelReflectance = glossyReflectionProbability(material, wo_WS, surfShadingNor_WS);
+    // A microfacet-Fresnel lobe reflects its average Fresnel whether or not a split separated it from the
+    // diffuse lobe
+    const float fresnelReflectance = (material.hasMicrofacetFresnel() && material.roughness > 0.f)
+        ? averageMicrofacetFresnel(material, wo_WS, surfShadingNor_WS)
+        : glossyReflectionProbability(material, wo_WS, surfShadingNor_WS);
     const float3 glossyReflectionAlbedo = calculateDlssSpecularAlbedo(
         material.glossyReflectionTint, material.roughness * material.roughness, cosTheta(wo_WS, surfShadingNor_WS));
     // The lobe the light reaches when it isn't reflected: diffuse, or transmission for glass
@@ -464,9 +468,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             }
 
             // A rough glossy first bounce would otherwise write the stochastically chosen lobe's weight as its
-            // albedo. Only pathSplitIdx 0 can reach a rough material (trySplitMaterial breaks split 1 out for
-            // anything it can't split, and the alpha split makes split 1 a delta passthrough), so the single
-            // write to the shared specular albedo target has no other writer to race with.
+            // albedo. Only one path split can reach a rough glossy material (trySplitMaterial breaks split 1 out
+            // for anything it can't split, the alpha split makes split 1 a delta passthrough, and the microfacet
+            // Fresnel split leaves glossy only in split 1), so the single write to the shared specular albedo
+            // target has no other writer to race with.
             const bool useAnalyticAlbedoGuides =
                 (pathDepth == 0) && surfMaterial.hasGlossy() && surfMaterial.roughness > 0.f;
             if (useAnalyticAlbedoGuides)
