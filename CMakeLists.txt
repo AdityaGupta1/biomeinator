@@ -282,6 +282,7 @@ assign_source_group("external" "${EXT}" "${IMGUI_SRC}")
 add_executable(Biomeinator
     ${SRC_FILES}
     ${IMGUI_SRC}
+    "${SRC_DIR}/resources/biomeinator.rc"
     ${COMPILED_HEADERS}
     ${SHADER_FILES}
     ${SHADER_INCLUDE_FILES}
