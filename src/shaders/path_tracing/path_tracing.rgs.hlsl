@@ -162,7 +162,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         {
             // Give the sky an albedo so DLSS doesn't see it as black. Uses the unattenuated dome
             // light rather than pathWeight, which would fold in fog transmittance.
-            ptDiffuseAlbedo = applyReinhard(cloudGuideColor(ray.Direction, domeLightColor, primaryCloud.transmittance));
+            ptDiffuseAlbedo = cloudGuideAlbedo(domeLightColor, primaryCloud.transmittance);
         }
         return;
     }
@@ -606,7 +606,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                     {
                         // Specular reflection of the sky. Excludes fog and absorption to match
                         // how the primary miss builds its albedo.
-                        ptDiffuseAlbedo *= applyReinhard(cloudGuideColor(ray.Direction, missDomeLightColor, segmentCloud.transmittance));
+                        ptDiffuseAlbedo *= cloudGuideAlbedo(missDomeLightColor, segmentCloud.transmittance);
                     }
                     else
                     {

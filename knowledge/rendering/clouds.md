@@ -1,4 +1,4 @@
-_Last edited: 2026-09-17_
+_Last edited: 2026-10-02_
 
 # Clouds
 
@@ -56,12 +56,15 @@ existing rays. This is where clouds shadow the ground.
 
 ## DLSS guides
 
-The G-buffer overrides depth and motion with the first cloud boundary in front of the
-endpoint regardless of opacity, and un-applies wind for the previous position so pausing
+The G-buffer overrides depth, motion and normal with the first cloud boundary in front of
+the endpoint regardless of opacity, and un-applies wind for the previous position so pausing
 animation freezes wind motion but not camera motion. Starting inside a cloud, the exit
 boundary is used; a geometry endpoint or the draw distance is never reported as a surface.
 
-Sky misses (and first perfect-specular sky reflections) blend an unshadowed cloud color with
-the sky using the segment's analytic transmittance (`cloudGuideColor`). The guide must never
-use the sampled lighting or self-shadowing: any noise there would be reconstructed as
+Sky misses (and first perfect-specular sky reflections) blend a white cloud albedo with the
+tonemapped sky using the segment's analytic transmittance (`cloudGuideAlbedo`). White, not a
+lit cloud color: an unshadowed sun-lit guide paints every face equally bright while the real
+radiance is dark on self-shadowed faces, and at sunset DLSS-RR turns that mismatch into green
+vertical stripes and orange smears on the dark faces (issue #414). The guide must never
+use the sampled lighting or self-shadowing either: any noise there would be reconstructed as
 detail. See [dlss.md](dlss.md#cloud-albedo).
