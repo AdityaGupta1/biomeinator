@@ -603,6 +603,41 @@ bool LodTile::meshVoxels(ThreadMemoryAllocator& threadMemoryAlloc)
         return cells[cellIdx(cellPos)];
     };
 
+    // Margin cells round up like all cells, so they may be solid where the real blocks beside the tile are
+    // air. Faces out of the tile are instead culled against those real blocks: whatever is drawn there,
+    // chunks or another tile, covers at least them.
+    const auto isFaceVisible = [&](ivec3 cellPos, const BlockData& blockData, uint8_t faceIdx)
+    {
+        const ivec3 normal = blockFaceBases[faceIdx].normal;
+        const ivec3 neighborCellPos = cellPos + normal;
+        if (neighborCellPos.x >= 0 && neighborCellPos.x < numCellsXZ && neighborCellPos.z >= 0 &&
+            neighborCellPos.z < numCellsXZ)
+        {
+            const BlockData& neighborData = Blocks::getBlockData(cellAt(neighborCellPos));
+            return blockFaceVisible(blockData.type, BlockShape::CUBE, neighborData.type, BlockShape::CUBE, faceIdx);
+        }
+
+        const ivec2 cellBlockXZ = cellToBlockXZ(ivec2(cellPos.x, cellPos.z));
+        const ivec3 cellBlockPos(cellBlockXZ.x, bandMinY + cellPos.y * voxelCellSize, cellBlockXZ.y);
+        for (int i = 0; i < 8; ++i)
+        {
+            const ivec3 acrossOffset = ivec3(i & 1, i >> 2, (i >> 1) & 1) + normal;
+            if (glm::all(glm::greaterThanEqual(acrossOffset, ivec3(0))) &&
+                glm::all(glm::lessThan(acrossOffset, ivec3(voxelCellSize))))
+            {
+                continue;
+            }
+            const ivec3 acrossPos = cellBlockPos + acrossOffset;
+            const BlockData& neighborData =
+                Blocks::getBlockData(acrossPos.y < static_cast<int>(chunkSizeY) ? blockAt(acrossPos) : Block::AIR);
+            if (blockFaceVisible(blockData.type, BlockShape::CUBE, neighborData.type, neighborData.shape, faceIdx))
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+
     HostGeometry& terrainGeometry = this->terrainInstance->hostGeometry;
     HostGeometry& waterGeometry = this->waterInstance->hostGeometry;
     const PerFaceData waterFaceData =
@@ -656,8 +691,7 @@ bool LodTile::meshVoxels(ThreadMemoryAllocator& threadMemoryAlloc)
 
                 for (uint8_t faceIdx = 0; faceIdx < blockFaceCount; ++faceIdx)
                 {
-                    const BlockData& neighborData = Blocks::getBlockData(cellAt(cellPos + blockFaceBases[faceIdx].normal));
-                    if (!blockFaceVisible(blockData.type, BlockShape::CUBE, neighborData.type, BlockShape::CUBE, faceIdx))
+                    if (!isFaceVisible(cellPos, blockData, faceIdx))
                     {
                         continue;
                     }

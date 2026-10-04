@@ -56,6 +56,11 @@ hard edge.
   above the voxel levels.
 - Downsampling keeps the most common block that fills a cube, ties to the higher, so canopies, trunks and
   thin pillars survive (slightly thickened) and surfaces keep their top block. Plants vanish.
+- Any cube-filling block makes its cell solid, so tiles cover at least the real blocks. Faces out of a
+  tile are culled against the real blocks beside it, not the rounded-up margin cells, which would hide
+  faces where the neighboring chunks are air and crack the seam. Rounding down (e.g. by majority) would
+  crack it from the other side: chunks cull their edge faces against real neighbors the tile no longer
+  covers. The rounding leaves a ledge of up to a block at the seam.
 - Leaves keep their cutout, without OMMs, so a tile with leaf faces runs the anyhit alpha test.
 
 ## Quadtree and selection
