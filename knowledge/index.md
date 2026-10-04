@@ -17,4 +17,5 @@ Each subsystem has its own folder with a local `index.md` that describes its ent
 | [build/](build/index.md) | CMake configurations, third-party dependencies, CI, app icon |
 | [debugging/](debugging/index.md) | GPU fault diagnosis: Aftermath crash dumps and reference instrumentation to read and adapt |
 | [tests/](tests/index.md) | CPU unit tests, rendering tests, performance runs, and ad hoc CPU terrain experiments |
+| [conventions/](conventions/index.md) | Project-wide conventions such as copyright header years |
 | [reference/](reference/index.md) | Vendored upstream docs (DirectX-Specs) for agent reference |

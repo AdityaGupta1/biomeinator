@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2025-2026 Aditya Gupta
+// Copyright (c) 2026 Aditya Gupta
 
 // StructureGen is pure config and variant selection with no placement dependencies; it lives in
 // its own translation unit so tools that only need the biome table (which contains StructureGens)

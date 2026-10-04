@@ -39,3 +39,10 @@ the user cannot disturb the run by clicking or typing into it. Its defaults
 [settings → settings_manager.md](knowledge/settings/settings_manager.md); like
 rendering tests, it must run outside the agent sandbox (see
 [tests → rendering_tests.md](knowledge/tests/rendering_tests.md)).
+
+## Copyright headers
+
+New source files get `Copyright (c) <current year>`, and editing a file whose
+range ends before the current year extends it (`2026` becomes `2026-2027`).
+Don't copy the years from a neighbouring file. Renames and splits are covered
+in [conventions → copyright_headers.md](knowledge/conventions/copyright_headers.md).
