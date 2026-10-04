@@ -297,9 +297,16 @@ void imguiEndFrame(double deltaTime)
         const glm::vec3 cameraPos_WS = renderState.camera.getPos_WS();
         ImGui::Text("Position: (%.2f, %.2f, %.2f)", cameraPos_WS.x, cameraPos_WS.y, cameraPos_WS.z);
 
-        Biome cameraBiome;
-        ImGui::Text("Biome: %s",
-                    Terrain::tryGetCameraBiome(cameraBiome) ? Biomes::getBiomeData(cameraBiome).name : "unknown");
+        const float cameraYawDegrees = glm::mod(glm::degrees(renderState.camera.getTheta()), 360.f);
+        const float cameraPitchDegrees = glm::degrees(renderState.camera.getPhi());
+        ImGui::Text("Yaw: %.1f Pitch: %.1f", cameraYawDegrees, cameraPitchDegrees);
+
+        if (renderState.voxelMode)
+        {
+            Biome cameraBiome;
+            ImGui::Text("Biome: %s",
+                        Terrain::tryGetCameraBiome(cameraBiome) ? Biomes::getBiomeData(cameraBiome).name : "unknown");
+        }
     }
     ImGui::End();
 
