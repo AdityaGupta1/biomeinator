@@ -1035,15 +1035,15 @@ void render()
         renderState.hudlessTarget.transitionToState(renderState.cmdList.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     }
 
-    if (renderState.screenshotRequest.active)
-    {
-        captureQueuedScreenshot();
-    }
-
     if (showGui)
     {
         GPU_PROFILE_SCOPE(renderState.cmdList.Get(), "imgui");
         imguiEndFrame(deltaTime);
+    }
+
+    if (renderState.screenshotRequest.active)
+    {
+        captureQueuedScreenshot();
     }
 
     BufferHelper::stateTransitionResourceBarrier(
