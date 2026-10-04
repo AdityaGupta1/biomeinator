@@ -3,7 +3,7 @@ _Last edited: 2026-10-04_
 # Terrain LODs
 
 `src/terrain/terrain_lod.h/cpp` shows terrain out to `--lodDistance` chunks as smooth heightfield tiles, and
-`ChunkGenerator::sampleLodColumns` samples their columns. LODs are off in headless runs, so goldens never
+`ChunkGenerator::sampleLodColumns` samples their columns. LODs are off in automated runs, so goldens never
 see them.
 
 ## Data comes from the noise, not from chunks

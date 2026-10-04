@@ -103,7 +103,7 @@ Rejected:
 The voxel goldens need regolding as a whole:
 - Fog is now on all day, and goldens include fog (e.g. `grass_biome_blend` fails at 0.0145 against 0.01
   from fog alone).
-- LODs are off in headless runs today (`Terrain::lodsEnabled` checks `headless`), so goldens don't see
+- LODs are off in automated runs today (`Terrain::lodsEnabled` checks `automatedRun`), so goldens don't see
   them yet. Once tests run with LODs, nearly every voxel scene changes: distant terrain, the ring, and
   fog and shadows reaching past the chunk distance. Decide whether goldens run with LODs on (likely, so
   they cover them), then regold all voxel tests in one pass, after the LOD look settles, rather than per
@@ -120,7 +120,7 @@ Not yet checked with LODs on. Things to verify:
 - Reimport (`resetTerrainState`) resets `TerrainLod` and `SurfaceChunkCache`; check no task, pinned
   cells or lingering chunk survives it.
 - Export writes completed regions only; make sure lingering chunks and LOD state don't leak into it.
-- Headless runs of imported worlds (goldens) once LODs are on there (see item 3).
+- Automated runs of imported worlds (goldens) once LODs are on there (see item 3).
 
 ### 5. Smaller items
 

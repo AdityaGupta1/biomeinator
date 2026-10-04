@@ -126,7 +126,8 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
     ADD_OPTION("cloudWindZ", "Cloud wind Z in blocks/s", float, "50");
     ADD_OPTION("renderDistance", "Render distance in chunks (must be positive)", int, "30");
     ADD_OPTION("lodDistance",
-               "Distance in chunks out to which distant terrain is shown as LODs (0 disables them; never shown headless)",
+               "Distance in chunks out to which distant terrain is shown as LODs "
+               "(0 disables them; never shown in automated runs)",
                int,
                "512");
     ADD_OPTION("lodVoxelDistanceScale",

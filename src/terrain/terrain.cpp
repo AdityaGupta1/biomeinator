@@ -200,7 +200,7 @@ void init(Scene* scene)
     Terrain::automatedRun = SettingsManager::isAutomatedRun();
     Terrain::evictingRegions = SettingsManager::getAsBool("evictRegions");
     Terrain::validatingEviction = SettingsManager::getAsBool("validateEviction");
-    Terrain::lodsEnabled = !Terrain::headless && SettingsManager::getAsInt("lodDistance") > 0;
+    Terrain::lodsEnabled = !Terrain::automatedRun && SettingsManager::getAsInt("lodDistance") > 0;
 
     // Blocks::init() assigns the texture array slice indices that TerrainMaterials::init()
     // loads textures for
