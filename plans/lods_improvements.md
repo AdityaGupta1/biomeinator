@@ -24,7 +24,7 @@ Done so far in this round:
 1. Coarse tiles popping in near the player (done; lingering chunks cost memory while moving fast)
 2. Distance fog that fades far terrain to a neutral color
 3. Decorator emulation
-4. Snow layers in voxel tiles
+4. Snow layers in voxel tiles (done)
 5. Per-chunk surface-only pipeline (ring generation speed)
 6. Smaller items: seam ledge, sea ice outline, Tianzi spikes, water fade, dawn/dusk fog boost
 
@@ -72,19 +72,12 @@ Proposal: emulate statistically rather than placing decorators.
 - Alternative considered: run the floor decorator pass in surface-only chunks (the cave decorator half
   is what needs skipped data). Not worth it: downsampling deletes them, and only their color matters.
 
-### 4. Snow layers in voxel tiles
+### 4. Snow layers in voxel tiles (done)
 
-Symptom: snow layers turn into full-block snow in voxel tiles, so snowy ground sits up to a block too
-high and looks lumpy.
-
-Cause: `downsampleBlocks` counts `BlockShape::LAYER` as filling its cell, and voxel tiles mesh every
-cell as a full box.
-
-Fix: give a cell whose top is a snow layer a lowered top at the layer's actual height (the solid blocks
-below plus `blockShapeTopHeight` of the layer), meshing its top face and the exposed parts of its sides
-at that height. Side faces against a neighbor with a different top height need the same partial-height
-treatment chunks give layers (`blockFaceVisible` compares top heights). Keep the cull-against-real-
-blocks rule at tile edges consistent with the lowered tops.
+Done: cells keep block shapes as a fill height in eighths of a block from the cell's bottom (bottom-anchored
+shapes only; the user doesn't expect top slabs or stairs), with a body block for sides and the tallest
+column's top block on top. Snow layers are an eighth of a block thick. This also stopped surfaces rounding
+up to the next 2-block boundary.
 
 ### 5. Per-chunk surface-only pipeline
 
@@ -111,10 +104,10 @@ Options:
 
 ### 6. Smaller items
 
-- Seam ledge: voxel tiles sit up to a block above the chunks beside them, since downsampling rounds
-  surfaces up. Majority rounding is not the fix on its own: it would crack the seam from the chunk side.
-  Candidate: mesh each tile's outermost 2-block strip at full resolution from the real blocks, so the
-  step moves inside the tile where culling is exact.
+- Seam ledge: vertical rounding is gone with the fill heights, but a cell takes its tallest column's
+  height, so a step of up to a block remains where columns differ. Fills below the real blocks would crack
+  the seam from the chunk side. Candidate: mesh each tile's outermost 2-block strip at full resolution
+  from the real blocks, so the step moves inside the tile where culling is exact.
 - Water seam: a thin bright line across open water near the camera, seen right after loading (a lake
   next to snowy shore). Possibly at a chunk/tile boundary in the water surface. Not yet investigated.
 - Sea ice outline: sea ice in heightfield tiles still shows a dark outline along shores after the

@@ -54,13 +54,23 @@ hard edge.
   manager never sees them. Generating them inside one task duplicates the margin between neighboring
   tiles, which is why voxel tiles are capped low and why placeholders inside the chunk distance start
   above the voxel levels.
-- Downsampling keeps the most common block that fills a cube, ties to the higher, so canopies, trunks and
-  thin pillars survive (slightly thickened) and surfaces keep their top block. Plants vanish.
-- Any cube-filling block makes its cell solid, so tiles cover at least the real blocks. Faces out of a
-  tile are culled against the real blocks beside it, not the rounded-up margin cells, which would hide
-  faces where the neighboring chunks are air and crack the seam. Rounding down (e.g. by majority) would
+- Downsampling keeps the most common block that fills from the bottom (any shape but plants and models),
+  ties to the higher, so canopies, trunks and thin pillars survive (slightly thickened) and surfaces keep
+  their top block. Plants vanish.
+- A cell is not a cube: it fills from its bottom to its highest column, in eighths of a block, counting a
+  block in the upper row as standing on a full one. Shapes keep their heights that way (a snow layer on
+  the ground is an eighth of a block thick, not a full cell of snow), which works for any shape anchored
+  at the bottom of its block but could not represent top slabs or stairs. Solid cells cull against each
+  other by comparing fills, as chunks compare shape heights. The cell's sides show its block and its top shows the tallest
+  column's top block, preferring whole blocks for the former: otherwise a snow layer on leaves or grass,
+  winning the tie, turned the whole cell into snow.
+- Taking the highest column means tiles cover at least the real blocks. Faces out of a tile are culled
+  against the real blocks beside it, not the margin cells, which cover more and would hide faces where
+  the neighboring chunks are air, cracking the seam. Fills below the real blocks (e.g. by majority) would
   crack it from the other side: chunks cull their edge faces against real neighbors the tile no longer
-  covers. The rounding leaves a ledge of up to a block at the seam.
+  covers. What is left at the seam is the horizontal widening, up to a block.
+- A partial cell holding water under its top also shows the water surface, since the cell above has
+  none to show.
 - Leaves keep their cutout, without OMMs, so a tile with leaf faces runs the anyhit alpha test.
 
 ## Quadtree and selection
