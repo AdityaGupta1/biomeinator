@@ -99,8 +99,17 @@ Options:
   This removes the duplicated margins and spreads the work across all workers. It needs dependency
   tracking, either a small dedicated scheduler or a surface-only mode in the region pipeline (chunks
   then switch mode by being discarded and regenerated when they come within the full-res distance).
-- Measure first: time surface-only versus full chunk generation (CPU terrain benchmark harness,
-  `knowledge/tests/cpu_terrain_benchmarks.md`) to size the ring.
+Measured (2026-10-03, seed 100, render distance 30, random walk at 40 blocks/s, 23 workers, temporary
+timers in the worker tasks; absolute numbers drift ~30% between runs with machine state):
+- Full chunk: generateTerrain 3.0 ms, structures and decorators 0.3, segments 0.5, createInstances 1.9.
+- Surface-only chunk: terrain 0.5 ms (6x cheaper), structures 0.07 ms.
+- Voxel tile, per tile: L0 7.2 ms, L1 17.3, L2 55.1; per covered chunk 7.2, 4.3, 3.4.
+- L2 breakdown: generating 36 chunks 20.0 ms (terrain 18.7, structures 1.2), height band scan 26.3,
+  downsample 4.9, mesh 3.9. The band scan walks every column down from the world top through
+  `blockAt`; it is 40-48% of L1 and L2 tiles and is pure overhead.
+- Useful work per chunk is about 1.1 ms (terrain 0.5, structures 0.07, downsample 0.3, mesh 0.25).
+- While moving, workers were 12% busy. Voxel tiles took 1.9 worker-seconds per second against the cap's
+  4; at 100 blocks/s demand exceeds the cap, which is what piles up lingering chunks.
 
 ### 6. Smaller items
 

@@ -91,7 +91,6 @@ inline constexpr uint32_t numChunkSegments = numChunkSegmentsXZ * numChunkSegmen
 
 class Region;
 class ThreadMemoryAllocator;
-struct SurfaceOnlyChunks;
 
 // Chunk-owned inputs for deferred cave decoration. Neighboring chunks read only
 // the immutable terrain masks; these fields live until this chunk finishes decoration.
@@ -207,9 +206,15 @@ struct SnowData
 
 class Chunk
 {
+public:
+    static constexpr uint32_t structureNeighborSideLength = 2 * structureMaxChunkRadius + 1;
+    static constexpr uint32_t numStructureNeighbors = structureNeighborSideLength * structureNeighborSideLength;
+    // Row by row from the -X, -Z corner
+    using ConstStructureNeighborhood = std::array<const Chunk*, numStructureNeighbors>;
+
 private:
     const glm::ivec2 chunkPos;
-    // Null for chunks generated outside the region pipeline (see generateSurfaceOnly)
+    // Null for surface-only chunks, which are generated outside the region pipeline
     Region* const region;
     // Only seen from afar, so generated without caves, decorators or rock deep below the surface
     const bool isSurfaceOnly;
@@ -265,8 +270,6 @@ private:
     Instance* terrainInstance{ nullptr };
     Instance* waterInstance{ nullptr };
 
-    static constexpr uint32_t structureNeighborSideLength = 2 * structureMaxChunkRadius + 1;
-    static constexpr uint32_t numStructureNeighbors = structureNeighborSideLength * structureNeighborSideLength;
     static_assert(numStructureNeighbors < 32, "readyStructureNeighborsMask needs a bit per structure neighbor");
     static constexpr uint32_t allStructureNeighborsMask = (1u << numStructureNeighbors) - 1;
     static constexpr uint32_t allNeighborsMask = (1u << 4) - 1;
@@ -311,10 +314,10 @@ public:
     Chunk(glm::ivec2 chunkPos, Region* region, bool isSurfaceOnly = false);
     ~Chunk();
 
-    // Generates the surface-only chunks from minChunkPos across sideChunks, with their structures, outside
-    // the region pipeline. Clears threadMemoryAlloc.
-    static SurfaceOnlyChunks generateSurfaceOnly(glm::ivec2 minChunkPos, int sideChunks,
-                                                 ThreadMemoryAllocator& threadMemoryAlloc);
+    // Surface-only chunks are generated outside the region pipeline, which tracks their readiness itself
+    void generateSurfaceOnlyTerrain(ThreadMemoryAllocator& threadMemoryAlloc);
+    // Every chunk in the neighborhood must have its terrain
+    void fillSurfaceOnlyStructures(const ConstStructureNeighborhood& neighborhood);
 
     void setNeighbors(bool createNeighbors);
 
@@ -355,6 +358,8 @@ public:
     bool tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const;
     // Whatever generation has written so far
     Block getGeneratedBlock(glm::uvec3 chunkBlockPos) const;
+    // The column's generated blocks, bottom up
+    const Block* getGeneratedColumn(glm::uvec2 chunkBlockPosXZ) const;
 
     const std::vector<Biome>& getBiomes() const;
     // Only valid once the chunk has all its blocks
@@ -394,20 +399,6 @@ public:
     static inline bool isInChunk(glm::ivec3 pos_CS)
     {
         return isInChunkXZ(pos_CS) && pos_CS.y >= 0 && pos_CS.y < chunkSizeY;
-    }
-};
-
-// Surface-only chunks with all their blocks, and the margin of terrain-only chunks their structures needed
-struct SurfaceOnlyChunks
-{
-    glm::ivec2 minChunkPos; // of the margin
-    int sideChunks; // including the margin
-    std::vector<std::unique_ptr<Chunk>> chunks;
-
-    const Chunk& chunkAt(glm::ivec2 chunkPos) const
-    {
-        const glm::ivec2 offset = chunkPos - this->minChunkPos;
-        return *this->chunks[offset.x + this->sideChunks * offset.y];
     }
 };
 

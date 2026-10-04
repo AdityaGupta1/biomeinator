@@ -17,6 +17,7 @@
 class Chunk;
 class LodTile;
 class Region;
+class SurfaceChunk;
 class ThreadMemoryAllocator;
 
 struct Task
@@ -24,6 +25,7 @@ struct Task
     void (*func)(const Task&, ThreadMemoryAllocator&);
     Chunk* chunkPtr{ nullptr };
     LodTile* lodTilePtr{ nullptr };
+    SurfaceChunk* surfaceChunkPtr{ nullptr };
     // Pinned while the task is queued or running so they cannot be removed; func unpins them
     std::array<Region*, 4> pinnedRegions{};
     uint32_t numPinnedRegions{ 0 };

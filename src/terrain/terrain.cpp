@@ -225,15 +225,7 @@ void init(Scene* scene)
     startRegionDeleter();
 }
 
-struct IVec2Hash
-{
-    size_t operator()(const glm::ivec2& v) const noexcept
-    {
-        return hash(v.x ^ hash(v.y));
-    }
-};
-
-static std::unordered_map<glm::ivec2, std::unique_ptr<Region>, IVec2Hash> regions;
+static std::unordered_map<glm::ivec2, std::unique_ptr<Region>, glmUtil::IVec2Hash> regions;
 
 static glm::ivec2 cameraChunkPosition(glm::ivec3 position)
 {
@@ -312,7 +304,7 @@ static std::atomic<uint32_t> expectedImportedChunks{ 0 };
 static std::atomic<uint32_t> importedChunksEnqueuedForBlas{ 0 };
 static std::atomic<bool> worldImportActive{ false };
 // Protected by chunksWithNewGeometryMutex; each initial-import coordinate counts once.
-static std::unordered_set<glm::ivec2, IVec2Hash> pendingImportedChunks;
+static std::unordered_set<glm::ivec2, glmUtil::IVec2Hash> pendingImportedChunks;
 
 void addChunkWithNewGeometry(Chunk* chunk)
 {
@@ -410,7 +402,7 @@ static void updateRegionStaging(glm::ivec2 cameraChunkPos, const ChunkScanDistan
 }
 
 // Final block hashes of generated chunks in evicted regions, until they are regenerated
-static std::unordered_map<glm::ivec2, uint64_t, IVec2Hash> evictedChunkHashes;
+static std::unordered_map<glm::ivec2, uint64_t, glmUtil::IVec2Hash> evictedChunkHashes;
 static std::mutex evictedChunkHashesMutex;
 
 static void recordEvictedChunkHash(const Chunk* chunk)
@@ -1200,7 +1192,7 @@ static std::vector<Block> buildBlockRemapTable(const nlohmann::json& paletteJson
 struct ImportedWorld
 {
     decltype(Terrain::regions) regions;
-    std::unordered_set<glm::ivec2, IVec2Hash> pendingChunks;
+    std::unordered_set<glm::ivec2, glmUtil::IVec2Hash> pendingChunks;
     uint32_t seed{ 0 };
     uint32_t numChunks{ 0 };
     int renderDistance{ 0 };

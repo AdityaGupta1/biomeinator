@@ -753,43 +753,20 @@ void Chunk::fillBlocksFromStructureNeighbors()
     this->structureNeighbors = {};
 }
 
-SurfaceOnlyChunks Chunk::generateSurfaceOnly(ivec2 minChunkPos, int sideChunks, ThreadMemoryAllocator& threadMemoryAlloc)
+void Chunk::generateSurfaceOnlyTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    constexpr int margin = static_cast<int>(structureMaxChunkRadius);
-    SurfaceOnlyChunks area{
-        .minChunkPos = minChunkPos - margin,
-        .sideChunks = sideChunks + 2 * margin,
-    };
-    area.chunks.resize(area.sideChunks * area.sideChunks);
-    for (int z = 0; z < area.sideChunks; ++z)
-    {
-        for (int x = 0; x < area.sideChunks; ++x)
-        {
-            std::unique_ptr<Chunk>& chunk = area.chunks[x + area.sideChunks * z];
-            chunk = std::make_unique<Chunk>(area.minChunkPos + ivec2(x, z), nullptr, true /*isSurfaceOnly*/);
-            if (x > 0)
-            {
-                chunk->setNeighbor(NeighborDirection::X_NEG, area.chunks[(x - 1) + area.sideChunks * z].get());
-            }
-            if (z > 0)
-            {
-                chunk->setNeighbor(NeighborDirection::Z_NEG, area.chunks[x + area.sideChunks * (z - 1)].get());
-            }
-            chunk->generateTerrainBlocks(threadMemoryAlloc);
-            threadMemoryAlloc.clear();
-        }
-    }
+    ASSERT(this->isSurfaceOnly);
+    this->generateTerrainBlocks(threadMemoryAlloc);
+}
 
-    // Each structure pass writes only its own chunk and reads the others' immutable terrain, so the
-    // order doesn't matter
-    for (int z = margin; z < area.sideChunks - margin; ++z)
-    {
-        for (int x = margin; x < area.sideChunks - margin; ++x)
-        {
-            area.chunks[x + area.sideChunks * z]->fillBlocksFromStructureNeighbors();
-        }
-    }
-    return area;
+void Chunk::fillSurfaceOnlyStructures(const ConstStructureNeighborhood& neighborhood)
+{
+    ASSERT(this->isSurfaceOnly);
+    this->structureNeighbors.assign(neighborhood.begin(), neighborhood.end());
+    this->runStructuresAndDecoratorPass();
+    this->structureNeighbors = {};
+    this->caveDecoration.release();
+    this->snow.release();
 }
 
 void Chunk::fillStructuresAndDecorators()
@@ -1589,6 +1566,11 @@ bool Chunk::tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const
 Block Chunk::getGeneratedBlock(glm::uvec3 chunkBlockPos) const
 {
     return this->blocks[Chunk::blockPosToIdx(chunkBlockPos)];
+}
+
+const Block* Chunk::getGeneratedColumn(glm::uvec2 chunkBlockPosXZ) const
+{
+    return this->blocks.data() + Chunk::blockPosXZToIdx(chunkBlockPosXZ);
 }
 
 const std::vector<Biome>& Chunk::getBiomes() const

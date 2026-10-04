@@ -42,18 +42,28 @@ surface cave. That keeps the seam with full-resolution chunks small for the near
 ## Voxel tiles near the chunks
 
 Within `--lodVoxelDistance`, tiles are subdivided down to `maxVoxelTileLevel` and built from real chunks
-instead of the noise: `Chunk::generateSurfaceOnly` generates the tile's chunks, plus the margin their
-structures need, inside the tile's own task, and the tile downsamples them 2x into voxels. That carries
-trees, structures, pillars and overhangs past the chunk distance, where heightfields dropped them at a
-hard edge.
+instead of the noise, downsampled 2x into voxels. That carries trees, structures, pillars and overhangs
+past the chunk distance, where heightfields dropped them at a hard edge.
 
 - Surface-only chunks skip what can't be seen from afar, which is most of terrain generation's cost:
   cave shape and cave biome noise, cave structures, decorators, and filling rock far below the
   surface. Structures and snow layers still run, so placements match the full chunks they become.
 - They live outside the region pipeline (null region) and never report state changes, so the terrain
-  manager never sees them. Generating them inside one task duplicates the margin between neighboring
-  tiles, which is why voxel tiles are capped low and why placeholders inside the chunk distance start
-  above the voxel levels.
+  manager never sees them. `SurfaceChunkCache` generates them a task per chunk and step instead: terrain,
+  then the structure pass once the structure neighborhood has terrain, then downsampling into cells. Full
+  blocks are freed as soon as no waiting neighbor needs them, leaving a few KB of cells per chunk, which
+  tiles mesh from once their chunks and the ring around them are ready.
+- Generating a tile's chunks and their structure margin inside the tile's own task, as an earlier version
+  did, was serial, regenerated margins (9 chunks for a level-0 tile's 1), spent half its time finding the
+  height band, and held so much memory that only four could run: workers sat at 12% while the ring lagged.
+  Per chunk, the useful work is about a millisecond.
+- A chunk regenerated for a neighbor's structure pass after its own cells exist is only read for its
+  immutable terrain, so its own structure pass never runs twice. Cells are dropped only once their chunk
+  holds no terrain, and a chunk's cells are never regenerated while its old terrain lives.
+- Only the highest-priority request may exceed the cap on chunks holding terrain, so neighborhoods that
+  later requests left half generated can't stall every request.
+- Placeholders inside the chunk distance start above the voxel levels: voxel tiles there would be
+  replaced by chunks almost as soon as they were built.
 - Downsampling keeps the most common block that fills from the bottom (any shape but plants and models),
   ties to the higher, so canopies, trunks and thin pillars survive (slightly thickened) and surfaces keep
   their top block. Plants vanish.
@@ -61,16 +71,20 @@ hard edge.
   block in the upper row as standing on a full one. Shapes keep their heights that way (a snow layer on
   the ground is an eighth of a block thick, not a full cell of snow), which works for any shape anchored
   at the bottom of its block but could not represent top slabs or stairs. Solid cells cull against each
-  other by comparing fills, as chunks compare shape heights. The cell's sides show its block and its top shows the tallest
-  column's top block, preferring whole blocks for the former: otherwise a snow layer on leaves or grass,
-  winning the tie, turned the whole cell into snow.
+  other by comparing fills, as chunks compare shape heights. The cell's sides show its block and its top
+  shows the tallest column's top block, preferring whole blocks for the former: otherwise a snow layer on
+  leaves or grass, winning the tie, turned the whole cell into snow.
 - Taking the highest column means tiles cover at least the real blocks. Faces out of a tile are culled
-  against the real blocks beside it, not the margin cells, which cover more and would hide faces where
-  the neighboring chunks are air, cracking the seam. Fills below the real blocks (e.g. by majority) would
+  against the real blocks beside it (each chunk keeps its four outer block slices for this), not the
+  neighbors' cells, which cover more and would hide faces where the neighboring chunks are air, cracking
+  the seam. Fills below the real blocks (e.g. by majority) would
   crack it from the other side: chunks cull their edge faces against real neighbors the tile no longer
   covers. What is left at the seam is the horizontal widening, up to a block.
 - A partial cell holding water under its top also shows the water surface, since the cell above has
   none to show.
+- Each chunk's cells cover only its own height band, with solid rock below. A tile meshes each chunk from
+  the lowest band among it and its four neighbors, or a cliff wall facing a lower neighbor would be left
+  out.
 - Leaves keep their cutout, without OMMs, so a tile with leaf faces runs the anyhit alpha test.
 
 ## Quadtree and selection

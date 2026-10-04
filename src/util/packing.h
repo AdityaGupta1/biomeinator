@@ -68,6 +68,11 @@ inline uint32_t packUnorm8(const float value)
     return static_cast<uint32_t>(std::lround(std::clamp(value, 0.f, 1.f) * 255.f));
 }
 
+inline uint32_t packUnorm8Rgb(const float r, const float g, const float b)
+{
+    return packUnorm8(r) | (packUnorm8(g) << 8) | (packUnorm8(b) << 16);
+}
+
 // Mirrors unpackTerrainVertex in path_tracing_common.hlsli
 inline Vertex unpackTerrainVertex(const PackedTerrainVertex& packed)
 {
