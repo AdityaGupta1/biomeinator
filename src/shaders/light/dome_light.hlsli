@@ -65,7 +65,7 @@ DomeLightSample sampleDomeLight(const float3 surfPos_WS,
                                 const float3 surfGeoNor_WS,
                                 const RayCone rayCone,
                                 const bool canPassthrough,
-                                const uint2 surfMedia,
+                                const SurfaceMedia surfMedia,
                                 const bool acceptsBacksideLight,
                                 inout RandomNumberGenerator rng)
 {

@@ -5,7 +5,7 @@
 #ifndef COMMON_STRUCTS_H
 #define COMMON_STRUCTS_H
 
-#include "common_media.h"
+#include "common_enums.h"
 
 #ifdef __cplusplus
 #include <DirectXMath.h>
@@ -321,7 +321,6 @@ static_assert(sizeof(PackedTerrainVertex) == 12, "PackedTerrainVertex must be 12
 #define FACE_MEDIUM_MASK ((1u << FACE_MEDIUM_BITS) - 1u)
 #define FACE_MEDIUM_FRONT_SHIFT 8
 #define FACE_MEDIUM_BACK_SHIFT (FACE_MEDIUM_FRONT_SHIFT + FACE_MEDIUM_BITS)
-#define FACE_MEDIA_FLAGS(front, back) (((front) << FACE_MEDIUM_FRONT_SHIFT) | ((back) << FACE_MEDIUM_BACK_SHIFT))
 
 #define FACE_FLAGS_BITS 16
 #define FACE_FLAGS_MASK ((1u << FACE_FLAGS_BITS) - 1u)
@@ -350,14 +349,14 @@ public:
         return bool(packedFlagsAndSlice & flag);
     }
 
-    uint getFrontMedium()
+    Medium getFrontMedium()
     {
-        return (packedFlagsAndSlice >> FACE_MEDIUM_FRONT_SHIFT) & FACE_MEDIUM_MASK;
+        return (Medium)((packedFlagsAndSlice >> FACE_MEDIUM_FRONT_SHIFT) & FACE_MEDIUM_MASK);
     }
 
-    uint getBackMedium()
+    Medium getBackMedium()
     {
-        return (packedFlagsAndSlice >> FACE_MEDIUM_BACK_SHIFT) & FACE_MEDIUM_MASK;
+        return (Medium)((packedFlagsAndSlice >> FACE_MEDIUM_BACK_SHIFT) & FACE_MEDIUM_MASK);
     }
 
     bool isMediumBoundary()
@@ -374,7 +373,7 @@ public:
 #ifdef __cplusplus
 static_assert(sizeof(PerFaceData) == 8, "PerFaceData must be 8 bytes for parity with the HLSL layout");
 static_assert(FACE_MEDIUM_BACK_SHIFT + FACE_MEDIUM_BITS <= FACE_FLAGS_BITS, "Face media must fit in the face flags");
-static_assert(MEDIUM_COUNT <= (1u << FACE_MEDIUM_BITS), "Medium ids must fit in FACE_MEDIUM_BITS");
+static_assert(static_cast<uint32_t>(Medium::COUNT) <=(1u << FACE_MEDIUM_BITS), "Medium ids must fit in FACE_MEDIUM_BITS");
 #endif
 
 #ifdef __cplusplus

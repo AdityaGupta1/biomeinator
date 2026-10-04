@@ -6,7 +6,9 @@
 
 #include "logger.h"
 
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <json.hpp>
@@ -45,11 +47,20 @@ static const std::unordered_map<std::string, BlockType> blockTypesByName = {
     { "scattering", BlockType::SCATTERING },
 };
 
-static const std::unordered_map<std::string, uint8_t> mediaByName = {
-    { "water", MEDIUM_WATER },
-    { "ice", MEDIUM_ICE },
-    { "glass", MEDIUM_GLASS },
-};
+// Lowercase MEDIA_TABLE names
+static const std::unordered_map<std::string, Medium> mediaByName = []
+{
+    std::unordered_map<std::string, Medium> media;
+    const auto addMedium = [&](std::string name, const Medium medium)
+    {
+        std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
+        media.emplace(std::move(name), medium);
+    };
+#define MEDIUM_NAME_ENTRY(name, ior, sigmaA) addMedium(#name, Medium::name);
+    MEDIA_TABLE(MEDIUM_NAME_ENTRY)
+#undef MEDIUM_NAME_ENTRY
+    return media;
+}();
 
 static const std::unordered_map<std::string, BlockShape> blockShapesByName = {
     { "cube", BlockShape::CUBE },
@@ -173,7 +184,7 @@ BlockData readBlockJson(const std::filesystem::path& jsonPath)
         {
             data.medium = parseNamedValue(mediaByName, blockJson["medium"], "medium");
         }
-        if ((data.type == BlockType::WATER || isVolumeType(data.type)) != (data.medium != MEDIUM_AIR))
+        if ((data.type == BlockType::WATER || isVolumeType(data.type)) != (data.medium != Medium::AIR))
         {
             throw std::runtime_error("water, glass and scattering blocks need a medium; other types must not set one");
         }

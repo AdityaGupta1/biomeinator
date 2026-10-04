@@ -40,7 +40,7 @@ RWStructuredBuffer<float4> ptDiffuseAlbedoRawBufferOut : REGISTER_U(PT, PT_DIFFU
 bool isOrphanWaterBackfaceHit(const Payload payload)
 {
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT) || !bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT) ||
-        getPayloadMedium(payload) == MEDIUM_WATER)
+        getPayloadMedium(payload) == Medium::WATER)
     {
         return false;
     }
@@ -62,14 +62,14 @@ bool isOrphanWaterBackfaceHit(const Payload payload)
 float applySegmentAtmosphere(inout Payload payload, const float3 origin_WS, const float3 dir,
     const uint numInScatterSteps, const bool cloudScatter, inout float3 pathColor, out CloudResult cloud)
 {
-    const uint medium = getPayloadMedium(payload);
-    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f && medium == MEDIUM_AIR;
+    const Medium medium = getPayloadMedium(payload);
+    const bool fogEnabled = sceneParams.voxelMode == 1 && renderParams.fogSigmaS > 0.f && medium == Medium::AIR;
     const float volumeDistance = getSegmentVolumeDistance(payload, origin_WS, dir);
     const float segmentDistance = bool(payload.flags & PAYLOAD_FLAG_DID_HIT)
         ? distance(origin_WS, payload.hitInfo.hitPos_WS) : renderParams.cloudSettings.drawDistance;
     const CloudTraversal cloudState = beginCloudTraversal(origin_WS, dir, segmentDistance, cloudUnboundedDistance);
     cloud = integrateClouds(origin_WS, dir, cloudState,
-        fogEnabled ? volumeDistance : 0.f, (medium == MEDIUM_WATER) ? volumeDistance : 0.f, cloudScatter, payload.rng);
+        fogEnabled ? volumeDistance : 0.f, (medium == Medium::WATER) ? volumeDistance : 0.f, cloudScatter, payload.rng);
     float fogTransmittance = 1.f;
     float3 fogScatter = 0.f;
     if (fogEnabled)
@@ -379,7 +379,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 // sample area lights
                 // ------------------------------
 
-                const uint2 surfMedia = uint2(getPayloadMedium(payload), getFarSideMedium(payload, perFaceData));
+                const SurfaceMedia surfMedia = getSurfaceMedia(payload, perFaceData);
 
                 DirectLightingSample lightSample;
                 if (useRtsl)

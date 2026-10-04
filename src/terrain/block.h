@@ -5,7 +5,7 @@
 
 #include "block_ids.h"
 #include "block_orientation.h"
-#include "rendering/common/common_media.h"
+#include "rendering/common/common_enums.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -93,7 +93,7 @@ struct BlockData
     // Color comes from a world-space ramp rather than the block's texture (see getProceduralColor)
     bool proceduralColor{ false };
     bool randomJitter{ false };
-    uint8_t medium{ MEDIUM_AIR }; // what fills the cell; non-air only for water and volume blocks
+    Medium medium{ Medium::AIR }; // what fills the cell; non-air only for water and volume blocks
     BlockStateKind stateKind{ BlockStateKind::NONE };
     uint32_t modelIdx{ ~0u };
     std::array<uint8_t, 4> rotationY{ 0, 0, 0, 0 }; // quarter turns

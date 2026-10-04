@@ -672,7 +672,7 @@ Material getMaterialFromPayload(const Payload payload, const PerFaceData perFace
         material.diffuseTransmission = foliageDiffuseTransmission;
     if (perFaceData.isMediumBoundary())
     {
-        material.ior = mediumIors[perFaceData.getBackMedium()] / mediumIors[perFaceData.getFrontMedium()];
+        material.ior = getMediumIor(perFaceData.getBackMedium()) / getMediumIor(perFaceData.getFrontMedium());
     }
 
     if (bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT))

@@ -5,21 +5,22 @@
 
 #include "../rendering/common/common_structs.h"
 
-static const float3 waterSigmaA = float3(0.35f, 0.06f, 0.02f) * 0.4f;
+#define MEDIUM_IOR_ENTRY(name, ior, sigmaA) ior,
+#define MEDIUM_SIGMA_A_ENTRY(name, ior, sigmaA) sigmaA,
+static const float mediumIors[(uint)Medium::COUNT] = { MEDIA_TABLE(MEDIUM_IOR_ENTRY) };
+static const float3 mediumSigmaAs[(uint)Medium::COUNT] = { MEDIA_TABLE(MEDIUM_SIGMA_A_ENTRY) };
+#undef MEDIUM_IOR_ENTRY
+#undef MEDIUM_SIGMA_A_ENTRY
 
-// Indexed by MEDIUM_*. A medium boundary face refracts by the ratio of the IORs on its two sides, so
-// the same glass refracts less in water than in air.
-static const float mediumIors[MEDIUM_COUNT] = {
-    1.f,
-    1.33f,
-    1.31f,
-    1.55f, // quartz-ish
-};
+// A medium boundary face refracts by the ratio of the IORs on its two sides, so the same glass refracts
+// less in water than in air
+float getMediumIor(const Medium medium)
+{
+    return mediumIors[(uint)medium];
+}
 
-// Absorption along path segments inside each medium. Ice absorbs about as much as water does.
-static const float3 mediumSigmaAs[MEDIUM_COUNT] = {
-    float3(0.f, 0.f, 0.f),
-    waterSigmaA,
-    waterSigmaA,
-    float3(0.f, 0.f, 0.f),
-};
+// Absorption along path segments inside the medium
+float3 getMediumSigmaA(const Medium medium)
+{
+    return mediumSigmaAs[(uint)medium];
+}

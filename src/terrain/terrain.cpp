@@ -329,7 +329,7 @@ void setDirty()
 }
 
 static glm::ivec2 lastChunkPos{ INT_MAX, INT_MAX };
-static uint32_t cameraMedium = MEDIUM_AIR;
+static Medium cameraMedium = Medium::AIR;
 static Biome cameraBiome = Biome::OCEAN;
 static bool cameraBiomeValid = false;
 static glm::ivec3 voxelRenderBoundsMin_WS{ 0, 0, 0 };
@@ -621,7 +621,7 @@ void update(ToFreeList& toFreeList)
     scene->setDeformableAnimation(cameraChunkCenterXZ_WS, waveFadeEnd + chunkSize * 2.5f, waveFadeStart, waveFadeEnd);
 
     CpuProfiler::beginScope("chunk scan");
-    cameraMedium = MEDIUM_AIR;
+    cameraMedium = Medium::AIR;
     cameraBiomeValid = false;
     {
         const Chunk* cameraChunk = findChunk(currentChunkPos);
@@ -657,7 +657,7 @@ void update(ToFreeList& toFreeList)
                                 Renderer::getWaveTime());
                         if (cameraPosFloat_WS.y >= surfaceY)
                         {
-                            cameraMedium = MEDIUM_AIR;
+                            cameraMedium = Medium::AIR;
                         }
                     }
                 }
@@ -1290,7 +1290,7 @@ static void resetTerrainState()
     tasksToEnqueue.clear();
     thisFrameTasks.clear();
     lastChunkPos = { INT_MAX, INT_MAX };
-    cameraMedium = MEDIUM_AIR;
+    cameraMedium = Medium::AIR;
     cameraBiomeValid = false;
     dirty.store(true, std::memory_order_release);
     expectedImportedChunks.store(0, std::memory_order_relaxed);
@@ -1388,7 +1388,7 @@ ResidencyStats getResidencyStats()
     return stats;
 }
 
-uint32_t getCameraMedium()
+Medium getCameraMedium()
 {
     return cameraMedium;
 }

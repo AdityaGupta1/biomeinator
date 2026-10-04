@@ -1,4 +1,4 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-04_
 
 # Block System
 
@@ -72,8 +72,10 @@ tops explicitly, and the ice-fields soil layer under the snow cap is a transluce
 
 Water and volume blocks name the medium that fills them (`"medium"` in the JSON); the parser
 rejects a water or volume block without one and any other block with one, so a new transparent
-block cannot silently become an air pocket. The medium ids are shared with the shaders through
-`common_structs.h`; each medium's IOR and absorption live in `shaders/materials/media.hlsli`. Faces
+block cannot silently become an air pocket. Every medium is one row of `MEDIA_TABLE` in
+`common_enums.h` (name, IOR, absorption), which generates the `Medium` enum shared with the shaders,
+the shaders' IOR and absorption tables (`media.hlsli`) and the JSON names (the row's name in lowercase),
+so they cannot drift apart. Faces
 record the media on their two sides (see [greedy_meshing.md](greedy_meshing.md)), which is what
 lets a crystal under water refract by the glass-to-water ratio and paths inside ice or water absorb
 correctly (see [shaders → path_tracing.md](../shaders/path_tracing.md)).

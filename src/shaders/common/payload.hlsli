@@ -12,7 +12,7 @@
 #define PAYLOAD_FLAG_BACKFACE_HIT (1 << 1)
 #define PAYLOAD_FLAG_REFRACTION_PASSTHROUGH (1 << 2)
 #define PAYLOAD_FLAG_IS_GBUFFER (1 << 4)
-// Bits of flags holding the MEDIUM_* the ray travels through
+// Bits of flags holding the Medium the ray travels through
 #define PAYLOAD_MEDIUM_SHIFT 8
 #define PAYLOAD_MEDIUM_MASK (FACE_MEDIUM_MASK << PAYLOAD_MEDIUM_SHIFT)
 
@@ -31,12 +31,12 @@ struct [raypayload] Payload
     HitInfo hitInfo : read(caller) : write(closesthit);
 };
 
-uint getPayloadMedium(const Payload payload)
+Medium getPayloadMedium(const Payload payload)
 {
-    return (payload.flags >> PAYLOAD_MEDIUM_SHIFT) & FACE_MEDIUM_MASK;
+    return (Medium)((payload.flags >> PAYLOAD_MEDIUM_SHIFT) & FACE_MEDIUM_MASK);
 }
 
-void setPayloadMedium(inout Payload payload, const uint medium)
+void setPayloadMedium(inout Payload payload, const Medium medium)
 {
-    payload.flags = (payload.flags & ~PAYLOAD_MEDIUM_MASK) | (medium << PAYLOAD_MEDIUM_SHIFT);
+    payload.flags = (payload.flags & ~PAYLOAD_MEDIUM_MASK) | ((uint)medium << PAYLOAD_MEDIUM_SHIFT);
 }

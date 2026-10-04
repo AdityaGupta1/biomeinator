@@ -1079,16 +1079,21 @@ const BlockData& Chunk::getNeighborBlockData(ivec3 neighborPos_CS, int faceIdx) 
 // block leaves the rest of a cell open to air. Only faces of medium-filled blocks are boundaries:
 // light never crosses an opaque face, and a diffuse sample dipping below its shading normal must not
 // pull the path out of the water it is in.
+static uint32_t makeFaceMediaFlags(const Medium front, const Medium back)
+{
+    return (static_cast<uint32_t>(front) << FACE_MEDIUM_FRONT_SHIFT) | (static_cast<uint32_t>(back) << FACE_MEDIUM_BACK_SHIFT);
+}
+
 static uint32_t getFaceMediaFlags(const BlockData& block, const BlockData& neighbor, int faceIdx)
 {
-    if (block.medium == MEDIUM_AIR)
+    if (block.medium == Medium::AIR)
     {
         return 0;
     }
     const BlockFace face = static_cast<BlockFace>(faceIdx);
     const bool frontIsAir = (face == BlockFace::Y_POS && blockShapeTopHeight(block.shape) < 1.f) ||
                             (face == BlockFace::Y_NEG && blockShapeTopHeight(neighbor.shape) < 1.f);
-    return FACE_MEDIA_FLAGS(frontIsAir ? MEDIUM_AIR : neighbor.medium, block.medium);
+    return makeFaceMediaFlags(frontIsAir ? Medium::AIR : neighbor.medium, block.medium);
 }
 
 static void appendQuadIdxs(std::vector<uint32_t>& idxs, uint32_t baseVertIdx)
@@ -1393,15 +1398,15 @@ void Chunk::createInstances()
                                 neighborData.type == BlockType::WATER && neighborData.shape == BlockShape::LIQUID_TOP)
                             {
                                 const float surfaceHeight = blockShapeTopHeight(neighborData.shape);
-                                const auto appendBand = [&](const float yBottom, const float yTop, const uint32_t frontMedium)
+                                const auto appendBand = [&](const float yBottom, const float yTop, const Medium frontMedium)
                                 {
                                     appendFace(this->waterlineGeometry.verts, this->waterlineGeometry.idxs, yBottom, yTop,
                                                1.f - yTop, 1.f - yBottom);
                                     this->waterlineGeometry.perFaceDatas.emplace_back(makeBlockFaceData(
-                                        blockData, texArraySliceIdx, FACE_MEDIA_FLAGS(frontMedium, blockData.medium)));
+                                        blockData, texArraySliceIdx, makeFaceMediaFlags(frontMedium, blockData.medium)));
                                 };
                                 appendBand(0.f, surfaceHeight, neighborData.medium);
-                                appendBand(surfaceHeight, 1.f, MEDIUM_AIR);
+                                appendBand(surfaceHeight, 1.f, Medium::AIR);
                                 continue;
                             }
 

@@ -89,7 +89,7 @@ bool traceToLight(const float3 surfPos_WS,
                   const AreaLight light,
                   const RayCone rayCone,
                   const bool canPassthrough,
-                  const uint2 surfMedia,
+                  const SurfaceMedia surfMedia,
                   inout RandomNumberGenerator rng,
                   out float3 Le)
 {
@@ -154,7 +154,7 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
                                                  const float3 surfGeoNor_WS,
                                                  const RayCone rayCone,
                                                  const bool canPassthrough,
-                                                 const uint2 surfMedia,
+                                                 const SurfaceMedia surfMedia,
                                                  const bool acceptsBacksideLight,
                                                  inout RandomNumberGenerator rng)
 {

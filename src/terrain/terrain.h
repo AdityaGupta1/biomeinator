@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "rendering/common/common_enums.h"
+
 #include <filesystem>
 
 #include <glm/glm.hpp>
@@ -65,8 +67,8 @@ struct ResidencyStats
 };
 ResidencyStats getResidencyStats();
 
-// MEDIUM_* of the cell the camera is in
-uint32_t getCameraMedium();
+// Medium of the cell the camera is in
+Medium getCameraMedium();
 
 // Biome of the camera's column from the loaded chunk's per-column biomes (jittered, exactly what
 // generated). False while the camera's chunk isn't loaded yet.
