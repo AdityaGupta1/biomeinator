@@ -90,6 +90,11 @@ lapse:
   are kept alive by being visited, not by being needed.
 - Tiles near the chunk distance's edge keep their geometry, because the chunks covering them leave the
   BLAS distance after a single crossing, sooner than a tile could be generated.
+- That margin alone doesn't keep up while moving fast: voxel tiles generate a few at a time, and the
+  level-0 and level-1 ring around the chunk distance is over a thousand tiles. So chunks leaving the
+  BLAS distance keep their instances while `TerrainLod` still shows them (the existing-coverage path
+  treats them like any finer cover), and `Terrain` frees them once the tiles covering them take over.
+  Freeing them on leaving made a level 4-6 ancestor, reaching back to the camera, stand in behind it.
 - Generation is ordered by distance over level, as Distant Horizons does, coarser first on ties. Coarse
   tiles still cover the area first, but tiles next to the chunks don't wait on the whole horizon.
   Ordering by distance in tile widths did, so their coarse ancestors stood in right by the camera.

@@ -21,7 +21,7 @@ Done so far in this round:
 
 ## Remaining work
 
-1. Coarse tiles popping in near the player (next up)
+1. Coarse tiles popping in near the player (done; lingering chunks cost memory while moving fast)
 2. Distance fog that fades far terrain to a neutral color
 3. Decorator emulation
 4. Snow layers in voxel tiles
@@ -30,13 +30,14 @@ Done so far in this round:
 
 ### 1. Coarse tiles popping in near the player
 
-Symptom: coarse LOD tiles still appear briefly near the camera, where everything around them is full-res
-chunks. Earlier fixes (counting existing coverage in `areChildrenCoveredByExisting`, the keep-geometry
-margin, distance / (level + 1) priority, `createBlasDistance` as the chunk distance) reduced it but did
-not remove it.
+Done: the cause was chunks leaving the BLAS distance being freed before the voxel tiles replacing them
+were generated, so a level 4-6 ancestor reaching back to the camera stood in. Chunks now linger while
+LOD still shows them (`lingeringChunks` in `terrain.cpp`). A random walk at render distance 30 and 100
+blocks/s went from about 2,000 pops to 2 (small edge tiles).
 
-Plan: reproduce with the perf random-walk runs, adding temporary checks that flag any LOD tile shown
-near the camera whose chunks are all full-res and visible, then find the cause from the flagged cases.
+Cost: at that speed about 2,000 chunks linger behind the camera, about 1 GB more VRAM, because voxel tile
+generation can't keep up. Item 5 (faster ring generation) fixes that; a cheaper stopgap is generating
+the tiles that cover lingering chunks first.
 
 ### 2. Distance fog to a neutral color
 
@@ -114,6 +115,8 @@ Options:
   surfaces up. Majority rounding is not the fix on its own: it would crack the seam from the chunk side.
   Candidate: mesh each tile's outermost 2-block strip at full resolution from the real blocks, so the
   step moves inside the tile where culling is exact.
+- Water seam: a thin bright line across open water near the camera, seen right after loading (a lake
+  next to snowy shore). Possibly at a chunk/tile boundary in the water surface. Not yet investigated.
 - Sea ice outline: sea ice in heightfield tiles still shows a dark outline along shores after the
   any-corner water rule. Not yet diagnosed.
 - Tianzi spikes: heightfield tiles can't represent vertical walls, so Tianzi pillars come out spiky. A

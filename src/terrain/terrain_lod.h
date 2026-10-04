@@ -33,6 +33,9 @@ void update(glm::ivec2 cameraChunkPos,
 // No generation task may be queued or running
 void reset(ToFreeList& toFreeList);
 
+// Whether the last update showed the chunk
+bool isChunkDisplayed(glm::ivec2 chunkPos);
+
 // Inclusive chunk bounds of the area the tiles cover
 void getCoveredChunkBounds(glm::ivec2 cameraChunkPos, int lodDistance, glm::ivec2& outMinChunkPos,
                            glm::ivec2& outMaxChunkPos);

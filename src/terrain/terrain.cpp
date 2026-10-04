@@ -286,6 +286,10 @@ static std::vector<Chunk*> chunksWithNewGeometry;
 static std::mutex chunksWithNewGeometryMutex;
 // Main thread only
 static std::vector<Chunk*> chunksToDestroy;
+// With LODs, chunks past the BLAS distance keep their instances while LOD shows them, until the tiles
+// covering them are ready; otherwise the nearest ready ancestor tile, which can reach the camera,
+// would stand in for them.
+static std::unordered_set<Chunk*> lingeringChunks;
 static std::vector<Chunk*> chunksToRevisit;
 static std::mutex chunksToRevisitMutex;
 
@@ -578,7 +582,10 @@ static void scheduleChunkWork(Chunk* chunk,
     }
     else if (inLastCreateBlasDistance)
     {
-        chunk->setInstancesVisible(false);
+        if (!lodsEnabled)
+        {
+            chunk->setInstancesVisible(false);
+        }
 
         if (chunkState == ChunkState::GENERATING_GEOMETRY)
         {
@@ -587,8 +594,15 @@ static void scheduleChunkWork(Chunk* chunk,
         }
         else if (chunkState == ChunkState::HAS_GEOMETRY)
         {
-            // Destroy this chunk's instances at the end of this update
-            chunksToDestroy.push_back(chunk);
+            if (lodsEnabled)
+            {
+                lingeringChunks.insert(chunk);
+            }
+            else
+            {
+                // Destroy this chunk's instances at the end of this update
+                chunksToDestroy.push_back(chunk);
+            }
         }
     }
 }
@@ -899,6 +913,19 @@ void update(ToFreeList& toFreeList)
         // Ahead of the chunk backlog: LOD tiles are few and cheap, and the coarse ones are what covers
         // the world while it loads
         tasksToEnqueue.insert(tasksToEnqueue.begin(), lodTasks.begin(), lodTasks.end());
+
+        std::erase_if(lingeringChunks, [&](Chunk* chunk) {
+            if (glmUtil::chebyshevDistance(chunk->getChunkPos(), currentChunkPos) <= distances.createBlasDistance)
+            {
+                return true;
+            }
+            if (TerrainLod::isChunkDisplayed(chunk->getChunkPos()))
+            {
+                return false;
+            }
+            chunk->destroyInstances(toFreeList);
+            return true;
+        });
     }
 
     if (!regionsToRemove.empty())
@@ -911,6 +938,26 @@ void update(ToFreeList& toFreeList)
                        regionsToRemove.end();
             });
         }
+        // Removing a region resets its neighbors' geometry, so lingering chunks beside it go first
+        const auto isRemoved = [&](const Chunk* chunk) {
+            return chunk != nullptr &&
+                   std::find(regionsToRemove.begin(), regionsToRemove.end(), chunk->getRegion()) != regionsToRemove.end();
+        };
+        std::erase_if(lingeringChunks, [&](Chunk* chunk) {
+            if (isRemoved(chunk))
+            {
+                return true;
+            }
+            for (int dirIdx = 0; dirIdx < 4; ++dirIdx)
+            {
+                if (isRemoved(chunk->getNeighbor(static_cast<NeighborDirection>(dirIdx))))
+                {
+                    chunk->destroyInstances(toFreeList);
+                    return true;
+                }
+            }
+            return false;
+        });
         for (Region* region : regionsToRemove)
         {
             removeRegion(region, toFreeList);
@@ -1304,6 +1351,7 @@ static void resetTerrainState()
         pendingImportedChunks.clear();
     }
     chunksToDestroy.clear();
+    lingeringChunks.clear();
     {
         std::scoped_lock<std::mutex> lock(chunksToRevisitMutex);
         chunksToRevisit.clear();

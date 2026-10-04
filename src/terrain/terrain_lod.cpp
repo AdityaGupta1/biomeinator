@@ -775,6 +775,7 @@ static std::vector<ivec2> displayedChunkPositions;
 // What the previous update showed, to hide whatever it no longer does
 static std::vector<LodTile*> prevDisplayedTiles;
 static std::vector<ivec2> prevDisplayedChunkPositions;
+static std::unordered_set<ivec2, IVec2Hash> displayedChunkSet;
 
 struct UpdateContext
 {
@@ -990,8 +991,8 @@ static void applyDisplayed(const UpdateContext& ctx)
         tile->setVisible(true);
     }
 
-    const std::unordered_set<ivec2, IVec2Hash> displayedChunkSet(displayedChunkPositions.begin(),
-                                                                 displayedChunkPositions.end());
+    displayedChunkSet.clear();
+    displayedChunkSet.insert(displayedChunkPositions.begin(), displayedChunkPositions.end());
     for (const ivec2 chunkPos : prevDisplayedChunkPositions)
     {
         Chunk* chunk = ctx.findChunk(chunkPos);
@@ -1133,6 +1134,11 @@ static void getRootTileBounds(ivec2 cameraChunkPos, int lodDistance, ivec2& outM
     outMaxRootPos = glmUtil::floorDiv(cameraChunkPos + lodDistance, rootSideChunks);
 }
 
+bool isChunkDisplayed(ivec2 chunkPos)
+{
+    return displayedChunkSet.contains(chunkPos);
+}
+
 void getCoveredChunkBounds(ivec2 cameraChunkPos, int lodDistance, ivec2& outMinChunkPos, ivec2& outMaxChunkPos)
 {
     ivec2 minRootPos;
@@ -1199,6 +1205,7 @@ void reset(ToFreeList& toFreeList)
     displayedChunkPositions.clear();
     prevDisplayedTiles.clear();
     prevDisplayedChunkPositions.clear();
+    displayedChunkSet.clear();
     numGeneratingTiles = 0;
     numGeneratingVoxelTiles = 0;
 }
