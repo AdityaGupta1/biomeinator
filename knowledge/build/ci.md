@@ -14,9 +14,10 @@ The checkout is deliberately narrower than a developer clone, to keep CI free an
   never a build input (see [dependencies.md](dependencies.md)).
 - **Only the LFS objects needed to compile and link are pulled, and they are cached.** LFS
   downloads count against the account's monthly LFS bandwidth quota, the one part of CI that can
-  cost money. That means import libraries plus dxc's DLLs (dxc runs during the build), about
-  40 MB, instead of all of `external/` (over 500 MB, mostly DLSS DLLs, docs and symbols).
-  Everything else stays a pointer file: the runtime DLL and asset copy steps copy pointers
-  without complaint, and the unit tests load none of them. A new prebuilt SDK whose `.lib` or
-  build-time tool lives outside that pattern must be added to `LFS_BUILD_INPUTS`. The cache key
-  is derived from the matching LFS object IDs, so updating a vendored SDK invalidates it.
+  cost money. That means every `.lib` under `external/` plus dxc's DLLs (dxc runs during the
+  build), about 40 MB, instead of all of `external/` (over 500 MB, mostly DLSS DLLs, docs and
+  symbols). Everything else stays a pointer file: the runtime DLL and asset copy steps copy
+  pointers without complaint, and the unit tests load none of them. A new prebuilt SDK's `.lib`
+  is covered automatically, but any other LFS file it needs at build time (a tool, or a DLL that
+  tool loads) must be added to `LFS_BUILD_INPUTS`. The cache key is derived from the matching
+  LFS object IDs, so updating a vendored SDK invalidates it.

@@ -6,13 +6,17 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 30
     env:
       LFS_BUILD_INPUTS: external/**/*.lib,external/dxc/bin/**
     steps:
@@ -40,4 +44,4 @@ jobs:
         run: cmake --build build --config RelWithDebInfo --parallel
 
       - name: Run unit tests
-        run: ctest --test-dir build -C RelWithDebInfo -L unit --output-on-failure
+        run: ctest --test-dir build -C RelWithDebInfo -L unit --no-tests=error --output-on-failure
