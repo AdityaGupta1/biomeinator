@@ -48,12 +48,12 @@ void setWorldSeed(uint32_t value);
 // Visits every setting in unspecified order
 void forEachSetting(const std::function<void(const std::string& name, const SettingValue& value)>& callback);
 
-// Rendering test run: render, save --renderingTestOutput, exit
-bool isRenderingTestMode();
+// Render-to-file run (rendering tests, agent screenshots): render in a hidden window, save --renderToFile, exit
+bool isRenderToFileMode();
 // Performance measurement run: warm up, measure, write --perfOutput, exit
 bool isPerfMode();
-// Either automated run: camera locked, GUI hidden, animation paused, vsync off (all as
-// overridable defaults), no foreground window, voxel import awaited
-bool isHeadless();
+// Either automated run: camera locked, GUI hidden, animation paused, vsync off, SHaRC off (all as
+// overridable defaults), voxel import awaited
+bool isAutomatedRun();
 
 } // namespace SettingsManager

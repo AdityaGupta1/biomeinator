@@ -87,6 +87,8 @@ inline std::string slResultToString(sl::Result result)
             return "Driver out of date";
         case sl::Result::eErrorOSOutOfDate:
             return "OS out of date";
+        case sl::Result::eErrorNGXFailed:
+            return "NGX failed";
         default:
             return "Unknown Streamline error: " + std::to_string(static_cast<uint32_t>(result));
     }
@@ -297,7 +299,7 @@ struct FrameGenState
 {
     // DLSS-G additionally needs Reflex and PCL; all three are checked together at startup
     bool supported{ false };
-    // Shown in the GUI while unsupported; empty once supported or in headless runs
+    // Shown in the GUI while unsupported; empty once supported or in automated runs
     std::string unsupportedReason;
     // Only ever changes between frames, since flipping it recreates the swap chain
     bool active{ false };
@@ -371,7 +373,7 @@ struct ScreenshotRequest
     uint32_t height{ 0 };
     uint32_t rowPitchBytes{ 0 };
     uint32_t rowPitchBytesAligned{ 0 };
-    bool useRenderingTestOutputPath{ false };
+    bool useRenderToFilePath{ false };
 };
 
 // The back buffers and everything that has to match them exactly (PSO render target formats, the
@@ -440,8 +442,8 @@ struct RendererState
     GpuRadixSort gpuRadixSort;
 
     // -- Mode flags --
-    bool renderingTestMode{ false };
-    bool headless{ false };
+    bool renderToFileMode{ false };
+    bool automatedRun{ false };
     bool voxelMode{ false };
     bool useSer{ false };
     // Voxel mode with raytracing tier 1.2: terrain alpha cutout resolves via opacity micromaps

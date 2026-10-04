@@ -4,6 +4,7 @@
 #include "window_manager.h"
 
 #include "renderer.h"
+#include "resources/resource.h"
 #include "settings_manager.h"
 #include "scene/gltf_loader.h"
 #include "terrain/terrain.h"
@@ -378,12 +379,27 @@ void init()
 {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-    WNDCLASSW wcw = {
+    const HINSTANCE hInstance = GetModuleHandleW(nullptr);
+    const auto loadAppIcon = [hInstance](const int widthMetric, const int heightMetric)
+    {
+        return static_cast<HICON>(LoadImageW(hInstance,
+                                             MAKEINTRESOURCEW(IDI_APP_ICON),
+                                             IMAGE_ICON,
+                                             GetSystemMetrics(widthMetric),
+                                             GetSystemMetrics(heightMetric),
+                                             LR_DEFAULTCOLOR));
+    };
+
+    WNDCLASSEXW wcw = {
+        .cbSize = sizeof(WNDCLASSEXW),
         .lpfnWndProc = &onWindowMessage,
+        .hInstance = hInstance,
+        .hIcon = loadAppIcon(SM_CXICON, SM_CYICON),
         .hCursor = LoadCursor(nullptr, IDC_ARROW),
         .lpszClassName = L"BiomeinatorClass",
+        .hIconSm = loadAppIcon(SM_CXSMICON, SM_CYSMICON),
     };
-    RegisterClassW(&wcw);
+    RegisterClassExW(&wcw);
 
     RECT rect;
     rect.left = 0;
@@ -405,11 +421,14 @@ void init()
                            height,
                            nullptr,
                            nullptr,
-                           nullptr,
+                           hInstance,
                            nullptr);
 
-    // Non-test runs are brought to the front by the renderer once init finishes
-    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    // Render-to-file runs stay hidden; others are brought to the front by the renderer once init finishes
+    if (!SettingsManager::isRenderToFileMode())
+    {
+        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    }
 
     RAWINPUTDEVICE rid{};
     rid.usUsagePage = 0x01; // generic desktop controls
