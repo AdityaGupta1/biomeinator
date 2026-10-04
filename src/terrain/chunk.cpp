@@ -130,8 +130,8 @@ void Chunk::clearBufferPool()
     bufferPool = {};
 }
 
-Chunk::Chunk(ivec2 chunkPos, Region* region)
-    : chunkPos(chunkPos), region(region)
+Chunk::Chunk(ivec2 chunkPos, Region* region, bool isSurfaceOnly)
+    : chunkPos(chunkPos), region(region), isSurfaceOnly(isSurfaceOnly)
 {}
 
 Chunk::~Chunk()
@@ -210,23 +210,28 @@ void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
     ++neighborChunk->numNeighborsSet;
 }
 
+void Chunk::generateTerrainBlocks(ThreadMemoryAllocator& threadMemoryAlloc)
+{
+    ChunkBuffers buffers = takePooledBuffers();
+    this->blocks = std::move(buffers.blocks);
+    this->blocks.assign(numChunkBlocks, Block{});
+    this->terrainAirMask = std::move(buffers.terrainAirMask);
+    this->terrainSolidCubeMask = std::move(buffers.terrainSolidCubeMask);
+    this->biomes.resize(chunkSizeXZSquare);
+    this->terrainTopY.resize(chunkSizeXZSquare);
+    this->terrainSurfaceHeight.resize(chunkSizeXZSquare);
+    this->caveDecoration.prepare();
+    this->snow.prepare();
+
+    this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
+    this->buildTerrainAirMask();
+}
+
 void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 {
     if (!this->hasSerializedData)
     {
-        ChunkBuffers buffers = takePooledBuffers();
-        this->blocks = std::move(buffers.blocks);
-        this->blocks.assign(numChunkBlocks, Block{});
-        this->terrainAirMask = std::move(buffers.terrainAirMask);
-        this->terrainSolidCubeMask = std::move(buffers.terrainSolidCubeMask);
-        this->biomes.resize(chunkSizeXZSquare);
-        this->terrainTopY.resize(chunkSizeXZSquare);
-        this->terrainSurfaceHeight.resize(chunkSizeXZSquare);
-        this->caveDecoration.prepare();
-        this->snow.prepare();
-
-        this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
-        this->buildTerrainAirMask();
+        this->generateTerrainBlocks(threadMemoryAlloc);
     }
     else if (this->terrainAirMask.empty())
     {
@@ -564,6 +569,13 @@ void Chunk::runStructuresAndDecoratorPass()
     // Before decorators, which only fill air: a layer keeps plants off the ground it covers
     this->placeSnowLayers();
 
+    // Decorators vanish at the distances surface-only chunks are seen from, and the cave pass needs the
+    // cave data they skip
+    if (this->isSurfaceOnly)
+    {
+        return;
+    }
+
     const uint worldSeed = SettingsManager::getWorldSeed();
     RandomNumberGenerator decoratorRng = initRng(worldSeed ^ hash(198594190), this->chunkPos.x, this->chunkPos.y /*z*/);
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
@@ -733,14 +745,58 @@ void Chunk::runStructuresAndDecoratorPass()
     }
 }
 
+void Chunk::fillBlocksFromStructureNeighbors()
+{
+    const StructureNeighborhood neighborhood = this->collectStructureNeighbors();
+    this->structureNeighbors.assign(neighborhood.begin(), neighborhood.end());
+    this->runStructuresAndDecoratorPass();
+    this->structureNeighbors = {};
+}
+
+SurfaceOnlyChunks Chunk::generateSurfaceOnly(ivec2 minChunkPos, int sideChunks, ThreadMemoryAllocator& threadMemoryAlloc)
+{
+    constexpr int margin = static_cast<int>(structureMaxChunkRadius);
+    SurfaceOnlyChunks area{
+        .minChunkPos = minChunkPos - margin,
+        .sideChunks = sideChunks + 2 * margin,
+    };
+    area.chunks.resize(area.sideChunks * area.sideChunks);
+    for (int z = 0; z < area.sideChunks; ++z)
+    {
+        for (int x = 0; x < area.sideChunks; ++x)
+        {
+            std::unique_ptr<Chunk>& chunk = area.chunks[x + area.sideChunks * z];
+            chunk = std::make_unique<Chunk>(area.minChunkPos + ivec2(x, z), nullptr, true /*isSurfaceOnly*/);
+            if (x > 0)
+            {
+                chunk->setNeighbor(NeighborDirection::X_NEG, area.chunks[(x - 1) + area.sideChunks * z].get());
+            }
+            if (z > 0)
+            {
+                chunk->setNeighbor(NeighborDirection::Z_NEG, area.chunks[x + area.sideChunks * (z - 1)].get());
+            }
+            chunk->generateTerrainBlocks(threadMemoryAlloc);
+            threadMemoryAlloc.clear();
+        }
+    }
+
+    // Each structure pass writes only its own chunk and reads the others' immutable terrain, so the
+    // order doesn't matter
+    for (int z = margin; z < area.sideChunks - margin; ++z)
+    {
+        for (int x = margin; x < area.sideChunks - margin; ++x)
+        {
+            area.chunks[x + area.sideChunks * z]->fillBlocksFromStructureNeighbors();
+        }
+    }
+    return area;
+}
+
 void Chunk::fillStructuresAndDecorators()
 {
     if (!this->hasSerializedData)
     {
-        const StructureNeighborhood neighborhood = this->collectStructureNeighbors();
-        this->structureNeighbors.assign(neighborhood.begin(), neighborhood.end());
-        this->runStructuresAndDecoratorPass();
-        this->structureNeighbors = {};
+        this->fillBlocksFromStructureNeighbors();
         this->caveDecoration.release();
         this->snow.release();
     }
@@ -1526,8 +1582,13 @@ bool Chunk::tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const
         return false;
     }
 
-    outBlock = this->blocks[Chunk::blockPosToIdx(chunkBlockPos)];
+    outBlock = this->getGeneratedBlock(chunkBlockPos);
     return true;
+}
+
+Block Chunk::getGeneratedBlock(glm::uvec3 chunkBlockPos) const
+{
+    return this->blocks[Chunk::blockPosToIdx(chunkBlockPos)];
 }
 
 const std::vector<Biome>& Chunk::getBiomes() const

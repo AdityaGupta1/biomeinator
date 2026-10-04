@@ -35,9 +35,19 @@ inline constexpr int maxCellsPerSideLog2 = 7;
 // A tile is replaced by its children within this many of its own widths of the camera, so a cell spans
 // about the same angle wherever its level is shown
 inline constexpr int subdivideDistanceTiles = 2;
+// Tiles up to this level are voxel tiles where voxel tiles are on: surface-only chunks with their
+// structures, downsampled. Tiles within the voxel distance are subdivided down to this level, so
+// structures and 3D landforms continue past the chunk distance.
+inline constexpr int maxVoxelTileLevel = 2;
+// Voxel cells are this many blocks on a side
+inline constexpr int voxelCellSize = 2;
+// Generating a voxel tile means generating all its chunks and their margin, so few run at once; each
+// holds that many chunks' block buffers, which the chunk buffer pool keeps afterward
+inline constexpr uint32_t maxGeneratingVoxelTiles = 4;
 // Tiles entirely within the chunk distance are only placeholders until their chunks are ready. Below
-// this level there are too many of them to be worth generating, so their parents stand in.
-inline constexpr int minPlaceholderLevel = 2;
+// this level there are too many of them to be worth generating, so their parents stand in. Voxel tiles
+// would cost as much as the chunks they stand in for.
+inline constexpr int minPlaceholderLevel = maxVoxelTileLevel + 1;
 // Tiles within this many chunks of the chunk distance's edge keep their geometry even where chunks
 // cover them: moving away needs them as soon as the chunks leave, sooner than they could be generated
 inline constexpr int keepGeometryMarginChunks = 4;
@@ -66,6 +76,7 @@ public:
     // In tiles of this level
     const ivec2 tilePos;
     const int level;
+    const bool isVoxel;
 
     // Main thread only
     LodTileState state{ LodTileState::NEEDS_GEOMETRY };
@@ -81,7 +92,7 @@ public:
     Instance* terrainInstance{ nullptr };
     Instance* waterInstance{ nullptr };
 
-    LodTile(ivec2 tilePos, int level) : tilePos(tilePos), level(level) {}
+    LodTile(ivec2 tilePos, int level, bool isVoxel) : tilePos(tilePos), level(level), isVoxel(isVoxel) {}
 
     int getSideChunks() const
     {
@@ -95,7 +106,9 @@ public:
 
     bool isReady() const
     {
-        return this->state == LodTileState::HAS_GEOMETRY && this->terrainInstance->getHasBlas() &&
+        // Either instance is dropped when empty
+        return this->state == LodTileState::HAS_GEOMETRY &&
+               (this->terrainInstance == nullptr || this->terrainInstance->getHasBlas()) &&
                (this->waterInstance == nullptr || this->waterInstance->getHasBlas());
     }
 
@@ -127,6 +140,11 @@ public:
     }
 
     void createGeometry(ThreadMemoryAllocator& threadMemoryAlloc);
+
+private:
+    // Each returns whether any face is a cutout, which needs the anyhit alpha test
+    bool meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc);
+    bool meshVoxels(ThreadMemoryAllocator& threadMemoryAlloc);
 };
 
 namespace TerrainLod
@@ -210,7 +228,7 @@ static void forEachRowRun(int numCells, const CanMerge& canMerge, const Emit& em
     }
 }
 
-void LodTile::createGeometry(ThreadMemoryAllocator& threadMemoryAlloc)
+bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
 {
     const int cellSize = 1 << cellSizeLog2(this->level);
     const int numCells = (static_cast<int>(chunkSizeXZ) << this->level) / cellSize;
@@ -453,14 +471,223 @@ void LodTile::createGeometry(ThreadMemoryAllocator& threadMemoryAlloc)
         }
     }
 
-    const ivec3 transformOffset(originXZ_WS.x, 0, originXZ_WS.y /*z*/);
-    this->terrainInstance->setPackedVertexFormat(VERTEX_FORMAT_PACKED_LOD_TERRAIN);
-    this->terrainInstance->setTransformOffset(transformOffset);
-    this->terrainInstance->setTrisPerFaceLog2(1);
-    this->terrainInstance->finalizeGeometry();
-    this->terrainInstance->setMaterialIdx(TerrainMaterials::getMaterialIdx(TerrainMaterial::DEFAULT));
     // Every top and side block is opaque
-    this->terrainInstance->setIsOpaque(true);
+    return false;
+}
+
+// Of a 2x2x2 group of blocks, bottom four first: the most common that fills its cell as a cube, ties going
+// to the higher, so canopies and thin pillars survive and surfaces keep their top blocks; else water if
+// any; else air. Plants and models are too small to show.
+static Block downsampleBlocks(const std::array<Block, 8>& blocks)
+{
+    Block best = Block::AIR;
+    int bestCount = 0;
+    bool hasWater = false;
+    for (int i = 0; i < 8; ++i)
+    {
+        const BlockData& blockData = Blocks::getBlockData(blocks[i]);
+        if (blockData.type == BlockType::WATER)
+        {
+            hasWater = true;
+            continue;
+        }
+        const bool fillsCube = blockData.type != BlockType::AIR &&
+                               (blockData.shape == BlockShape::CUBE || blockData.shape == BlockShape::LAYER);
+        if (!fillsCube)
+        {
+            continue;
+        }
+        const int count = static_cast<int>(std::count(blocks.begin(), blocks.end(), blocks[i]));
+        if (count >= bestCount)
+        {
+            best = blocks[i];
+            bestCount = count;
+        }
+    }
+    if (best != Block::AIR)
+    {
+        return best;
+    }
+    return hasWater ? Block::WATER : Block::AIR;
+}
+
+bool LodTile::meshVoxels(ThreadMemoryAllocator& threadMemoryAlloc)
+{
+    const ivec2 minChunkPos = this->getMinChunkPos();
+    const SurfaceOnlyChunks area = Chunk::generateSurfaceOnly(minChunkPos, this->getSideChunks(), threadMemoryAlloc);
+    const ivec2 originXZ_WS = minChunkPos * static_cast<int>(chunkSizeXZ);
+    const auto chunkAndLocalPos = [&](ivec2 posXZ_WS, ivec2& outPosXZ_CS) -> const Chunk&
+    {
+        const ivec2 chunkPos = glmUtil::floorDiv(posXZ_WS, ivec2(chunkSizeXZ));
+        outPosXZ_CS = posXZ_WS - chunkPos * static_cast<int>(chunkSizeXZ);
+        return area.chunkAt(chunkPos);
+    };
+    const auto blockAt = [&](ivec3 pos_WS)
+    {
+        ivec2 posXZ_CS;
+        const Chunk& chunk = chunkAndLocalPos(ivec2(pos_WS.x, pos_WS.z), posXZ_CS);
+        return chunk.getGeneratedBlock(uvec3(posXZ_CS.x, pos_WS.y, posXZ_CS.y));
+    };
+
+    // Cells cover the tile plus one cell of margin from the surrounding chunks, which only culls faces
+    const int numCellsXZ = this->getSideChunks() * static_cast<int>(chunkSizeXZ) / voxelCellSize;
+    const int numGridCellsXZ = numCellsXZ + 2;
+    const auto cellToBlockXZ = [&](ivec2 cellXZ)
+    {
+        return originXZ_WS + cellXZ * voxelCellSize;
+    };
+
+    // The cells span the band from below the lowest solid column top (under any water) to the highest top;
+    // below it is all solid
+    int lowestTopY = static_cast<int>(chunkSizeY);
+    int highestTopY = 0;
+    for (int z = -1; z <= numCellsXZ; ++z)
+    {
+        for (int x = -1; x <= numCellsXZ; ++x)
+        {
+            for (const ivec2 blockOffset : { ivec2(0, 0), ivec2(1, 0), ivec2(0, 1), ivec2(1, 1) })
+            {
+                const ivec2 posXZ_WS = cellToBlockXZ(ivec2(x, z)) + blockOffset;
+                int topY = static_cast<int>(chunkSizeY) - 1;
+                while (topY > 0 && blockAt(ivec3(posXZ_WS.x, topY, posXZ_WS.y)) == Block::AIR)
+                {
+                    --topY;
+                }
+                highestTopY = std::max(highestTopY, topY);
+                while (topY > 0 && Blocks::getBlockData(blockAt(ivec3(posXZ_WS.x, topY, posXZ_WS.y))).type == BlockType::WATER)
+                {
+                    --topY;
+                }
+                lowestTopY = std::min(lowestTopY, topY);
+            }
+        }
+    }
+    const int bandMinY = std::max(lowestTopY - 2 * voxelCellSize, 0) / voxelCellSize * voxelCellSize;
+    const int numCellsY = (highestTopY - bandMinY) / voxelCellSize + 1;
+
+    Block* cells = threadMemoryAlloc.request<Block>(numGridCellsXZ * numGridCellsXZ * numCellsY);
+    const auto cellIdx = [&](ivec3 cellPos)
+    {
+        return (cellPos.x + 1) + numGridCellsXZ * ((cellPos.z + 1) + numGridCellsXZ * cellPos.y);
+    };
+    for (int y = 0; y < numCellsY; ++y)
+    {
+        for (int z = -1; z <= numCellsXZ; ++z)
+        {
+            for (int x = -1; x <= numCellsXZ; ++x)
+            {
+                const ivec2 blockXZ = cellToBlockXZ(ivec2(x, z));
+                const int blockY = bandMinY + y * voxelCellSize;
+                std::array<Block, 8> blocks;
+                for (int i = 0; i < 8; ++i)
+                {
+                    const int sourceY = blockY + (i >> 2);
+                    blocks[i] = sourceY < static_cast<int>(chunkSizeY)
+                        ? blockAt(ivec3(blockXZ.x + (i & 1), sourceY, blockXZ.y + ((i >> 1) & 1)))
+                        : Block::AIR;
+                }
+                cells[cellIdx(ivec3(x, y, z))] = downsampleBlocks(blocks);
+            }
+        }
+    }
+    const auto cellAt = [&](ivec3 cellPos)
+    {
+        if (cellPos.y < 0)
+        {
+            return Block::STONE;
+        }
+        if (cellPos.y >= numCellsY)
+        {
+            return Block::AIR;
+        }
+        return cells[cellIdx(cellPos)];
+    };
+
+    HostGeometry& terrainGeometry = this->terrainInstance->hostGeometry;
+    HostGeometry& waterGeometry = this->waterInstance->hostGeometry;
+    const PerFaceData waterFaceData =
+        blockFaceData(Block::WATER_TOP, BlockFace::Y_POS, FACE_FLAG_IS_WATER | FACE_FLAG_IS_WATER_TOP);
+    bool hasCutoutFaces = false;
+    for (int y = 0; y < numCellsY; ++y)
+    {
+        for (int z = 0; z < numCellsXZ; ++z)
+        {
+            for (int x = 0; x < numCellsXZ; ++x)
+            {
+                const ivec3 cellPos(x, y, z);
+                const Block block = cellAt(cellPos);
+                if (block == Block::AIR)
+                {
+                    continue;
+                }
+                const BlockData& blockData = Blocks::getBlockData(block);
+                const vec3 cellMin(x * voxelCellSize, bandMinY + y * voxelCellSize, z * voxelCellSize);
+                const vec3 cellMax = cellMin + vec3(voxelCellSize);
+
+                ivec2 posXZ_CS;
+                const Chunk& chunk = chunkAndLocalPos(cellToBlockXZ(ivec2(x, z)), posXZ_CS);
+                const glm::vec3& tint = Biomes::getBiomeData(chunk.getBiomes()[posXZ_CS.x + chunkSizeXZ * posXZ_CS.y]).grassTint;
+                const uint32_t packedTint =
+                    Util::packUnorm8(tint.r) | (Util::packUnorm8(tint.g) << 8) | (Util::packUnorm8(tint.b) << 16);
+                const auto cellTint = [&](vec2) { return packedTint; };
+
+                if (blockData.type == BlockType::WATER)
+                {
+                    if (Blocks::getBlockData(cellAt(cellPos + ivec3(0, 1, 0))).type == BlockType::WATER)
+                    {
+                        continue;
+                    }
+                    // The surface sits where the cell's highest water does
+                    float waterTopY = cellMin.y;
+                    const ivec2 blockXZ = cellToBlockXZ(ivec2(x, z));
+                    for (int i = 0; i < 8; ++i)
+                    {
+                        const ivec3 pos_WS(blockXZ.x + (i & 1), static_cast<int>(cellMin.y) + (i >> 2), blockXZ.y + ((i >> 1) & 1));
+                        const BlockData& sourceData = Blocks::getBlockData(blockAt(pos_WS));
+                        if (sourceData.type == BlockType::WATER)
+                        {
+                            waterTopY = std::max(waterTopY, pos_WS.y + blockShapeTopHeight(sourceData.shape));
+                        }
+                    }
+                    addBoxFace(waterGeometry, BlockFace::Y_POS, vec3(cellMin.x, waterTopY, cellMin.z),
+                               vec3(cellMax.x, waterTopY, cellMax.z), waterFaceData, cellTint);
+                    continue;
+                }
+
+                for (uint8_t faceIdx = 0; faceIdx < blockFaceCount; ++faceIdx)
+                {
+                    const BlockData& neighborData = Blocks::getBlockData(cellAt(cellPos + blockFaceBases[faceIdx].normal));
+                    if (!blockFaceVisible(blockData.type, BlockShape::CUBE, neighborData.type, BlockShape::CUBE, faceIdx))
+                    {
+                        continue;
+                    }
+                    const BlockFace face = static_cast<BlockFace>(faceIdx);
+                    addBoxFace(terrainGeometry, face, cellMin, cellMax, blockFaceData(block, face), cellTint);
+                    hasCutoutFaces |= blockData.type == BlockType::TRANSPARENT_CUTOUT;
+                }
+            }
+        }
+    }
+    return hasCutoutFaces;
+}
+
+void LodTile::createGeometry(ThreadMemoryAllocator& threadMemoryAlloc)
+{
+    const bool hasCutoutFaces = this->isVoxel ? this->meshVoxels(threadMemoryAlloc) : this->meshHeightfield(threadMemoryAlloc);
+    HostGeometry& waterGeometry = this->waterInstance->hostGeometry;
+
+    const ivec2 originXZ_WS = this->getMinChunkPos() * static_cast<int>(chunkSizeXZ);
+    const ivec3 transformOffset(originXZ_WS.x, 0, originXZ_WS.y /*z*/);
+    if (!this->terrainInstance->hostGeometry.verts.empty())
+    {
+        this->terrainInstance->setPackedVertexFormat(VERTEX_FORMAT_PACKED_LOD_TERRAIN);
+        this->terrainInstance->setTransformOffset(transformOffset);
+        this->terrainInstance->setTrisPerFaceLog2(1);
+        this->terrainInstance->finalizeGeometry();
+        this->terrainInstance->setMaterialIdx(TerrainMaterials::getMaterialIdx(TerrainMaterial::DEFAULT));
+        // Tiles have no OMMs, so cutouts take the anyhit alpha test
+        this->terrainInstance->setIsOpaque(!hasCutoutFaces);
+    }
 
     if (!waterGeometry.verts.empty())
     {
@@ -504,6 +731,7 @@ struct IVec2Hash
 
 static std::unordered_map<TileKey, std::unique_ptr<LodTile>, TileKeyHash> tiles;
 static uint32_t numGeneratingTiles{ 0 };
+static uint32_t numGeneratingVoxelTiles{ 0 };
 static uint64_t frame{ 0 };
 
 // Rebuilt every update
@@ -518,6 +746,7 @@ struct UpdateContext
 {
     ivec2 cameraChunkPos;
     int chunkDistance;
+    int voxelDistance;
     Chunk* (*findChunk)(ivec2 chunkPos);
 
     // Chebyshev distances in chunks from the camera's chunk to the tile's nearest and farthest chunks
@@ -560,12 +789,12 @@ static LodTile* findTile(ivec2 tilePos, int level)
     return tileIter == tiles.end() ? nullptr : tileIter->second.get();
 }
 
-static LodTile& getOrCreateTile(ivec2 tilePos, int level)
+static LodTile& getOrCreateTile(ivec2 tilePos, int level, const UpdateContext& ctx)
 {
     std::unique_ptr<LodTile>& tile = tiles[{ tilePos, level }];
     if (tile == nullptr)
     {
-        tile = std::make_unique<LodTile>(tilePos, level);
+        tile = std::make_unique<LodTile>(tilePos, level, ctx.voxelDistance > 0 && level <= maxVoxelTileLevel);
     }
     return *tile;
 }
@@ -611,7 +840,8 @@ static bool visitNeededTile(LodTile& tile, const UpdateContext& ctx)
 
     const int distance = ctx.distanceTo(tile);
     tile.subdivides = distance <= ctx.chunkDistance ||
-                      (tile.level > 0 && distance < (subdivideDistanceTiles << tile.level));
+                      (tile.level > 0 && distance < (subdivideDistanceTiles << tile.level)) ||
+                      (tile.level > maxVoxelTileLevel && distance <= ctx.voxelDistance);
 
     bool childrenRenderable = false;
     if (tile.subdivides)
@@ -626,7 +856,7 @@ static bool visitNeededTile(LodTile& tile, const UpdateContext& ctx)
             for (int childIdx = 0; childIdx < 4; ++childIdx)
             {
                 // Every child is visited, so none is left out of the needed tree
-                childrenRenderable &= visitNeededTile(getOrCreateTile(childTilePos(tile, childIdx), tile.level - 1), ctx);
+                childrenRenderable &= visitNeededTile(getOrCreateTile(childTilePos(tile, childIdx), tile.level - 1, ctx), ctx);
             }
         }
     }
@@ -780,18 +1010,28 @@ static void task_createLodGeometry(const Task& task, ThreadMemoryAllocator& thre
 
 static void startGeneratingTiles(ToFreeList& toFreeList, std::vector<Task>& outTasks)
 {
-    const size_t numToStart = std::min<size_t>(generationCandidates.size(), maxGeneratingTiles - numGeneratingTiles);
     // Ties go to the coarser tile
     const auto isHigherPriority = [](const std::pair<float, LodTile*>& a, const std::pair<float, LodTile*>& b)
     {
         return a.first != b.first ? a.first < b.first : a.second->level > b.second->level;
     };
-    std::partial_sort(generationCandidates.begin(), generationCandidates.begin() + numToStart,
-                      generationCandidates.end(), isHigherPriority);
+    std::sort(generationCandidates.begin(), generationCandidates.end(), isHigherPriority);
 
-    for (size_t i = 0; i < numToStart; ++i)
+    for (const auto& [priority, tilePtr] : generationCandidates)
     {
-        LodTile& tile = *generationCandidates[i].second;
+        if (numGeneratingTiles >= maxGeneratingTiles)
+        {
+            break;
+        }
+        LodTile& tile = *tilePtr;
+        if (tile.isVoxel)
+        {
+            if (numGeneratingVoxelTiles >= maxGeneratingVoxelTiles)
+            {
+                continue;
+            }
+            ++numGeneratingVoxelTiles;
+        }
         tile.state = LodTileState::GENERATING_GEOMETRY;
         ++numGeneratingTiles;
 
@@ -816,6 +1056,10 @@ static void processTilesWithNewGeometry(ToFreeList& toFreeList)
     {
         tile->state = LodTileState::HAS_GEOMETRY;
         --numGeneratingTiles;
+        if (tile->isVoxel)
+        {
+            --numGeneratingVoxelTiles;
+        }
         if (tile->isMarkedForDestruction)
         {
             tile->destroyInstances(toFreeList);
@@ -823,15 +1067,17 @@ static void processTilesWithNewGeometry(ToFreeList& toFreeList)
             continue;
         }
 
-        scene->markInstanceReadyForBlasBuild(tile->terrainInstance);
-        if (tile->waterInstance->getIsGeometryFinalized())
+        for (Instance** instance : { &tile->terrainInstance, &tile->waterInstance })
         {
-            scene->markInstanceReadyForBlasBuild(tile->waterInstance);
-        }
-        else
-        {
-            toFreeList.pushInstance(tile->waterInstance);
-            tile->waterInstance = nullptr;
+            if ((*instance)->getIsGeometryFinalized())
+            {
+                scene->markInstanceReadyForBlasBuild(*instance);
+            }
+            else
+            {
+                toFreeList.pushInstance(*instance);
+                *instance = nullptr;
+            }
         }
     }
 }
@@ -865,6 +1111,7 @@ void getCoveredChunkBounds(ivec2 cameraChunkPos, int lodDistance, ivec2& outMinC
 
 void update(ivec2 cameraChunkPos,
             int chunkDistance,
+            int voxelDistance,
             int lodDistance,
             Chunk* (*findChunk)(ivec2 chunkPos),
             ToFreeList& toFreeList,
@@ -877,6 +1124,7 @@ void update(ivec2 cameraChunkPos,
     const UpdateContext ctx{
         .cameraChunkPos = cameraChunkPos,
         .chunkDistance = chunkDistance,
+        .voxelDistance = voxelDistance,
         .findChunk = findChunk,
     };
 
@@ -889,7 +1137,7 @@ void update(ivec2 cameraChunkPos,
     {
         for (int rootX = minRootPos.x; rootX <= maxRootPos.x; ++rootX)
         {
-            LodTile& root = getOrCreateTile(ivec2(rootX, rootZ), rootLevel);
+            LodTile& root = getOrCreateTile(ivec2(rootX, rootZ), rootLevel, ctx);
             visitNeededTile(root, ctx);
             roots.push_back(&root);
         }
@@ -918,6 +1166,7 @@ void reset(ToFreeList& toFreeList)
     prevDisplayedTiles.clear();
     prevDisplayedChunkPositions.clear();
     numGeneratingTiles = 0;
+    numGeneratingVoxelTiles = 0;
 }
 
 } // namespace TerrainLod

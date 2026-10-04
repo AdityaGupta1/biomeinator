@@ -120,6 +120,11 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
                "Distance in chunks out to which distant terrain is shown as LODs (0 disables them; never shown headless)",
                int,
                "512");
+    ADD_OPTION("lodVoxelDistance",
+               "Distance in chunks out to which LODs show downsampled blocks with structures rather than "
+               "heightfields (0 for none)",
+               int,
+               "64");
     ADD_OPTION("world", "World to import", std::string, "");
     ADD_OPTION("evictRegions",
                "Free regions far from the camera, regenerating them if the camera returns",
@@ -261,6 +266,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         COPY_SETTING("cloudWindZ", float);
         COPY_SETTING("renderDistance", int);
         COPY_SETTING("lodDistance", int);
+        COPY_SETTING("lodVoxelDistance", int);
         COPY_SETTING("world", std::string);
         COPY_SETTING("evictRegions", bool);
         COPY_SETTING("validateEviction", bool);

@@ -908,9 +908,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     ASSERT(caveSimplexNoiseHeight > 0 && caveSimplexNoiseHeight <= static_cast<uint>(caveNoiseMaxY), "cave simplex noise height out of range");
 
     float* terrainNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * terrainNoiseHeight);
-    float* caveNoiseWorley = threadMemoryAlloc.request<float>(caveNoiseSizeXZSquare * caveWorleyNoiseHeight);
-    float* caveNoiseSimplex = threadMemoryAlloc.request<float>(caveNoiseSizeXZSquare * caveSimplexNoiseHeight);
-    const ivec2 caveNoisePosXZ_WS = chunkPosBlocksXZ_WS - ivec2(caveNoiseMarginXZ);
     fillNoiseArray3D<terrainNoiseDownsample>(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeXZ,
                                              terrainNoiseHeight, threadMemoryAlloc, terrainNoiseMinY);
     float* terrainDetailNoise = nullptr;
@@ -920,34 +917,45 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
         fillNoiseArray3D<terrainDetailDownsampleXZ, terrainDetailDownsampleY>(terrainDetailNoise, fnTerrainDetail, chunkPosBlocksXZ_WS,
             chunkSizeXZ, terrainNoiseHeight, threadMemoryAlloc, terrainNoiseMinY);
     }
-    fillNoiseArray3D<caveShapeNoiseDownsample>(caveNoiseWorley, fnCavesWorley, caveNoisePosXZ_WS, caveNoiseSizeXZ,
-                                               caveWorleyNoiseHeight, threadMemoryAlloc);
-    fillNoiseArray3D<caveShapeNoiseDownsample>(caveNoiseSimplex, fnCavesSimplex, caveNoisePosXZ_WS, caveNoiseSizeXZ,
-                                               caveSimplexNoiseHeight, threadMemoryAlloc, caveSimplexNoiseMinY);
-
-    // +1 cell on each XZ axis is the far-edge interpolation margin; +2 in y leaves room for the
-    // top of the band to interpolate against the next coarse cell.
-    this->caveDecoration.allocateNoise(caveNoiseMaxY);
+    // Surface-only chunks have no caves, so they skip the cave shape and biome fields entirely
+    float* caveNoiseWorley = nullptr;
+    float* caveNoiseSimplex = nullptr;
     constexpr uint caveBiomeNoiseSizeXZ = CaveDecorationData::noiseSizeXZ;
-    const uint caveBiomeNoiseHeight = this->caveDecoration.noiseHeight;
-    const uint caveBiomeNoiseSize = this->caveDecoration.fieldSize();
-    const auto requestCaveBiomeField = [&](const FN::SmartNode<FN::Generator>& fn)
+    uint caveBiomeNoiseHeight = 0;
+    const float* caveSkinThicknessNoise = nullptr;
+    const float* caveSkinPatchNoise = nullptr;
+    const float* caveRockNoise = nullptr;
+    if (!this->isSurfaceOnly)
     {
-        float* data = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
-        fillCaveBiomeNoiseArray(data, fn, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
-        return static_cast<const float*>(data);
-    };
-    // Keep only the two biome axes until decoration. Generate directly into owned storage
-    // so deferred air classification needs neither fresh noise nor a copy of the fields.
-    float* caveTemperatureNoise = this->caveDecoration.temperatureNoise();
-    float* caveHumidityNoise = this->caveDecoration.humidityNoise();
-    fillCaveBiomeNoiseArray(caveTemperatureNoise, fnCaveTemperature, chunkPosBlocksXZ_WS,
-                           caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
-    fillCaveBiomeNoiseArray(caveHumidityNoise, fnCaveHumidity, chunkPosBlocksXZ_WS,
-                           caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
-    const float* caveSkinThicknessNoise = requestCaveBiomeField(fnCaveSkinThickness);
-    const float* caveSkinPatchNoise = requestCaveBiomeField(fnCaveSkinPatch);
-    const float* caveRockNoise = requestCaveBiomeField(fnCaveRock);
+        caveNoiseWorley = threadMemoryAlloc.request<float>(caveNoiseSizeXZSquare * caveWorleyNoiseHeight);
+        caveNoiseSimplex = threadMemoryAlloc.request<float>(caveNoiseSizeXZSquare * caveSimplexNoiseHeight);
+        const ivec2 caveNoisePosXZ_WS = chunkPosBlocksXZ_WS - ivec2(caveNoiseMarginXZ);
+        fillNoiseArray3D<caveShapeNoiseDownsample>(caveNoiseWorley, fnCavesWorley, caveNoisePosXZ_WS, caveNoiseSizeXZ,
+                                                   caveWorleyNoiseHeight, threadMemoryAlloc);
+        fillNoiseArray3D<caveShapeNoiseDownsample>(caveNoiseSimplex, fnCavesSimplex, caveNoisePosXZ_WS, caveNoiseSizeXZ,
+                                                   caveSimplexNoiseHeight, threadMemoryAlloc, caveSimplexNoiseMinY);
+
+        // +1 cell on each XZ axis is the far-edge interpolation margin; +2 in y leaves room for the
+        // top of the band to interpolate against the next coarse cell.
+        this->caveDecoration.allocateNoise(caveNoiseMaxY);
+        caveBiomeNoiseHeight = this->caveDecoration.noiseHeight;
+        const uint caveBiomeNoiseSize = this->caveDecoration.fieldSize();
+        const auto requestCaveBiomeField = [&](const FN::SmartNode<FN::Generator>& fn)
+        {
+            float* data = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
+            fillCaveBiomeNoiseArray(data, fn, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
+            return static_cast<const float*>(data);
+        };
+        // Keep only the two biome axes until decoration. Generate directly into owned storage
+        // so deferred air classification needs neither fresh noise nor a copy of the fields.
+        fillCaveBiomeNoiseArray(this->caveDecoration.temperatureNoise(), fnCaveTemperature, chunkPosBlocksXZ_WS,
+                               caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
+        fillCaveBiomeNoiseArray(this->caveDecoration.humidityNoise(), fnCaveHumidity, chunkPosBlocksXZ_WS,
+                               caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
+        caveSkinThicknessNoise = requestCaveBiomeField(fnCaveSkinThickness);
+        caveSkinPatchNoise = requestCaveBiomeField(fnCaveSkinPatch);
+        caveRockNoise = requestCaveBiomeField(fnCaveRock);
+    }
 
     const uint terrainNoiseSize = chunkSizeXZSquare * terrainNoiseHeight;
     const uint caveWorleyNoiseSize = caveNoiseSizeXZSquare * caveWorleyNoiseHeight;
@@ -1145,7 +1153,17 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             bool wasSolid = true;
             // Fringe candidate from the voxel below, promoted once this voxel turns out to be air
             Block prevFringeBlock = Block::AIR;
-            for (uint y = 1; y <= maxFillY; ++y)
+            // Rock this far below the chunk's lowest possible surface can't show from afar, even
+            // where a neighbor's lower ground exposes a cliff
+            uint firstFillY = 1;
+            if (this->isSurfaceOnly)
+            {
+                constexpr int surfaceOnlyRockDepth = 16;
+                firstFillY = static_cast<uint>(std::clamp(terrainNoiseMinY - surfaceOnlyRockDepth, 1, static_cast<int>(maxFillY)));
+                std::fill(this->blocks.begin() + baseBlockIdx + 1, this->blocks.begin() + baseBlockIdx + firstFillY,
+                          Block::STONE);
+            }
+            for (uint y = firstFillY; y <= maxFillY; ++y)
             {
                 Block block = Block::AIR;
                 Block fringeBlock = Block::AIR;
@@ -1179,7 +1197,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 {
                     // Quartz belongs to the solid landform. Decide its material before
                     // carving so it cannot acquire cave air, cave skins or cave decorators.
-                    if (y < static_cast<uint>(caveNoiseMaxY) && !SurfaceMaterials::isQuartz(surfaceRock))
+                    if (!this->isSurfaceOnly && y < static_cast<uint>(caveNoiseMaxY) &&
+                        !SurfaceMaterials::isQuartz(surfaceRock))
                     {
                         const float caveNoiseVal = sampleCaveNoise(caveColumnIdx, y);
                         float caveSurfaceVal = caveSurfaceValAt(static_cast<float>(y));

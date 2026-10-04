@@ -39,6 +39,25 @@ The broad terrain noise is sampled on the same 4-block world lattice chunks use 
 same way, so a one-block cell's height equals its chunk's wherever the chunk has no detail noise or
 surface cave. That keeps the seam with full-resolution chunks small for the near tiles.
 
+## Voxel tiles near the chunks
+
+Within `--lodVoxelDistance`, tiles are subdivided down to `maxVoxelTileLevel` and built from real chunks
+instead of the noise: `Chunk::generateSurfaceOnly` generates the tile's chunks, plus the margin their
+structures need, inside the tile's own task, and the tile downsamples them 2x into voxels. That carries
+trees, structures, pillars and overhangs past the chunk distance, where heightfields dropped them at a
+hard edge.
+
+- Surface-only chunks skip what can't be seen from afar, which is most of terrain generation's cost:
+  cave shape and cave biome noise, cave structures, decorators, and filling rock far below the
+  surface. Structures and snow layers still run, so placements match the full chunks they become.
+- They live outside the region pipeline (null region) and never report state changes, so the terrain
+  manager never sees them. Generating them inside one task duplicates the margin between neighboring
+  tiles, which is why voxel tiles are capped low and why placeholders inside the chunk distance start
+  above the voxel levels.
+- Downsampling keeps the most common block that fills a cube, ties to the higher, so canopies, trunks and
+  thin pillars survive (slightly thickened) and surfaces keep their top block. Plants vanish.
+- Leaves keep their cutout, without OMMs, so a tile with leaf faces runs the anyhit alpha test.
+
 ## Quadtree and selection
 
 A tile at level L covers 2^L × 2^L chunks with at most 128 cells per side, so cells are one block up to
