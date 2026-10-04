@@ -21,10 +21,10 @@
 
 #include <algorithm>
 #include <bit>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 using namespace glm;
@@ -52,7 +52,7 @@ inline constexpr int edgeSkirtDepthCells = 4;
 // Steeper cells show their slope's material rather than their top block: block terrain this steep shows
 // as much side as top
 inline constexpr float maxTopGradient = 1.f;
-inline constexpr uint32_t maxGeneratingTiles = 16;
+inline constexpr uint32_t maxGeneratingTiles = 64;
 // Chunks voxel tiles request cells for each update, highest priority first. Requesting for every waiting
 // tile each update was a hash lookup per chunk for the whole ring, and only the first ones get generated.
 inline constexpr int maxCellRequestsPerUpdate = 2048;
@@ -93,7 +93,32 @@ public:
     // A voxel tile's chunks and the ring around them, row by row, pinned while it meshes from them
     std::vector<const SurfaceChunkCells*> sourceCells;
 
+    // Links to the tiles that exist, so visits don't look them up; each tile unlinks itself when destroyed
+    LodTile* parent{ nullptr };
+    std::array<LodTile*, 4> children{};
+
     LodTile(ivec2 tilePos, int level, bool isVoxel) : tilePos(tilePos), level(level), isVoxel(isVoxel) {}
+
+    ~LodTile()
+    {
+        if (this->parent != nullptr)
+        {
+            this->parent->children[this->getChildIdx()] = nullptr;
+        }
+        for (LodTile* child : this->children)
+        {
+            if (child != nullptr)
+            {
+                child->parent = nullptr;
+            }
+        }
+    }
+
+    // Which of its parent's children it is
+    int getChildIdx() const
+    {
+        return (this->tilePos.x & 1) + 2 * (this->tilePos.y & 1);
+    }
 
     int getSideChunks() const
     {
@@ -696,7 +721,6 @@ static std::vector<ivec2> displayedChunkPositions;
 // What the previous update showed, to hide whatever it no longer does
 static std::vector<LodTile*> prevDisplayedTiles;
 static std::vector<ivec2> prevDisplayedChunkPositions;
-static std::unordered_set<ivec2, glmUtil::IVec2Hash> displayedChunkSet;
 
 struct UpdateContext
 {
@@ -745,19 +769,44 @@ static LodTile* findTile(ivec2 tilePos, int level)
     return tileIter == tiles.end() ? nullptr : tileIter->second.get();
 }
 
+static ivec2 childTilePos(const LodTile& tile, int childIdx)
+{
+    return tile.tilePos * 2 + ivec2(childIdx & 1, childIdx >> 1);
+}
+
+// A new tile links to its parent and children that already exist, as tiles outlive their relatives
 static LodTile& getOrCreateTile(ivec2 tilePos, int level, const UpdateContext& ctx)
 {
     std::unique_ptr<LodTile>& tile = tiles[{ tilePos, level }];
     if (tile == nullptr)
     {
         tile = std::make_unique<LodTile>(tilePos, level, ctx.voxelDistance > 0 && level <= maxVoxelTileLevel);
+        LodTile* parent = findTile(glmUtil::floorDiv(tilePos, ivec2(2)), level + 1);
+        if (parent != nullptr)
+        {
+            tile->parent = parent;
+            parent->children[tile->getChildIdx()] = tile.get();
+        }
+        for (int childIdx = 0; level > 0 && childIdx < 4; ++childIdx)
+        {
+            LodTile* child = findTile(childTilePos(*tile, childIdx), level - 1);
+            if (child != nullptr)
+            {
+                child->parent = tile.get();
+                tile->children[childIdx] = child;
+            }
+        }
     }
     return *tile;
 }
 
-static ivec2 childTilePos(const LodTile& tile, int childIdx)
+static LodTile& getOrCreateChild(LodTile& tile, int childIdx, const UpdateContext& ctx)
 {
-    return tile.tilePos * 2 + ivec2(childIdx & 1, childIdx >> 1);
+    if (tile.children[childIdx] == nullptr)
+    {
+        getOrCreateTile(childTilePos(tile, childIdx), tile.level - 1, ctx);
+    }
+    return *tile.children[childIdx];
 }
 
 static bool isCoveredByExisting(const LodTile& tile, const UpdateContext& ctx);
@@ -796,7 +845,7 @@ static bool areChildrenCoveredByExisting(const LodTile& tile, const UpdateContex
     }
     for (int childIdx = 0; childIdx < 4; ++childIdx)
     {
-        const LodTile* child = findTile(childTilePos(tile, childIdx), tile.level - 1);
+        const LodTile* child = tile.children[childIdx];
         if (child == nullptr || !isCoveredByExisting(*child, ctx))
         {
             return false;
@@ -836,7 +885,7 @@ static bool visitNeededTile(LodTile& tile, const UpdateContext& ctx)
             for (int childIdx = 0; childIdx < 4; ++childIdx)
             {
                 // Every child is visited, so none is left out of the needed tree
-                childrenRenderable &= visitNeededTile(getOrCreateTile(childTilePos(tile, childIdx), tile.level - 1, ctx), ctx);
+                childrenRenderable &= visitNeededTile(getOrCreateChild(tile, childIdx, ctx), ctx);
             }
         }
     }
@@ -878,7 +927,7 @@ static void displayExisting(LodTile& tile, const UpdateContext& ctx)
     {
         for (int childIdx = 0; childIdx < 4; ++childIdx)
         {
-            displayExisting(*findTile(childTilePos(tile, childIdx), tile.level - 1), ctx);
+            displayExisting(*tile.children[childIdx], ctx);
         }
     }
 }
@@ -905,7 +954,7 @@ static void displayNeededTile(LodTile& tile, const UpdateContext& ctx)
     }
     for (int childIdx = 0; childIdx < 4; ++childIdx)
     {
-        LodTile& child = *findTile(childTilePos(tile, childIdx), tile.level - 1);
+        LodTile& child = *tile.children[childIdx];
         if (tile.subdivides)
         {
             displayNeededTile(child, ctx);
@@ -917,36 +966,52 @@ static void displayNeededTile(LodTile& tile, const UpdateContext& ctx)
     }
 }
 
+static bool isChunkPosLess(ivec2 a, ivec2 b)
+{
+    return a.x != b.x ? a.x < b.x : a.y < b.y;
+}
+
+// Shows what this update displays and hides what the last one did and this one doesn't, touching only
+// what changed. The lists are kept sorted to diff them.
 static void applyDisplayed(const UpdateContext& ctx)
 {
-    for (LodTile* tile : prevDisplayedTiles)
+    std::sort(displayedTiles.begin(), displayedTiles.end());
+    std::sort(displayedChunkPositions.begin(), displayedChunkPositions.end(), isChunkPosLess);
+
+    std::vector<LodTile*> changedTiles;
+    std::set_difference(prevDisplayedTiles.begin(), prevDisplayedTiles.end(), displayedTiles.begin(),
+                        displayedTiles.end(), std::back_inserter(changedTiles));
+    for (LodTile* tile : changedTiles)
     {
         tile->isDisplayed = false;
+        tile->setVisible(false);
     }
-    for (LodTile* tile : displayedTiles)
+    changedTiles.clear();
+    std::set_difference(displayedTiles.begin(), displayedTiles.end(), prevDisplayedTiles.begin(),
+                        prevDisplayedTiles.end(), std::back_inserter(changedTiles));
+    for (LodTile* tile : changedTiles)
     {
         tile->isDisplayed = true;
-    }
-    for (LodTile* tile : prevDisplayedTiles)
-    {
-        tile->setVisible(tile->isDisplayed);
-    }
-    for (LodTile* tile : displayedTiles)
-    {
         tile->setVisible(true);
     }
 
-    displayedChunkSet.clear();
-    displayedChunkSet.insert(displayedChunkPositions.begin(), displayedChunkPositions.end());
-    for (const ivec2 chunkPos : prevDisplayedChunkPositions)
+    std::vector<ivec2> changedChunkPositions;
+    std::set_difference(prevDisplayedChunkPositions.begin(), prevDisplayedChunkPositions.end(),
+                        displayedChunkPositions.begin(), displayedChunkPositions.end(),
+                        std::back_inserter(changedChunkPositions), isChunkPosLess);
+    for (const ivec2 chunkPos : changedChunkPositions)
     {
         Chunk* chunk = ctx.findChunk(chunkPos);
-        if (chunk != nullptr && !displayedChunkSet.contains(chunkPos))
+        if (chunk != nullptr)
         {
             chunk->setInstancesVisible(false);
         }
     }
-    for (const ivec2 chunkPos : displayedChunkPositions)
+    changedChunkPositions.clear();
+    std::set_difference(displayedChunkPositions.begin(), displayedChunkPositions.end(),
+                        prevDisplayedChunkPositions.begin(), prevDisplayedChunkPositions.end(),
+                        std::back_inserter(changedChunkPositions), isChunkPosLess);
+    for (const ivec2 chunkPos : changedChunkPositions)
     {
         ctx.findChunk(chunkPos)->setInstancesVisible(true);
     }
@@ -1101,11 +1166,6 @@ static void getRootTileBounds(ivec2 cameraChunkPos, int lodDistance, ivec2& outM
     outMaxRootPos = glmUtil::floorDiv(cameraChunkPos + lodDistance, rootSideChunks);
 }
 
-bool isChunkDisplayed(ivec2 chunkPos)
-{
-    return displayedChunkSet.contains(chunkPos);
-}
-
 void getCoveredChunkBounds(ivec2 cameraChunkPos, int lodDistance, ivec2& outMinChunkPos, ivec2& outMaxChunkPos)
 {
     ivec2 minRootPos;
@@ -1174,7 +1234,6 @@ void reset(ToFreeList& toFreeList)
     displayedChunkPositions.clear();
     prevDisplayedTiles.clear();
     prevDisplayedChunkPositions.clear();
-    displayedChunkSet.clear();
     numGeneratingTiles = 0;
     SurfaceChunkCache::reset();
 }

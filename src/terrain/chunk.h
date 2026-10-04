@@ -320,6 +320,9 @@ public:
     void generateSurfaceOnlyTerrain(ThreadMemoryAllocator& threadMemoryAlloc);
     // Every chunk in the neighborhood must have its terrain
     void fillSurfaceOnlyStructures(const ConstStructureNeighborhood& neighborhood);
+    // Neighbors' structure passes read only a chunk's masks, heights and structures, so a surface-only
+    // chunk downsampled already can give its blocks back while it stays a neighbor
+    void releaseBlocks();
 
     void setNeighbors(bool createNeighbors);
 
@@ -349,6 +352,7 @@ public:
     void setIsMarkedForDestruction(bool marked = true);
 
     void setInstancesVisible(bool visible);
+    bool getAreInstancesVisible() const;
 
     glm::ivec2 getChunkPos() const;
     Region* getRegion() const;

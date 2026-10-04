@@ -65,11 +65,22 @@ past the chunk distance, where heightfields dropped them at a hard edge.
 - Regeneration, not per-chunk work, is what the ring costs: each chunk's terrain is needed by up to nine
   structure passes requested at different times. Freeing terrain as soon as no waiting chunk claimed it
   generated each chunk's terrain 4-5 times, and dropping cells after a timeout regenerated them when the
-  camera passed and the chunks left the chunk distance behind it. Unused terrain is now kept in a least
-  recently used queue under the cap (512 chunks: about 2.7 terrain generations per chunk, 2.3 at 1024
-  for about 150 MB more), and cells are kept by distance, over the whole area out to the ring's edge.
+  camera passed and the chunks left the chunk distance behind it. So:
+  - Cells are kept by distance, over the whole area out to the ring's edge.
+  - Unused terrain is kept in least recently used queues. A neighbor's structure pass reads only a
+    chunk's masks, heights and structures, never its blocks, so a downsampled chunk gives its blocks back
+    and stays cached at about 35 KB instead of 300 KB. Compact terrain and terrain still holding blocks
+    have separate caps and queues: with one queue, freeing room for blocks discarded compact terrain first
+    and barely helped.
+  - Requests are ordered by whole priority steps and then around the camera, so a chunk's neighbors are
+    requested soon after it.
+  
+  Together these took a 40 blocks/s walk from 4.6 terrain generations per chunk to 2.1 (1.36 per cells
+  task; the rest is the walk revisiting areas beyond the keep distance).
 - A request claims its neighborhood before freeing unused terrain to make room, or it could free the
   very terrain it was about to use.
+- Tasks only start once an update, so the cap on tasks in flight must cover a frame of work for every
+  worker. At 64 a fresh load's ring kept two of 23 workers busy and took 15 s; at 512, 6.5 s.
 - Placeholders inside the chunk distance start above the voxel levels: voxel tiles there would be
   replaced by chunks almost as soon as they were built.
 - Downsampling keeps the most common block that fills from the bottom (any shape but plants and models),

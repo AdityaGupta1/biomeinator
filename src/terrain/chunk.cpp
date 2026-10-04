@@ -52,32 +52,34 @@ uint64_t capacityBytes(const std::vector<T>& vector)
     return vector.capacity() * sizeof(T);
 }
 
-// A chunk's large buffers, pooled as one set and never freed while running; see
-// knowledge/terrain/region_system.md (Freeing without stutter)
-struct ChunkBuffers
+// A chunk's large buffers, pooled and never freed while running; see knowledge/terrain/region_system.md
+// (Freeing without stutter). The masks are pooled as a pair and the block array on its own, since
+// surface-only chunks give their blocks back long before their masks.
+struct ChunkMasks
 {
-    std::vector<Block> blocks;
     std::vector<uint64_t> terrainAirMask;
     std::vector<uint64_t> terrainSolidCubeMask;
 
     uint64_t capacityBytes() const
     {
-        return ::capacityBytes(blocks) + ::capacityBytes(terrainAirMask) + ::capacityBytes(terrainSolidCubeMask);
+        return ::capacityBytes(terrainAirMask) + ::capacityBytes(terrainSolidCubeMask);
     }
 };
 
 std::mutex bufferPoolMutex;
-std::vector<ChunkBuffers> bufferPool;
+std::vector<std::vector<Block>> blocksPool;
+std::vector<ChunkMasks> masksPool;
 
-ChunkBuffers takePooledBuffers()
+template<typename T>
+T takePooled(std::vector<T>& pool)
 {
     std::scoped_lock<std::mutex> lock(bufferPoolMutex);
-    if (bufferPool.empty())
+    if (pool.empty())
     {
         return {};
     }
-    ChunkBuffers buffers = std::move(bufferPool.back());
-    bufferPool.pop_back();
+    T buffers = std::move(pool.back());
+    pool.pop_back();
     return buffers;
 }
 } // namespace
@@ -117,9 +119,13 @@ uint64_t Chunk::getPooledBufferBytes()
 {
     std::scoped_lock<std::mutex> lock(bufferPoolMutex);
     uint64_t bytes = 0;
-    for (const ChunkBuffers& buffers : bufferPool)
+    for (const std::vector<Block>& blocks : blocksPool)
     {
-        bytes += buffers.capacityBytes();
+        bytes += capacityBytes(blocks);
+    }
+    for (const ChunkMasks& masks : masksPool)
+    {
+        bytes += masks.capacityBytes();
     }
     return bytes;
 }
@@ -127,7 +133,8 @@ uint64_t Chunk::getPooledBufferBytes()
 void Chunk::clearBufferPool()
 {
     std::scoped_lock<std::mutex> lock(bufferPoolMutex);
-    bufferPool = {};
+    blocksPool = {};
+    masksPool = {};
 }
 
 Chunk::Chunk(ivec2 chunkPos, Region* region, bool isSurfaceOnly)
@@ -136,20 +143,26 @@ Chunk::Chunk(ivec2 chunkPos, Region* region, bool isSurfaceOnly)
 
 Chunk::~Chunk()
 {
-    // Only complete sets: a chunk destroyed before it had terrain has nothing worth pooling
-    const bool hasAllBuffers = this->blocks.capacity() >= numChunkBlocks &&
-                               this->terrainAirMask.capacity() >= terrainMaskWords &&
-                               this->terrainSolidCubeMask.capacity() >= terrainMaskWords;
-    if (!hasAllBuffers)
+    this->releaseBlocks();
+    // Only full-size buffers: a chunk destroyed before it had terrain has nothing worth pooling
+    if (this->terrainAirMask.capacity() >= terrainMaskWords && this->terrainSolidCubeMask.capacity() >= terrainMaskWords)
     {
-        return;
+        std::scoped_lock<std::mutex> lock(bufferPoolMutex);
+        masksPool.push_back({
+            .terrainAirMask = std::move(this->terrainAirMask),
+            .terrainSolidCubeMask = std::move(this->terrainSolidCubeMask),
+        });
     }
-    std::scoped_lock<std::mutex> lock(bufferPoolMutex);
-    bufferPool.push_back({
-        .blocks = std::move(this->blocks),
-        .terrainAirMask = std::move(this->terrainAirMask),
-        .terrainSolidCubeMask = std::move(this->terrainSolidCubeMask),
-    });
+}
+
+void Chunk::releaseBlocks()
+{
+    if (this->blocks.capacity() >= numChunkBlocks)
+    {
+        std::scoped_lock<std::mutex> lock(bufferPoolMutex);
+        blocksPool.push_back(std::move(this->blocks));
+    }
+    this->blocks = {};
 }
 
 // Main thread only: this can call Region::createChunk, which mutates Region::chunks
@@ -212,11 +225,11 @@ void Chunk::setNeighbor(NeighborDirection dir, Chunk* neighborChunk)
 
 void Chunk::generateTerrainBlocks(ThreadMemoryAllocator& threadMemoryAlloc)
 {
-    ChunkBuffers buffers = takePooledBuffers();
-    this->blocks = std::move(buffers.blocks);
+    this->blocks = takePooled(blocksPool);
     this->blocks.assign(numChunkBlocks, Block{});
-    this->terrainAirMask = std::move(buffers.terrainAirMask);
-    this->terrainSolidCubeMask = std::move(buffers.terrainSolidCubeMask);
+    ChunkMasks masks = takePooled(masksPool);
+    this->terrainAirMask = std::move(masks.terrainAirMask);
+    this->terrainSolidCubeMask = std::move(masks.terrainSolidCubeMask);
     this->biomes.resize(chunkSizeXZSquare);
     this->terrainTopY.resize(chunkSizeXZSquare);
     this->terrainSurfaceHeight.resize(chunkSizeXZSquare);
@@ -1520,6 +1533,11 @@ void Chunk::setInstancesVisible(bool visible)
     {
         this->waterInstance->setVisible(visible);
     }
+}
+
+bool Chunk::getAreInstancesVisible() const
+{
+    return this->areInstancesVisible;
 }
 
 glm::ivec2 Chunk::getChunkPos() const

@@ -911,7 +911,7 @@ void update(ToFreeList& toFreeList)
             {
                 return true;
             }
-            if (TerrainLod::isChunkDisplayed(chunk->getChunkPos()))
+            if (chunk->getAreInstancesVisible())
             {
                 return false;
             }

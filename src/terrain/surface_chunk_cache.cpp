@@ -20,12 +20,15 @@
 
 using namespace glm;
 
-// Tasks queued or running at once. Each is short, so this only bounds how far ahead of the workers the
-// cache commits to an order.
-inline constexpr uint32_t maxTasksInFlight = 64;
-// Chunks holding full blocks at once, including unused terrain kept for later neighbors. Their buffers
-// stay pooled afterward, so this bounds that memory.
-inline constexpr uint32_t maxChunksWithTerrain = 512;
+// Tasks queued or running at once. Tasks only start once an update, and each takes about half a
+// millisecond, so this must cover a frame's worth of work for every worker: at 64, a fresh load's ring
+// kept two of 23 workers busy.
+inline constexpr uint32_t maxTasksInFlight = 512;
+// Chunks holding terrain at once, including unused terrain kept for later neighbors' structure passes.
+// Downsampled chunks give their blocks back and keep only what neighbors read, about 35 KB of masks,
+// heights and structures, so many more fit than chunks holding blocks, whose buffers stay pooled.
+inline constexpr uint32_t maxChunksWithTerrain = 2048;
+inline constexpr uint32_t maxChunksWithBlocks = 256;
 // Only this many of the highest-priority requests are ordered and considered each update; the tasks in
 // flight run out well before
 inline constexpr size_t maxRequestsConsidered = 1024;
@@ -245,11 +248,14 @@ public:
     uint32_t numTerrainUsers{ 0 };
     // Tiles meshing from the cells
     uint32_t numPins{ 0 };
-    bool isInUnusedTerrainQueue{ false };
+    // Indexed by terrainHasBlocks, as unusedTerrainQueues is
+    std::array<bool, 2> isInUnusedTerrainQueue{};
+    // Whether the terrain still holds its blocks, which only its own cells task reads
+    bool terrainHasBlocks{ false };
     uint64_t lastRequestedUpdate{ 0 };
     float priority{ 0.f };
-    // Position in this update's requests, which breaks priority ties
-    uint32_t requestIdx{ 0 };
+    // Breaks priority ties, ordering requests around the camera so neighbors are requested together
+    float sweepAngle{ 0.f };
     // Read by the cells task
     Chunk::ConstStructureNeighborhood neighborhood{};
 
@@ -270,10 +276,12 @@ static std::vector<SurfaceChunk*> requests;
 static uint64_t updateIdx{ 1 };
 static uint32_t numTasksInFlight{ 0 };
 static uint32_t numChunksWithTerrain{ 0 };
-// Chunks whose terrain no waiting chunk claims, oldest first. Neighbors requested later reuse it; without
-// it, each chunk's terrain was generated four to five times. Entries go stale when their terrain is claimed
-// again, and a chunk is queued once at a time.
-static std::deque<ivec2> unusedTerrainChunks;
+static uint32_t numChunksWithBlocks{ 0 };
+// Chunks whose terrain no waiting chunk claims, oldest first, without and with blocks: each cap frees from
+// its own queue, or freeing room for blocks would discard compact terrain first. Neighbors requested later
+// reuse it; without it, each chunk's terrain was generated four to five times. Entries go stale when their
+// terrain is claimed again or gives its blocks back, and a chunk is in each queue once at a time.
+static std::array<std::deque<ivec2>, 2> unusedTerrainQueues;
 
 static std::vector<SurfaceChunk*> finishedChunks;
 static std::mutex finishedChunksMutex;
@@ -310,29 +318,38 @@ static bool isTerrainUnused(const SurfaceChunk& surfaceChunk)
 
 static void markTerrainIfUnused(SurfaceChunk& surfaceChunk)
 {
-    if (isTerrainUnused(surfaceChunk) && !surfaceChunk.isInUnusedTerrainQueue)
+    const size_t queueIdx = surfaceChunk.terrainHasBlocks ? 1 : 0;
+    if (isTerrainUnused(surfaceChunk) && !surfaceChunk.isInUnusedTerrainQueue[queueIdx])
     {
-        unusedTerrainChunks.push_back(surfaceChunk.chunkPos);
-        surfaceChunk.isInUnusedTerrainQueue = true;
+        unusedTerrainQueues[queueIdx].push_back(surfaceChunk.chunkPos);
+        surfaceChunk.isInUnusedTerrainQueue[queueIdx] = true;
     }
 }
 
-// Returns whether any was freed
-static bool freeLeastRecentlyUsedTerrain()
+// Frees the least recently used unused terrain with or without blocks, and returns whether there was any
+static bool freeLeastRecentlyUsedTerrain(bool withBlocks)
 {
-    while (!unusedTerrainChunks.empty())
+    const size_t queueIdx = withBlocks ? 1 : 0;
+    std::deque<ivec2>& queue = unusedTerrainQueues[queueIdx];
+    while (!queue.empty())
     {
-        const auto iter = surfaceChunks.find(unusedTerrainChunks.front());
-        unusedTerrainChunks.pop_front();
+        const auto iter = surfaceChunks.find(queue.front());
+        queue.pop_front();
         if (iter == surfaceChunks.end())
         {
             continue;
         }
-        iter->second->isInUnusedTerrainQueue = false;
-        if (isTerrainUnused(*iter->second))
+        SurfaceChunk& surfaceChunk = *iter->second;
+        surfaceChunk.isInUnusedTerrainQueue[queueIdx] = false;
+        if (isTerrainUnused(surfaceChunk) && surfaceChunk.terrainHasBlocks == withBlocks)
         {
-            iter->second->terrain = nullptr;
+            surfaceChunk.terrain = nullptr;
             --numChunksWithTerrain;
+            if (surfaceChunk.terrainHasBlocks)
+            {
+                surfaceChunk.terrainHasBlocks = false;
+                --numChunksWithBlocks;
+            }
             return true;
         }
     }
@@ -373,6 +390,7 @@ static void task_generateCells(const Task& task, ThreadMemoryAllocator&)
     SurfaceChunk& surfaceChunk = *task.surfaceChunkPtr;
     surfaceChunk.terrain->fillSurfaceOnlyStructures(surfaceChunk.neighborhood);
     surfaceChunk.cells = downsampleChunk(*surfaceChunk.terrain);
+    surfaceChunk.terrain->releaseBlocks();
     pushFinished(surfaceChunk);
 }
 
@@ -388,7 +406,6 @@ const SurfaceChunkCells* requestCells(ivec2 chunkPos, float priority)
     if (isFirstRequest)
     {
         surfaceChunk.priority = priority;
-        surfaceChunk.requestIdx = static_cast<uint32_t>(requests.size());
         requests.push_back(&surfaceChunk);
     }
     else
@@ -427,6 +444,8 @@ static void processFinishedChunks()
         else
         {
             surfaceChunk->isGeneratingCells = false;
+            surfaceChunk->terrainHasBlocks = false;
+            --numChunksWithBlocks;
             stopWaitingForCells(*surfaceChunk);
         }
     }
@@ -439,17 +458,51 @@ static void startGenerating(SurfaceChunk& surfaceChunk, void (*func)(const Task&
     outTasks.push_back({ .func = func, .surfaceChunkPtr = &surfaceChunk });
 }
 
-// Highest priority first, and in request order on ties, which keeps a tile's chunks together so they share
-// their neighbors' terrain. A request keeps its claim on its neighborhood's terrain only if the terrain it
-// lacks fits under the cap on chunks holding terrain, after freeing unused terrain, so claims never pile up
-// half generated; the first unclaimed request may exceed the cap, so some request always progresses.
-static void startRequestedGeneration(std::vector<Task>& outTasks)
+// Frees unused terrain until the missing terrain fits under both caps, and returns whether it does
+static bool makeRoomForTerrain(uint32_t numMissingTerrain)
 {
+    while (true)
+    {
+        if (numChunksWithBlocks + numMissingTerrain > maxChunksWithBlocks)
+        {
+            if (!freeLeastRecentlyUsedTerrain(true))
+            {
+                return false;
+            }
+        }
+        else if (numChunksWithTerrain + numMissingTerrain > maxChunksWithTerrain)
+        {
+            if (!freeLeastRecentlyUsedTerrain(false) && !freeLeastRecentlyUsedTerrain(true))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            return true;
+        }
+    }
+}
+
+// Highest priority first, by whole priority steps, and around the camera within a step, so a chunk's
+// neighbors are requested soon after it and find its terrain still kept. A request keeps its claim on its
+// neighborhood's terrain only if the terrain it lacks fits under the caps, after freeing unused terrain,
+// so claims never pile up half generated; the first unclaimed request may exceed the caps, so some request
+// always progresses.
+static void startRequestedGeneration(ivec2 cameraChunkPos, std::vector<Task>& outTasks)
+{
+    for (SurfaceChunk* surfaceChunk : requests)
+    {
+        const vec2 offset(surfaceChunk->chunkPos - cameraChunkPos);
+        surfaceChunk->sweepAngle = std::atan2(offset.y, offset.x);
+    }
     const auto consideredEnd = requests.begin() + std::min(requests.size(), maxRequestsConsidered);
     std::partial_sort(requests.begin(), consideredEnd, requests.end(),
                       [](const SurfaceChunk* a, const SurfaceChunk* b)
                       {
-                          return a->priority != b->priority ? a->priority < b->priority : a->requestIdx < b->requestIdx;
+                          const float aStep = std::floor(a->priority);
+                          const float bStep = std::floor(b->priority);
+                          return aStep != bStep ? aStep < bStep : a->sweepAngle < b->sweepAngle;
                       });
 
     bool mayExceedTerrainCap = true;
@@ -471,10 +524,7 @@ static void startRequestedGeneration(std::vector<Task>& outTasks)
             uint32_t numMissingTerrain = 0;
             forEachInNeighborhood(*surfaceChunk,
                 [&](const SurfaceChunk& neighbor) { numMissingTerrain += neighbor.terrain == nullptr ? 1 : 0; });
-            while (numChunksWithTerrain + numMissingTerrain > maxChunksWithTerrain && freeLeastRecentlyUsedTerrain())
-            {
-            }
-            if (numChunksWithTerrain + numMissingTerrain > maxChunksWithTerrain && !mayExceedTerrainCap)
+            if (!makeRoomForTerrain(numMissingTerrain) && !mayExceedTerrainCap)
             {
                 stopWaitingForCells(*surfaceChunk);
                 continue;
@@ -497,7 +547,9 @@ static void startRequestedGeneration(std::vector<Task>& outTasks)
                 }
                 neighbor.terrain = std::make_unique<Chunk>(neighbor.chunkPos, nullptr, true /*isSurfaceOnly*/);
                 neighbor.isGeneratingTerrain = true;
+                neighbor.terrainHasBlocks = true;
                 ++numChunksWithTerrain;
+                ++numChunksWithBlocks;
                 startGenerating(neighbor, task_generateTerrain, outTasks);
             });
         if (!isNeighborhoodReady)
@@ -545,7 +597,7 @@ static void dropUnneeded(ivec2 cameraChunkPos, int keepDistance)
 void update(ivec2 cameraChunkPos, int keepDistance, std::vector<Task>& outTasks)
 {
     processFinishedChunks();
-    startRequestedGeneration(outTasks);
+    startRequestedGeneration(cameraChunkPos, outTasks);
     if (updateIdx % dropUnneededIntervalUpdates == 0)
     {
         dropUnneeded(cameraChunkPos, keepDistance);
@@ -558,9 +610,10 @@ void reset()
     surfaceChunks.clear();
     requests.clear();
     finishedChunks.clear();
-    unusedTerrainChunks.clear();
+    unusedTerrainQueues = {};
     numTasksInFlight = 0;
     numChunksWithTerrain = 0;
+    numChunksWithBlocks = 0;
 }
 
 } // namespace SurfaceChunkCache
