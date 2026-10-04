@@ -23,7 +23,7 @@ snow layers and block shapes in voxel tiles, and ring generation speed (see `kno
 
 1. Distance fog that fades far terrain to a neutral color (done: aerial haze, see
    `knowledge/shaders/path_tracing.md`)
-2. Decorator emulation
+2. Decorators in LOD tiles (deferred)
 3. Voxel mode regolding
 4. World import/export with LODs
 5. Smaller items: seam ledge, water seam, sea ice outline, Tianzi spikes, water fade, dawn/dusk fog boost
@@ -46,21 +46,57 @@ neutral color (blue-white, from a small set of settings or a gentle time-of-day 
 rather than one derived from the sky LUT. Fade by distance alone, with the fade start and strength as
 GUI settings so it can be tuned live.
 
-### 2. Decorator emulation
+### 2. Decorators in LOD tiles (deferred)
 
 Symptom: dense grass/flower decorators on full-res chunks darken and texture the ground; surface-only
 chunks skip decorators and 2x downsampling would drop them anyway, so voxel tiles (and heightfields)
-look brighter and flatter.
+look brighter and flatter. The difference is sharpest right at the full-res seam.
 
-Proposal: emulate statistically rather than placing decorators.
-- At init, compute per biome the expected floor decorator coverage from its `Decorator` entries.
-- Darken (and optionally shift) the baked biome vertex tint by coverage times a tuning factor that
-  stands for the tufts' color and their small self-shadows. LOD vertices already carry a tint
-  (`PackedLodTerrainVertex::packedTint`), applied to biome-tinted faces; untinted tops (sand etc.)
-  would need a separate darkening path or a tint flag.
-- Applies to both voxel and heightfield tiles, costs no generation, and can't flicker.
-- Alternative considered: run the floor decorator pass in surface-only chunks (the cave decorator half
-  is what needs skipped data). Not worth it: downsampling deletes them, and only their color matters.
+Leaning towards a hybrid: real decorators merged into the nearest voxel tiles (levels 0-1, just past the
+chunks), statistical darkening beyond (level-2 voxel tiles and heightfields). At 1440p a block 500 blocks
+away is about 3 pixels wide and about 1.5 at 1,000, so far tufts would only show as shimmering speckle.
+Open questions: real decorators over the whole voxel ring or only near the seam; whether to accept the
+anyhit alpha-test cost at first (LOD tiles have no OMMs) or reuse the chunks' decorator OMMs.
+
+Real decorators, merged into tile geometry:
+- Surface-only chunks already run the structure pass; the floor decorator pass could run in the same
+  cells task (they skip it only because the cave half needs skipped data), so placement matches chunks.
+- An X-shaped decorator is 4 triangles; merged in, roughly as many triangles as the voxel terrain
+  itself, a few hundred MB for the ring. Fewer, larger tufts (e.g. 1 in 4 at 2x size) keep the coverage
+  for fewer triangles.
+- Cutouts run the anyhit alpha test without OMMs, on every ray type including shadows.
+
+Statistical darkening, how it would be computed:
+1. Coverage per (biome, ground block): summed weight of the `Decorator` entries that can stand on that
+   block over the total weight including the `AIR` entry (e.g. grassland on grass blocks 14/29, about
+   48%; desert on sand 13/73, about 18%). That is the expected value of the chunk decorator pass on flat
+   open ground.
+2. Per decorator, at texture load: mean color of its opaque texels (times the biome tint for tinted
+   plants) and its opaque fraction. Mix entries by weight into one plant color per (biome, ground block).
+3. Blend factor = coverage x opaque fraction x a viewing factor (tunable, about 0.6-0.8: LOD terrain is
+   always seen at grazing angles, where X-shaped plants hide most of the ground). New albedo =
+   mix(ground, plant, blend) x (1 - shadow strength x coverage) for the shadows between tufts.
+4. Since the shader multiplies the top texture by the vertex tint, bake that as a per-(biome, block)
+   color multiplier into `PackedLodTerrainVertex::packedTint` at meshing. Untinted tops (sand) need a
+   face flag to apply the multiplier anyway.
+5. Optional: sample the drift-patch noise at each vertex so flower patches show as color patches.
+6. Calibrate the viewing factor and shadow strength against full-res chunks at the seam, by eye or by
+   comparing average screen color.
+Costs nothing per frame, no geometry, can't flicker; can't show individual tufts.
+
+Rejected:
+- DXR instancing: instancing exists only at the TLAS level, so each tuft would be a TLAS instance.
+  Hundreds of thousands to a million instances against today's ~10,000 (about 64 B each plus nodes,
+  100-150 MB, plus TLAS updates and deeper traversal), and tiny BLASes are the worst case for RT hardware
+  (each instance entry transforms the ray and starts a new BLAS walk, for every ray type). Shared
+  multi-tuft patches don't work on uneven terrain. NVIDIA's partitioned TLAS / cluster templates (RTX
+  Mega Geometry) are built for this scale but are a large new dependency.
+- Procedural intersection shader (an AABB over a thin layer above each tile, marching cells and
+  intersecting hashed X-shaped quads): cheap to store, but intersection shaders are the slowest RT path,
+  grazing rays march many cells, shadow rays must run it or skip it (the fog's occlusion query skips
+  procedural primitives; skipping loses the tufts' shadows), hashed placement can't match the chunks'
+  sequential decorator RNG at the seam, it needs its own hit group, and sub-3-pixel tufts still alias.
+  It suits volumetric near-field effects (grass shells, fur), not LOD distances.
 
 ### 3. Voxel mode regolding
 
@@ -102,6 +138,9 @@ Not yet checked with LODs on. Things to verify:
 - Water fade: the distance fade of the water's shading detail in `water_waves.hlsli` has a TODO; the
   user isn't fully happy with it.
 - Dawn/dusk fog boost: optional extra fog strength around sunrise and sunset on top of the constant fog.
+- Grass side faces on LOD tiles: use dirt instead of the grass side texture, whose thin green strip
+  along the top edge aliases at LOD distances. Applies to voxel tile sides and heightfield cliff sides
+  that show a top block's side.
 
 ### 6. Possible further speedups
 
