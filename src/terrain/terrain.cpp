@@ -200,7 +200,7 @@ void init(Scene* scene)
     Terrain::automatedRun = SettingsManager::isAutomatedRun();
     Terrain::evictingRegions = SettingsManager::getAsBool("evictRegions");
     Terrain::validatingEviction = SettingsManager::getAsBool("validateEviction");
-    Terrain::lodsEnabled = !Terrain::automatedRun && SettingsManager::getAsInt("lodDistance") > 0;
+    Terrain::lodsEnabled = SettingsManager::getAsInt("lodDistance") > 0;
 
     // Blocks::init() assigns the texture array slice indices that TerrainMaterials::init()
     // loads textures for
@@ -1414,7 +1414,7 @@ bool pollAutomatedRunTerrain()
                 }
             }
         }
-        return true;
+        return !lodsEnabled || TerrainLod::isSettled();
     }
     const uint32_t enqueued = importedChunksEnqueuedForBlas.load(std::memory_order_relaxed);
     const uint32_t expected = expectedImportedChunks.load(std::memory_order_relaxed);

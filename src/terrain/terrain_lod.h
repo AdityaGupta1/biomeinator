@@ -30,6 +30,9 @@ void update(glm::ivec2 cameraChunkPos,
             ToFreeList& toFreeList,
             std::vector<Task>& outTasks);
 
+// Whether the last update showed every tile and chunk the camera wants, with nothing left to generate
+bool isSettled();
+
 // No generation task may be queued or running
 void reset(ToFreeList& toFreeList);
 

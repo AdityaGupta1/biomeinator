@@ -17,7 +17,8 @@ Design and gotchas of what exists are in `knowledge/terrain/terrain_lod.md`; rea
   ambient strength 0.7).
 
 Done in this round: seam cracks at the voxel ring, constant fog, coarse tiles popping in near the player,
-snow layers and block shapes in voxel tiles, and ring generation speed (see `knowledge/terrain/terrain_lod.md`).
+snow layers and block shapes in voxel tiles, ring generation speed, the sea ice outline and grass sides
+on LOD tiles (see `knowledge/terrain/terrain_lod.md`).
 
 ## Remaining work
 
@@ -26,7 +27,7 @@ snow layers and block shapes in voxel tiles, and ring generation speed (see `kno
 2. Decorators in LOD tiles (deferred)
 3. Voxel mode regolding
 4. World import/export with LODs
-5. Smaller items: water seam, sea ice outline, Tianzi spikes, water fade, dawn/dusk fog boost
+5. Smaller items: water seam, Tianzi spikes, water fade, dawn/dusk fog boost
 6. Possible further speedups
 
 ### 1. Distance fog to a neutral color
@@ -103,9 +104,9 @@ Rejected:
 The voxel goldens need regolding as a whole:
 - Fog is now on all day, and goldens include fog (e.g. `grass_biome_blend` fails at 0.0145 against 0.01
   from fog alone).
-- LODs are off in automated runs today (`Terrain::lodsEnabled` checks `automatedRun`), so goldens don't see
-  them yet. Once tests run with LODs, nearly every voxel scene changes: distant terrain, the ring, and
-  fog and shadows reaching past the chunk distance. Decide whether goldens run with LODs on (likely, so
+- Automated runs default `--lodDistance` to 0, so goldens don't see LODs yet. Once tests run with LODs,
+  nearly every voxel scene changes: distant terrain, the ring, and fog and shadows reaching past the
+  chunk distance. Decide whether goldens run with LODs on (likely, so
   they cover them), then regold all voxel tests in one pass, after the LOD look settles, rather than per
   change.
 
@@ -126,17 +127,12 @@ Not yet checked with LODs on. Things to verify:
 
 - Water seam: a thin bright line across open water near the camera, seen right after loading (a lake
   next to snowy shore). Possibly at a chunk/tile boundary in the water surface. Not yet investigated.
-- Sea ice outline: sea ice in heightfield tiles still shows a dark outline along shores after the
-  any-corner water rule. Not yet diagnosed.
 - Tianzi spikes: heightfield tiles can't represent vertical walls, so Tianzi pillars come out spiky. A
   3D density isosurface (surface nets / dual contouring on the generator's density lattice) was
   discussed as the far representation that fixes this; deferred.
 - Water fade: the distance fade of the water's shading detail in `water_waves.hlsli` has a TODO; the
   user isn't fully happy with it.
 - Dawn/dusk fog boost: optional extra fog strength around sunrise and sunset on top of the constant fog.
-- Grass side faces on LOD tiles: use dirt instead of the grass side texture, whose thin green strip
-  along the top edge aliases at LOD distances. Applies to voxel tile sides and heightfield cliff sides
-  that show a top block's side.
 
 ### 6. Possible further speedups
 

@@ -1,4 +1,4 @@
-_Last edited: 2026-10-03_
+_Last edited: 2026-10-04_
 
 # Settings Manager
 
@@ -50,9 +50,10 @@ All settings and their defaults are defined in `parseArgs()` and are self-descri
 - **Generated-world camera arguments** (`cameraX/Y/Z`, `cameraYaw/Pitch`) make procedural
   terrain screenshots reproducible without exporting a world. Angles use degrees, yaw zero
   points along +Z, and positive pitch looks up. They only initialize voxel mode; an imported
-  world's saved camera still takes precedence, and glTF cameras are unaffected.
+  world's saved camera still takes precedence, and glTF cameras are unaffected. `fovY` sets the
+  field of view, for reproducing a capture taken with zoom held.
 - **`perfOutput`**: If set to a `.json` path, the engine warms up, measures `perfFrames` frames, writes GPU timing statistics, and exits. Mutually exclusive with `renderToFile`. See [tests → perf_runs.md](../tests/perf_runs.md).
-- **`isAutomatedRun()`** is true for either of the above and is what code should test for "automated run" behaviour (await voxel import); `isRenderToFileMode()` and `isPerfMode()` are for the behaviour specific to each, such as the render-to-file window staying hidden while a perf run's comes to the foreground. An automated run also defaults `lockCamera`, `showGui`, `animTimePaused` and `useVsync` to a fixed, unanimated, unthrottled viewpoint, and `sharc` off (see [rendering → sharc.md](../rendering/sharc.md)), but only when they were not passed explicitly. This is the single place those defaults live; the rendering test runner and `run_perf.py` pass only their output path.
+- **`isAutomatedRun()`** is true for either of the above and is what code should test for "automated run" behaviour (await voxel import); `isRenderToFileMode()` and `isPerfMode()` are for the behaviour specific to each, such as the render-to-file window staying hidden while a perf run's comes to the foreground. An automated run also defaults `lockCamera`, `showGui`, `animTimePaused` and `useVsync` to a fixed, unanimated, unthrottled viewpoint, `sharc` off (see [rendering → sharc.md](../rendering/sharc.md)) and `lodDistance` to 0 (no terrain LODs), but only when they were not passed explicitly. This is the single place those defaults live; the rendering test runner and `run_perf.py` pass only their output path.
 - **`forEachSetting`** exists so a perf report can embed every setting it ran with; there is no other reason to enumerate the map.
 - **`lockCamera`**: Disables player input; useful for test screenshots to get a reproducible viewpoint.
 - **`animTimePaused`** (default `false`): Freezes only the animation time driving world animation

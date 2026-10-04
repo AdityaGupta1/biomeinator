@@ -90,6 +90,8 @@ struct BlockData
     // Color comes from a world-space ramp rather than the block's texture (see getProceduralColor)
     bool proceduralColor{ false };
     bool randomJitter{ false };
+    // LOD tiles show the bottom texture on sides, whose strip of the top texture aliases at a distance
+    bool lodSideShowsBottom{ false };
     BlockStateKind stateKind{ BlockStateKind::NONE };
     uint32_t modelIdx{ ~0u };
     std::array<uint8_t, 4> rotationY{ 0, 0, 0, 0 }; // quarter turns

@@ -228,9 +228,9 @@ static void addBoxFace(HostGeometry& geometry,
 static PerFaceData blockFaceData(Block block, BlockFace face, uint32_t extraFlags = 0)
 {
     const BlockData& blockData = Blocks::getBlockData(block);
-    const int faceIdx = static_cast<int>(blockFaceIndex(face));
-    const uint32_t texSliceIdx = blockData.texSlices[std::max(faceIdx - 3, 0)];
-    const bool isSide = faceIdx < blockFaceIndex(BlockFace::Y_POS);
+    const bool isSide = blockFaceIndex(face) < blockFaceIndex(BlockFace::Y_POS);
+    const BlockFace textureFace = isSide && blockData.lodSideShowsBottom ? BlockFace::Y_NEG : face;
+    const uint32_t texSliceIdx = blockData.texSlices[std::max(static_cast<int>(blockFaceIndex(textureFace)) - 3, 0)];
     return TerrainMaterials::makeBlockFaceData(blockData, texSliceIdx,
                                                extraFlags | (isSide ? FACE_FLAG_SIDE_PROJECTION : 0u));
 }
@@ -312,8 +312,46 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
         return static_cast<uint32_t>(cornerPos.x + numCornersXZ * cornerPos.y);
     };
 
+    // A cell holds water, or the ice slab over it, wherever any of its corners is underwater, so the surface
+    // reaches the shore and covers the part of the cell's slope below the waterline. Terrain above the water
+    // level shows through it. Returns null for a dry cell.
+    const auto cellWaterColumn = [&](ivec2 cellPos) -> const ChunkGenerator::LodColumn*
+    {
+        for (const ivec2 cornerOffset : { ivec2(0, 0), ivec2(1, 0), ivec2(0, 1), ivec2(1, 1) })
+        {
+            const ChunkGenerator::LodColumn& column = columnAt(cellPos + cornerOffset);
+            if (column.topBlockY < column.waterLevel)
+            {
+                return &column;
+            }
+        }
+        return nullptr;
+    };
+    // Ice slabs sit half a block below their block's top, as the terrain surface does: dry terrain never
+    // dips below that, so no gap opens under a slab's edge on the shore side, where it has no side face
+    constexpr float iceSlabHeight = 0.5f;
+    const float waterTopHeight = blockShapeTopHeight(Blocks::getBlockData(Block::WATER_TOP).shape);
+    // Where the water or ice over a cell's water column sits
+    const auto waterSurfaceY = [&](const ChunkGenerator::LodColumn& waterColumn)
+    {
+        return static_cast<float>(waterColumn.waterLevel) +
+               (waterColumn.waterTopBlock == Block::WATER_TOP ? waterTopHeight : iceSlabHeight);
+    };
+
+    const auto cellGradient = [&](float h00, float h10, float h01, float h11)
+    {
+        return vec2((h10 - h00) + (h11 - h01), (h01 - h00) + (h11 - h10)) / (2.f * cellSizeF);
+    };
+    const auto isSteepGradient = [&](vec2 gradient)
+    {
+        return dot(gradient, gradient) >= maxTopGradient * maxTopGradient;
+    };
+
     // What a cell shows: its top block where the slope is gentle enough for block terrain to show mostly
-    // tops, otherwise the side of its top block where the slope stays within the topsoil, else rock
+    // tops, otherwise the side of its top block where the slope stays within the topsoil, else rock. A cell
+    // holding water is judged by its highest corner and the slope above the water, which is all that shows:
+    // judged down to the lakebed, every shore cell was rock, which outlined lakes and ice where it rose above
+    // them.
     PerFaceData* cellFaceDatas = threadMemoryAlloc.request<PerFaceData>(numCells * numCells);
     for (int z = 0; z < numCells; ++z)
     {
@@ -324,14 +362,32 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
             const float h10 = heightAt(cellPos + ivec2(1, 0));
             const float h01 = heightAt(cellPos + ivec2(0, 1));
             const float h11 = heightAt(cellPos + ivec2(1, 1));
-            const vec2 gradient = vec2((h10 - h00) + (h11 - h01), (h01 - h00) + (h11 - h10)) / (2.f * cellSizeF);
-            const float minHeight = std::min({ h00, h10, h01, h11 });
-            const float maxHeight = std::max({ h00, h10, h01, h11 });
-            const ChunkGenerator::LodColumn& column = columnAt(cellPos);
+            const vec2 gradient = cellGradient(h00, h10, h01, h11);
+            const bool isSteep = isSteepGradient(gradient);
+
+            const ChunkGenerator::LodColumn* const waterColumn = cellWaterColumn(cellPos);
+            const float visibleFromY = waterColumn != nullptr ? waterSurfaceY(*waterColumn) : 0.f;
+            const float v00 = std::max(h00, visibleFromY);
+            const float v10 = std::max(h10, visibleFromY);
+            const float v01 = std::max(h01, visibleFromY);
+            const float v11 = std::max(h11, visibleFromY);
+            const float minHeight = std::min({ v00, v10, v01, v11 });
+            const float maxHeight = std::max({ v00, v10, v01, v11 });
+            ivec2 shownCornerPos = cellPos;
+            if (waterColumn != nullptr)
+            {
+                for (const ivec2 cornerOffset : { ivec2(1, 0), ivec2(0, 1), ivec2(1, 1) })
+                {
+                    if (heightAt(cellPos + cornerOffset) > heightAt(shownCornerPos))
+                    {
+                        shownCornerPos = cellPos + cornerOffset;
+                    }
+                }
+            }
+            const ChunkGenerator::LodColumn& column = columnAt(shownCornerPos);
 
             PerFaceData& faceData = cellFaceDatas[x + numCells * z];
-            const bool isSteep = dot(gradient, gradient) >= maxTopGradient * maxTopGradient;
-            if (!isSteep)
+            if (!isSteepGradient(cellGradient(v00, v10, v01, v11)))
             {
                 faceData = blockFaceData(column.topBlock, BlockFace::Y_POS);
             }
@@ -341,7 +397,7 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
             }
             else
             {
-                faceData = blockFaceData(rockStrata.atHeight(sampleIdxAt(cellPos), 0.5f * (minHeight + maxHeight)),
+                faceData = blockFaceData(rockStrata.atHeight(sampleIdxAt(shownCornerPos), 0.5f * (minHeight + maxHeight)),
                                          BlockFace::X_POS);
             }
 
@@ -415,24 +471,8 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
         }
     }
 
-    const float waterTopHeight = blockShapeTopHeight(Blocks::getBlockData(Block::WATER_TOP).shape);
     const PerFaceData waterFaceData =
         blockFaceData(Block::WATER_TOP, BlockFace::Y_POS, FACE_FLAG_IS_WATER | FACE_FLAG_IS_WATER_TOP);
-    // A cell holds water, or the ice slab over it, wherever any of its corners is underwater, so the surface
-    // reaches the shore and covers the part of the cell's slope below the waterline. Terrain above the water
-    // level shows through it. Returns null for a dry cell.
-    const auto cellWaterColumn = [&](ivec2 cellPos) -> const ChunkGenerator::LodColumn*
-    {
-        for (const ivec2 cornerOffset : { ivec2(0, 0), ivec2(1, 0), ivec2(0, 1), ivec2(1, 1) })
-        {
-            const ChunkGenerator::LodColumn& column = columnAt(cellPos + cornerOffset);
-            if (column.topBlockY < column.waterLevel)
-            {
-                return &column;
-            }
-        }
-        return nullptr;
-    };
     const auto isLiquid = [&](ivec2 cellPos)
     {
         const ChunkGenerator::LodColumn* column = cellWaterColumn(cellPos);
@@ -464,7 +504,7 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
             }
             else
             {
-                const vec3 slabOffset(0.f, 1.f, 0.f);
+                const vec3 slabOffset(0.f, iceSlabHeight, 0.f);
                 addBoxFace(terrainGeometry, BlockFace::Y_POS, runMin + slabOffset, runMax + slabOffset,
                         blockFaceData(column.waterTopBlock, BlockFace::Y_POS), cornerTint);
             }
@@ -491,7 +531,7 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
                     continue;
                 }
                 addBoxFace(terrainGeometry, face, vec3(x * cellSizeF, slabBottomY, z * cellSizeF),
-                        vec3((x + 1) * cellSizeF, slabBottomY + 1.f, (z + 1) * cellSizeF),
+                        vec3((x + 1) * cellSizeF, slabBottomY + iceSlabHeight, (z + 1) * cellSizeF),
                         blockFaceData(Block::ICE, face), cornerTint);
             }
         }
@@ -721,6 +761,9 @@ static std::vector<ivec2> displayedChunkPositions;
 // What the previous update showed, to hide whatever it no longer does
 static std::vector<LodTile*> prevDisplayedTiles;
 static std::vector<ivec2> prevDisplayedChunkPositions;
+// Whether a tile stood in for children the camera wants this update
+static bool hasStandIns{ false };
+static bool isSettledNow{ false };
 
 // Tiles at or below this level lie within a single region, which the walk finds once for all of them
 inline constexpr int regionTileLevel = std::countr_zero(regionSideLength);
@@ -956,6 +999,7 @@ static void displayNeededTile(LodTile& tile, const UpdateContext& ctx)
 {
     tile.lastVisitedFrame = frame;
     const bool showChildren = tile.childrenRenderable && (tile.subdivides || !tile.isReady());
+    hasStandIns |= tile.subdivides && !tile.childrenRenderable;
     if (!showChildren)
     {
         if (tile.isReady())
@@ -1227,15 +1271,22 @@ void update(ivec2 cameraChunkPos,
         }
     }
 
+    hasStandIns = false;
     for (LodTile* root : roots)
     {
         displayNeededTile(*root, ctx);
     }
     applyDisplayed(ctx);
     removeUnneededTiles(toFreeList);
+    isSettledNow = !hasStandIns && generationCandidates.empty() && numGeneratingTiles == 0;
     startGeneratingTiles(toFreeList, outTasks);
     // Voxel tiles reach out to the voxel distance plus a tile, each reading the ring of chunks around it
     SurfaceChunkCache::update(cameraChunkPos, voxelDistance + (1 << maxVoxelTileLevel) + 1, outTasks);
+}
+
+bool isSettled()
+{
+    return isSettledNow;
 }
 
 void reset(ToFreeList& toFreeList)
@@ -1252,6 +1303,7 @@ void reset(ToFreeList& toFreeList)
     prevDisplayedTiles.clear();
     prevDisplayedChunkPositions.clear();
     numGeneratingTiles = 0;
+    isSettledNow = false;
     SurfaceChunkCache::reset();
 }
 

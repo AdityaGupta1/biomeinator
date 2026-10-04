@@ -80,6 +80,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
     ADD_OPTION("cameraZ", "Generated voxel-world camera Z", float, "0");
     ADD_OPTION("cameraYaw", "Generated voxel-world camera yaw in degrees (0=+Z)", float, "180");
     ADD_OPTION("cameraPitch", "Generated voxel-world camera pitch in degrees (positive=up)", float, "0");
+    ADD_OPTION("fovY", "Vertical field of view in degrees (zoom narrows it to 0.3 times)", float, "35");
     ADD_OPTION("movementSpeed", "Movement speed", float, "12");
     ADD_OPTION("animTimePaused", "Pause world animation (e.g. water waves, sun position)", bool, "false");
     ADD_OPTION("animTime", "Initial world animation time in seconds (0 = sunrise)", float, "150");
@@ -127,7 +128,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
     ADD_OPTION("renderDistance", "Render distance in chunks (must be positive)", int, "30");
     ADD_OPTION("lodDistance",
                "Distance in chunks out to which distant terrain is shown as LODs "
-               "(0 disables them; never shown in automated runs)",
+               "(0 disables them; 0 by default in automated runs)",
                int,
                "512");
     ADD_OPTION("lodVoxelDistanceScale",
@@ -245,6 +246,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         COPY_SETTING("cameraZ", float);
         COPY_SETTING("cameraYaw", float);
         COPY_SETTING("cameraPitch", float);
+        COPY_SETTING("fovY", float);
         COPY_SETTING("movementSpeed", float);
         COPY_SETTING("animTimePaused", bool);
         COPY_SETTING("animTime", float);
@@ -365,7 +367,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
     const bool isParsedAutomatedRun = !getString("renderToFile").empty() || !getString("perfOutput").empty();
     if (isParsedAutomatedRun)
     {
-        const auto defaultTo = [&parseResult, &parsedSettings](const char* name, const bool value)
+        const auto defaultTo = [&parseResult, &parsedSettings](const char* name, const SettingValue& value)
         {
             if (parseResult.count(name) == 0)
             {
@@ -377,6 +379,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         defaultTo("showGui", false);
         defaultTo("animTimePaused", true);
         defaultTo("useVsync", false);
+        defaultTo("lodDistance", 0); // Goldens and perf baselines are without LODs.
     }
 
     worldSeed = getUint("worldSeed");

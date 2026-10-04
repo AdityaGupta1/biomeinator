@@ -3,8 +3,8 @@ _Last edited: 2026-10-04_
 # Terrain LODs
 
 `src/terrain/terrain_lod.h/cpp` shows terrain out to `--lodDistance` chunks as smooth heightfield tiles, and
-`ChunkGenerator::sampleLodColumns` samples their columns. LODs are off in automated runs, so goldens never
-see them.
+`ChunkGenerator::sampleLodColumns` samples their columns. Automated runs default `--lodDistance` to 0, so goldens
+and perf baselines don't see them unless it is passed.
 
 ## Data comes from the noise, not from chunks
 
@@ -183,8 +183,17 @@ geometry is freed, except within `keepGeometryMarginChunks` of the edge (see abo
 - LOD water is a static top surface with no walls, covering every cell with any corner underwater so it
   reaches the shore; terrain above the water level shows through it. A cell taking water only from its
   own sample left the slope below the waterline uncovered along every shore, which showed as a dark
-  outline around ice. Sea ice is a one-block slab over the cell's floor, with edges only over open water;
-  drawing it as a column down to the floor showed through the clear water beside it as ice pillars.
+  outline around ice. Sea ice is a half-block slab over the cell's floor, with edges only over open water;
+  drawing it as a column down to the floor showed through the clear water beside it as ice pillars. Half a
+  block, as the terrain surface sits, because dry terrain never dips below that, so the shore side of a
+  slab, which has no face, never opens a gap under it.
+- A cell holding water picks its material from its highest corner and the slope above the water. Judged
+  down to the lakebed, every shore cell was steep and deep, so the shore above the water showed as rock,
+  outlining lakes and ice.
+- Blocks with `lodSideShowsBottom` (grass and similar) show their bottom texture on LOD side faces: the
+  side texture's strip of the top aliased into stripes on distant slopes.
+- Automated runs wait for `TerrainLod::isSettled` too, so `--renderToFile` with `--lodDistance` captures
+  the finished LODs. `--fovY` reproduces a capture taken with zoom held (0.3 times the default 35).
 - With LODs on, the voxel bounds that water absorption and fog use for rays that miss everything cover
   the root tiles, not just the render distance. Underwater surfaces in LOD tiles otherwise got no
   absorption on their sky light, which showed as a line in the water at the render distance.

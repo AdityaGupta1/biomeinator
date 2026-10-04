@@ -3,5 +3,6 @@
         "top": "yuushya/podzol_top",
         "side": "yuushya/podzol_side",
         "bottom": "dirt"
-    }
+    },
+    "lodSideShowsBottom": true
 }

@@ -43,8 +43,6 @@ using WindowManager::hwnd;
 namespace Renderer
 {
 
-static constexpr float defaultFovYDegrees = 35;
-
 static constexpr float timeScrubSpeed = 50.f; // anim time multiplier while a bracket key is held
 
 void init()
@@ -89,7 +87,7 @@ void init()
     CpuProfiler::init(SettingsManager::isPerfMode());
     perfRunInit();
 
-    renderState.camera.init(XMConvertToRadians(defaultFovYDegrees));
+    renderState.camera.init(XMConvertToRadians(SettingsManager::getAsFloat("fovY")));
 
     AcsHelper::init();
 
