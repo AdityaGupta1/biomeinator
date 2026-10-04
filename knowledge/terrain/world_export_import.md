@@ -1,4 +1,4 @@
-_Last edited: 2026-10-02_
+_Last edited: 2026-10-03_
 
 # World Export / Import
 
@@ -101,9 +101,9 @@ The mask side effects (`readyStructureNeighborsMask`, `neighborsWithBlocksMask`)
 
 `ChunkGenerator` caches `worldSeed` and the RNG-derived `noiseOffsetXZ` at init time. The first `Terrain::init` runs with whatever seed was active at startup; `importWorld` then calls `setWorldSeed` and must re-init `ChunkGenerator` before any boundary chunk runs fresh-gen. Without this, regenerated boundary chunks use the wrong noise offset and produce visible seams against imported chunks.
 
-## `pollHeadlessTerrain()` is a headless-only gate
+## `pollAutomatedRunTerrain()` is an automated-run-only gate
 
-The interactive import path does not need to know when import finishes — frames render unconditionally. Headless runs, however, must wait for all imported chunks within `createBlasDistance` to have BLASes before the rendering test screenshot or the perf warmup starts, otherwise BLAS-build churn keeps resetting accumulation and the golden image is non-deterministic.
+The interactive import path does not need to know when import finishes — frames render unconditionally. Automated runs, however, must wait for all imported chunks within `createBlasDistance` to have BLASes before the rendering test screenshot or the perf warmup starts, otherwise BLAS-build churn keeps resetting accumulation and the golden image is non-deterministic.
 
 For fresh procedural worlds, the same gate waits until the entire geometry ring has reached
 `HAS_GEOMETRY`. This prevents fast empty frames from exhausting screenshot accumulation before
@@ -128,11 +128,11 @@ visibility before the renderer polls completion. Resetting terrain clears the ba
 
 ### Why the gate is one frame early
 
-The counter ticks on **enqueue** to the BLAS-create queue, not on GPU-side BLAS-build completion. So `pollHeadlessTerrain()` returns true one frame before BLASes actually exist on the GPU. Acceptable: the renderer's `didSceneChange` reset still fires for any chunk geometry change, so the worst case is a loud golden mismatch rather than a silent stale read.
+The counter ticks on **enqueue** to the BLAS-create queue, not on GPU-side BLAS-build completion. So `pollAutomatedRunTerrain()` returns true one frame before BLASes actually exist on the GPU. Acceptable: the renderer's `didSceneChange` reset still fires for any chunk geometry change, so the worst case is a loud golden mismatch rather than a silent stale read.
 
 ### Cost containment
 
-All counter mutation in `addChunkWithNewGeometry` is wrapped in `if (headless && worldImportActive.load(...))` so the interactive path stays at zero extra atomic ops. `headless` is cached at `Terrain::init` from `SettingsManager::isHeadless()` (rendering tests and perf runs both await the import), mirroring how `renderer.cpp` caches its `headless`/`voxelMode` flags. Workers see the cached value via the happens-before edge from `threadPool.init()` in `Terrain::init()`.
+All counter mutation in `addChunkWithNewGeometry` is wrapped in `if (automatedRun && worldImportActive.load(...))` so the interactive path stays at zero extra atomic ops. `automatedRun` is cached at `Terrain::init` from `SettingsManager::isAutomatedRun()` (rendering tests and perf runs both await the import), mirroring how `renderer.cpp` caches its `automatedRun`/`voxelMode` flags. Workers see the cached value via the happens-before edge from `threadPool.init()` in `Terrain::init()`.
 
 ## Structure count bound
 

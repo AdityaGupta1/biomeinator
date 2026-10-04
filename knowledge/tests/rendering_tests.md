@@ -1,10 +1,10 @@
-_Last edited: 2026-09-30_
+_Last edited: 2026-10-03_
 
 # Rendering Tests
 
 `BiomeinatorRenderingTests.exe` (`src/tests/main.cpp`) reads `tests/tests.json`, launches
-`Biomeinator.exe` once per entry with the entry's args plus `--renderingTestOutput=<path>`
-(camera locked, GUI hidden, animation paused), and compares the screenshot against its reference image with
+`Biomeinator.exe` once per entry with the entry's args plus `--renderToFile=<path>`
+(window never shown, camera locked, GUI hidden, animation paused), and compares the screenshot against its reference image with
 RMSE over 8-bit RGB normalised to [0, 1]. `-f <regex>` filters by test name, while
 `--test <name>` selects exactly one entry and fails rather than silently succeeding if the name
 does not exist. Every run writes
@@ -50,7 +50,7 @@ ctest --test-dir build -C RelWithDebInfo -L rendering --output-on-failure
 
 A test entry has a `scene` (glTF), a `world` (saved export), or neither: a procedurally generated
 voxel world configured entirely by its args (`--voxelMode`, `--worldSeed`, `--renderDistance`,
-`--cameraX/Y/Z`, `--cameraYaw/Pitch` in degrees, as a world export stores its camera). Headless
+`--cameraX/Y/Z`, `--cameraYaw/Pitch` in degrees, as a world export stores its camera). Automated
 capture waits for the complete geometry ring before accumulating. Use procedural entries for
 features that should track current generation, like `grass_biome_blend`'s real biome edge: an
 imported world keeps its saved blocks but still takes grass tint from the current biome noise,

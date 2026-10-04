@@ -45,7 +45,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
     ADD_OPTION("sharcDebug", "SHARC view: 0 beauty, 1 hits, 2 bounces, 3 grid, 4 cached radiance", uint32_t, "0");
     ADD_OPTION("maxPathDepth", "Maximum path depth", uint32_t, "12");
     ADD_OPTION("scene", "Scene file (*.gltf; *.glb)", std::string, "");
-    ADD_OPTION("renderingTestOutput", "Rendering test screenshot output path (*.png)", std::string, "");
+    ADD_OPTION("renderToFile", "Render one image to this path (*.png) in a hidden window, then exit", std::string, "");
     ADD_OPTION("perfOutput", "Performance measurement output path (*.json)", std::string, "");
     ADD_OPTION("perfWarmupFrames", "Perf run: minimum frames before measuring starts", uint32_t, "100");
     ADD_OPTION("perfWarmupSeconds", "Perf run: minimum seconds before measuring starts", float, "2");
@@ -158,12 +158,12 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         return { ParseArgsStatus::Help, options.help() };
     }
 
-    if (parseResult.contains("renderingTestOutput"))
+    if (parseResult.contains("renderToFile"))
     {
-        const std::string& renderingTestOutputPath = parseResult["renderingTestOutput"].as<std::string>();
-        if (!renderingTestOutputPath.ends_with(".png"))
+        const std::string& renderToFilePath = parseResult["renderToFile"].as<std::string>();
+        if (!renderToFilePath.ends_with(".png"))
         {
-            return { ParseArgsStatus::Error, "--renderingTestOutput must be a .png" };
+            return { ParseArgsStatus::Error, "--renderToFile must be a .png" };
         }
     }
 
@@ -174,9 +174,9 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         {
             return { ParseArgsStatus::Error, "--perfOutput must be a .json" };
         }
-        if (parseResult.contains("renderingTestOutput"))
+        if (parseResult.contains("renderToFile"))
         {
-            return { ParseArgsStatus::Error, "--perfOutput and --renderingTestOutput are mutually exclusive" };
+            return { ParseArgsStatus::Error, "--perfOutput and --renderToFile are mutually exclusive" };
         }
     }
 
@@ -200,7 +200,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         COPY_SETTING("sharcDebug", uint32_t);
         COPY_SETTING("maxPathDepth", uint32_t);
         COPY_SETTING("scene", std::string);
-        COPY_SETTING("renderingTestOutput", std::string);
+        COPY_SETTING("renderToFile", std::string);
         COPY_SETTING("perfOutput", std::string);
         COPY_SETTING("perfWarmupFrames", uint32_t);
         COPY_SETTING("perfWarmupSeconds", float);
@@ -333,11 +333,11 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         parsedSettings["antialiasingMode"] = static_cast<uint32_t>(AntialiasingMode::DLSS);
     }
 
-    // A headless run renders a fixed, unanimated viewpoint with no frame-rate cap, so rendering test
+    // An automated run renders a fixed, unanimated viewpoint with no frame-rate cap, so render-to-file
     // screenshots are reproducible and perf measurements are not throttled; each of these can
     // still be overridden explicitly
-    const bool isParsedHeadless = !getString("renderingTestOutput").empty() || !getString("perfOutput").empty();
-    if (isParsedHeadless)
+    const bool isParsedAutomatedRun = !getString("renderToFile").empty() || !getString("perfOutput").empty();
+    if (isParsedAutomatedRun)
     {
         const auto defaultTo = [&parseResult, &parsedSettings](const char* name, const bool value)
         {
@@ -346,7 +346,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
                 parsedSettings[name] = value;
             }
         };
-        defaultTo("sharc", false); // Existing goldens and perf baselines remain uncached.
+        defaultTo("sharc", false); // Unbiased reference output; goldens and perf baselines are uncached.
         defaultTo("lockCamera", true);
         defaultTo("showGui", false);
         defaultTo("animTimePaused", true);
@@ -445,9 +445,9 @@ void setWorldSeed(uint32_t value)
     settings["worldSeed"] = value;
 }
 
-bool isRenderingTestMode()
+bool isRenderToFileMode()
 {
-    return !getAsString("renderingTestOutput").empty();
+    return !getAsString("renderToFile").empty();
 }
 
 bool isPerfMode()
@@ -455,9 +455,9 @@ bool isPerfMode()
     return !getAsString("perfOutput").empty();
 }
 
-bool isHeadless()
+bool isAutomatedRun()
 {
-    return isRenderingTestMode() || isPerfMode();
+    return isRenderToFileMode() || isPerfMode();
 }
 
 } // namespace SettingsManager

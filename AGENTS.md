@@ -27,3 +27,15 @@ non-obvious. Do not restate what is already clear from reading the source.
 - Call out gotchas, invariants, and ordering dependencies that would surprise a
   reader or cause bugs if violated.
 - Describe the *role* of a group of things, not each member individually.
+
+## Rendering images
+
+When launching `Biomeinator.exe` yourself, use `--renderToFile=<path>.png`
+unless the task needs a visible window (work on the window or input handling,
+perf runs, or the user asking to watch). It renders in a window that is never
+shown, saves the image and exits, so nothing pops up on the user's screen and
+the user cannot disturb the run by clicking or typing into it. Its defaults
+(locked camera, hidden GUI, paused animation, SHaRC off) are described in
+[settings → settings_manager.md](knowledge/settings/settings_manager.md); like
+rendering tests, it must run outside the agent sandbox (see
+[tests → rendering_tests.md](knowledge/tests/rendering_tests.md)).

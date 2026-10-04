@@ -1,4 +1,4 @@
-_Last edited: 2026-10-02_
+_Last edited: 2026-10-03_
 
 # Region System
 
@@ -80,7 +80,7 @@ The heap was not returning that memory to the OS anyway, so process memory is no
 
 `--validateEviction` records a hash of each generated chunk's final blocks and block states when
 its region is evicted, and compares it when the chunk next finishes its structure pass. Only
-mismatches are logged, as errors, one per chunk. A headless random walk at a small render distance
+mismatches are logged, as errors, one per chunk. An automated random walk at a small render distance
 (`--renderDistance=8 --perfMoveSpeed=200 --perfMoveTurnFrames=500 --perfFrames=8000`, seed 100)
 evicts around a hundred regions and revisits about 8,000 chunks.
 
