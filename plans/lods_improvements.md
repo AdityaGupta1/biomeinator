@@ -5,41 +5,30 @@ Design and gotchas of what exists are in `knowledge/terrain/terrain_lod.md`; rea
 
 ## Current state
 
-- Full-res chunks out to the BLAS distance (render distance + 1).
-- Voxel ring out to `--lodVoxelDistance` (default 64 chunks): level 0-2 tiles built from surface-only
-  chunks (`Chunk::generateSurfaceOnly`), downsampled 2x, meshed as boxes. Carries trees, structures,
-  pillars and overhangs past the chunk distance.
+- Full-res chunks out to the BLAS distance (render distance + 1). Chunks leaving it linger until the LOD
+  tiles covering them are ready.
+- Voxel ring out to `--lodVoxelDistance` (default 64 chunks): level 0-2 tiles meshed from
+  `SurfaceChunkCache`, which generates surface-only chunks a task per chunk, downsamples them into cells
+  that keep block shape heights, and caches cells and compact neighbor terrain. Carries trees,
+  structures, pillars and overhangs past the chunk distance.
 - Beyond: smooth heightfield tiles from noise samples (`ChunkGenerator::sampleLodColumns`), up to 128
   cells per side, flat-shaded where steep.
+- Fog is on all day with the user's tuned defaults (base sigma 0.0016, scale height 30, anisotropy 0.4,
+  ambient strength 0.7).
 
-Done so far in this round:
-- Seam cracks between full-res chunks and voxel tiles: voxel tiles cull their outer faces against the
-  real blocks beside them instead of the rounded-up margin cells.
-- Fog no longer fades with time of day; it is on all day with the user's tuned defaults (base sigma
-  0.0016, scale height 30, anisotropy 0.4, ambient strength 0.7). Goldens include fog, so they need
-  regolding.
+Done in this round: seam cracks at the voxel ring, constant fog, coarse tiles popping in near the player,
+snow layers and block shapes in voxel tiles, and ring generation speed (see `knowledge/terrain/terrain_lod.md`).
 
 ## Remaining work
 
-1. Coarse tiles popping in near the player (done; lingering chunks cost memory while moving fast)
-2. Distance fog that fades far terrain to a neutral color
-3. Decorator emulation
-4. Snow layers in voxel tiles (done)
-5. Per-chunk surface-only pipeline (ring generation speed)
-6. Smaller items: seam ledge, sea ice outline, Tianzi spikes, water fade, dawn/dusk fog boost
+1. Distance fog that fades far terrain to a neutral color
+2. Decorator emulation
+3. Voxel mode regolding
+4. World import/export with LODs
+5. Smaller items: seam ledge, water seam, sea ice outline, Tianzi spikes, water fade, dawn/dusk fog boost
+6. Possible further speedups
 
-### 1. Coarse tiles popping in near the player
-
-Done: the cause was chunks leaving the BLAS distance being freed before the voxel tiles replacing them
-were generated, so a level 4-6 ancestor reaching back to the camera stood in. Chunks now linger while
-LOD still shows them (`lingeringChunks` in `terrain.cpp`). A random walk at render distance 30 and 100
-blocks/s went from about 2,000 pops to 2 (small edge tiles).
-
-Cost: at that speed about 2,000 chunks linger behind the camera, about 1 GB more VRAM, because voxel tile
-generation can't keep up. Item 5 (faster ring generation) fixes that; a cheaper stopgap is generating
-the tiles that cover lingering chunks first.
-
-### 2. Distance fog to a neutral color
+### 1. Distance fog to a neutral color
 
 Goal: far terrain fades into a neutral blue-whitish color, perhaps shifting slightly with time of day, so
 distant LODs read as hazy silhouettes, while the existing ground fog and god rays stay as they are.
@@ -56,7 +45,7 @@ neutral color (blue-white, from a small set of settings or a gentle time-of-day 
 rather than one derived from the sky LUT. Fade by distance alone, with the fade start and strength as
 GUI settings so it can be tuned live.
 
-### 3. Decorator emulation
+### 2. Decorator emulation
 
 Symptom: dense grass/flower decorators on full-res chunks darken and texture the ground; surface-only
 chunks skip decorators and 2x downsampling would drop them anyway, so voxel tiles (and heightfields)
@@ -72,46 +61,31 @@ Proposal: emulate statistically rather than placing decorators.
 - Alternative considered: run the floor decorator pass in surface-only chunks (the cave decorator half
   is what needs skipped data). Not worth it: downsampling deletes them, and only their color matters.
 
-### 4. Snow layers in voxel tiles (done)
+### 3. Voxel mode regolding
 
-Done: cells keep block shapes as a fill height in eighths of a block from the cell's bottom (bottom-anchored
-shapes only; the user doesn't expect top slabs or stairs), with a body block for sides and the tallest
-column's top block on top. Snow layers are an eighth of a block thick. This also stopped surfaces rounding
-up to the next 2-block boundary.
+The voxel goldens need regolding as a whole:
+- Fog is now on all day, and goldens include fog (e.g. `grass_biome_blend` fails at 0.0145 against 0.01
+  from fog alone).
+- LODs are off in headless runs today (`Terrain::lodsEnabled` checks `headless`), so goldens don't see
+  them yet. Once tests run with LODs, nearly every voxel scene changes: distant terrain, the ring, and
+  fog and shadows reaching past the chunk distance. Decide whether goldens run with LODs on (likely, so
+  they cover them), then regold all voxel tests in one pass, after the LOD look settles, rather than per
+  change.
 
-### 5. Per-chunk surface-only pipeline
+### 4. World import/export with LODs
 
-Why the ring fills slowly: each voxel tile task generates its chunks plus a one-chunk margin serially
-(36 chunks for a level-2 tile's 16), and `maxGeneratingVoxelTiles` is 4, because each running tile
-holds about 11 MB of chunk block buffers that the chunk buffer pool keeps forever. Most workers sit
-idle, and margins are regenerated by every neighboring tile.
+Not yet checked with LODs on. Things to verify:
+- Imported regions are never evicted and may come from an older build that generates differently, while
+  LOD tiles (heightfield and surface-only) generate from the seed. Tiles beyond the imported area, and
+  surface-only chunks next to it, may not match the imported terrain at the seam.
+- Imported chunks get geometry through the normal pipeline; check that LOD tiles inside the imported
+  area hand over to them (atomic swaps, lingering chunks) and that nothing assumes generated chunks.
+- Reimport (`resetTerrainState`) resets `TerrainLod` and `SurfaceChunkCache`; check no task, pinned
+  cells or lingering chunk survives it.
+- Export writes completed regions only; make sure lingering chunks and LOD state don't leak into it.
+- Headless runs of imported worlds (goldens) once LODs are on there (see item 3).
 
-Options:
-- Quick: raise the cap toward the worker count. Costs about 11 MB of permanently pooled buffers per
-  extra concurrent tile, and each tile stays slow.
-- Proper: generate surface-only chunks as their own per-chunk tasks with shared results:
-  - Terrain per chunk once; structure pass per chunk once its 3x3 neighbors have terrain (the same
-    dependency as the region pipeline).
-  - Downsample each chunk once into compact cells (a band of 8x8xN cells, a few KB) and free its full
-    block buffers right away.
-  - Voxel tiles mesh from cached cells once all their chunks' cells exist; cells are evicted with the
-    ring.
-  This removes the duplicated margins and spreads the work across all workers. It needs dependency
-  tracking, either a small dedicated scheduler or a surface-only mode in the region pipeline (chunks
-  then switch mode by being discarded and regenerated when they come within the full-res distance).
-Measured (2026-10-03, seed 100, render distance 30, random walk at 40 blocks/s, 23 workers, temporary
-timers in the worker tasks; absolute numbers drift ~30% between runs with machine state):
-- Full chunk: generateTerrain 3.0 ms, structures and decorators 0.3, segments 0.5, createInstances 1.9.
-- Surface-only chunk: terrain 0.5 ms (6x cheaper), structures 0.07 ms.
-- Voxel tile, per tile: L0 7.2 ms, L1 17.3, L2 55.1; per covered chunk 7.2, 4.3, 3.4.
-- L2 breakdown: generating 36 chunks 20.0 ms (terrain 18.7, structures 1.2), height band scan 26.3,
-  downsample 4.9, mesh 3.9. The band scan walks every column down from the world top through
-  `blockAt`; it is 40-48% of L1 and L2 tiles and is pure overhead.
-- Useful work per chunk is about 1.1 ms (terrain 0.5, structures 0.07, downsample 0.3, mesh 0.25).
-- While moving, workers were 12% busy. Voxel tiles took 1.9 worker-seconds per second against the cap's
-  4; at 100 blocks/s demand exceeds the cap, which is what piles up lingering chunks.
-
-### 6. Smaller items
+### 5. Smaller items
 
 - Seam ledge: vertical rounding is gone with the fill heights, but a cell takes its tallest column's
   height, so a step of up to a block remains where columns differ. Fills below the real blocks would crack
@@ -127,3 +101,15 @@ timers in the worker tasks; absolute numbers drift ~30% between runs with machin
 - Water fade: the distance fade of the water's shading detail in `water_waves.hlsli` has a TODO; the
   user isn't fully happy with it.
 - Dawn/dusk fog boost: optional extra fog strength around sunrise and sunset on top of the constant fog.
+
+### 6. Possible further speedups
+
+Ring generation went from 15.4 s to about 6.5 s on a fresh load at render distance 30, and the LOD
+update from 3.9 ms to 2.0 ms per frame while moving fast (see `knowledge/terrain/terrain_lod.md`).
+Left on the table:
+- The LOD update's tree walk (about 1.1 ms) checks every chunk's readiness each frame; chunks deep inside
+  the chunk distance never change once ready, so that subtree's result could be kept.
+- Terrain is still generated about 2.1 times per chunk on a turning walk (1.36 per cells task).
+- Downsampling chunks the full-res pipeline already holds would skip surface-only generation near the
+  chunk distance on a fresh load.
+- Lingering chunks still pile up behind the camera at very high speeds.
