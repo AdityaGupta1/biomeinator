@@ -279,9 +279,13 @@ list(APPEND IMGUI_SRC
 
 assign_source_group("external" "${EXT}" "${IMGUI_SRC}")
 
+set(APP_RESOURCE_SCRIPT "${SRC_DIR}/resources/biomeinator.rc")
+set_source_files_properties(${APP_RESOURCE_SCRIPT} PROPERTIES OBJECT_DEPENDS "${SRC_DIR}/resources/biomeinator.ico")
+
 add_executable(Biomeinator
     ${SRC_FILES}
     ${IMGUI_SRC}
+    ${APP_RESOURCE_SCRIPT}
     ${COMPILED_HEADERS}
     ${SHADER_FILES}
     ${SHADER_INCLUDE_FILES}

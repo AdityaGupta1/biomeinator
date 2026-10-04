@@ -158,10 +158,10 @@ int main(int argc, char** argv)
         }
 
         std::filesystem::path exePath = BIOMEINATOR_EXE_PATH;
-        // --renderingTestOutput makes the run headless, which also locks the camera, hides the GUI, and
-        // pauses animation so screenshots are deterministic
+        // --renderToFile keeps the window hidden and makes the run automated, which also locks the camera, hides
+        // the GUI, and pauses animation so screenshots are deterministic
         std::string command =
-            exePath.generic_string() + " --renderingTestOutput=" + generatedImagePath.generic_string();
+            exePath.generic_string() + " --renderToFile=" + generatedImagePath.generic_string();
         for (const std::string& arg : test.args)
         {
             command += " " + arg;

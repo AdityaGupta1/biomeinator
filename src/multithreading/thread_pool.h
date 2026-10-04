@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2025-2026 Aditya Gupta
+// Copyright (c) 2026 Aditya Gupta
 
 // https://dev.to/ish4n10/making-a-thread-pool-in-c-from-scratch-bnm
 
