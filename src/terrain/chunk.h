@@ -17,6 +17,7 @@
 
 #include <array>
 #include <atomic>
+#include <bitset>
 #include <glm/glm.hpp>
 #include <unordered_map>
 
@@ -353,6 +354,8 @@ public:
 
     void setInstancesVisible(bool visible);
     bool getAreInstancesVisible() const;
+    // Has geometry with BLASes that it isn't about to lose, so it can be shown
+    bool isGeometryReady() const;
 
     glm::ivec2 getChunkPos() const;
     Region* getRegion() const;
@@ -419,6 +422,10 @@ private:
     bool isImported{ false };
     // Queued or running tasks that may touch this region's chunks; it is only removed at zero
     std::atomic<uint32_t> numPins{ 0 };
+    // Chunks found to have ready geometry, so that checking them again reads no chunk. BLAS builds don't
+    // notify chunks, so bits are set when a check finds a chunk ready; a chunk only stops being ready
+    // through destroyInstances or being marked for destruction, which clear its bit. Main thread only.
+    std::bitset<regionSideLength * regionSideLength> readyGeometryChunks{};
 
 public:
     const glm::ivec2 regionPos;
@@ -439,6 +446,9 @@ public:
     uint32_t getNumNeighborsSet() const;
 
     bool containsChunk(glm::ivec2 chunkPos) const;
+
+    bool isChunkGeometryReady(glm::ivec2 chunkPos);
+    void clearChunkGeometryReady(glm::ivec2 chunkPos);
 
     void pin();
     void unpin();

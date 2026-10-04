@@ -66,7 +66,9 @@ past the chunk distance, where heightfields dropped them at a hard edge.
   structure passes requested at different times. Freeing terrain as soon as no waiting chunk claimed it
   generated each chunk's terrain 4-5 times, and dropping cells after a timeout regenerated them when the
   camera passed and the chunks left the chunk distance behind it. So:
-  - Cells are kept by distance, over the whole area out to the ring's edge.
+  - Cells are kept by distance, over the whole area out to the ring's edge and a quarter of that again
+    past it, so a camera turning back finds them. Without the margin a turning walk built each chunk's
+    cells 1.66 times; with it, 1.05, for about 13% more cells memory (cells are about 9 KB a chunk).
   - Unused terrain is kept in least recently used queues. A neighbor's structure pass reads only a
     chunk's masks, heights and structures, never its blocks, so a downsampled chunk gives its blocks back
     and stays cached at about 35 KB instead of 300 KB. Compact terrain and terrain still holding blocks
@@ -75,8 +77,11 @@ past the chunk distance, where heightfields dropped them at a hard edge.
   - Requests are ordered by whole priority steps and then around the camera, so a chunk's neighbors are
     requested soon after it.
   
-  Together these took a 40 blocks/s walk from 4.6 terrain generations per chunk to 2.1 (1.36 per cells
-  task; the rest is the walk revisiting areas beyond the keep distance).
+  Together these took a 40 blocks/s turning walk from 4.6 terrain generations per chunk to 1.4. What is
+  left is about 1.36 per cells task, little of it from caps or released claims: quadrupling the compact
+  cap took it to 1.29 and the with-blocks cap to 1.28, and releasing claims of unrequested chunks frees
+  almost nothing. Most of it is terrain generated as a neighbor and evicted with its blocks before its own
+  cells task runs, which then needs the blocks again.
 - A request claims its neighborhood before freeing unused terrain to make room, or it could free the
   very terrain it was about to use.
 - Tasks only start once an update, so the cap on tasks in flight must cover a frame of work for every
@@ -125,6 +130,13 @@ would otherwise hit the coarse surface under it and shadow itself, and screen-sp
 the Minecraft LOD mods use doesn't exist for secondary rays. With LODs on, `Terrain` therefore never
 shows chunks itself; `TerrainLod::update` does, after the frame's chunk destruction so a chunk that lost
 its instances is already not ready.
+
+The update checks every chunk within the chunk distance each frame, and reading each chunk and its
+instances cost more than the rest of the walk. Regions therefore cache which chunks were found ready, so
+checking them again reads no chunk, and the walk finds a level-5 tile's region (tiles at level 5 and below
+lie within one) once for all of its chunks. BLAS builds don't notify chunks, so a bit is only set when a
+check finds the chunk ready; it must be cleared wherever a chunk stops being ready, which today is only
+`destroyInstances` and being marked for destruction. That took the walk from 0.9 to 0.3 ms at 40 blocks/s.
 
 Any tile that can't be shown makes every ancestor show itself instead, up to the root, so a gap
 anywhere replaces terrain right next to the camera with the coarsest level. Coverage therefore must not

@@ -142,10 +142,14 @@ Not yet checked with LODs on. Things to verify:
 
 Ring generation went from 15.4 s to about 6.5 s on a fresh load at render distance 30, and the LOD
 update from 3.9 ms to 2.0 ms per frame while moving fast (see `knowledge/terrain/terrain_lod.md`).
+Since then, regions cache which chunks are ready (the walk from 0.9 to 0.3 ms at 40 blocks/s, 1.05 to
+0.54 ms at 100), and cells are kept a margin past the keep distance (terrain generations per chunk on a
+turning walk from 2.2 to 1.4).
 Left on the table:
-- The LOD update's tree walk (about 1.1 ms) checks every chunk's readiness each frame; chunks deep inside
+- The rest of the walk (about 0.2-0.5 ms) still visits every tile and chunk each frame; chunks deep inside
   the chunk distance never change once ready, so that subtree's result could be kept.
-- Terrain is still generated about 2.1 times per chunk on a turning walk (1.36 per cells task).
+- About 1.36 terrain generations per cells task, mostly neighbor terrain evicted with its blocks before
+  its own cells task runs. Raising the with-blocks cap from 256 to 1024 only took it to 1.28.
 - Downsampling chunks the full-res pipeline already holds would skip surface-only generation near the
   chunk distance on a fresh load.
 - Lingering chunks still pile up behind the camera at very high speeds.

@@ -1432,6 +1432,7 @@ void Chunk::createInstances()
 
 void Chunk::destroyInstances(ToFreeList& toFreeList)
 {
+    this->region->clearChunkGeometryReady(this->chunkPos);
     toFreeList.pushInstance(this->terrainInstance);
     this->terrainInstance = nullptr;
     if (this->waterInstance != nullptr)
@@ -1520,6 +1521,10 @@ bool Chunk::getIsMarkedForDestruction() const
 void Chunk::setIsMarkedForDestruction(bool marked)
 {
     this->isMarkedForDestruction = marked;
+    if (marked)
+    {
+        this->region->clearChunkGeometryReady(this->chunkPos);
+    }
 }
 
 void Chunk::setInstancesVisible(bool visible)
@@ -1538,6 +1543,15 @@ void Chunk::setInstancesVisible(bool visible)
 bool Chunk::getAreInstancesVisible() const
 {
     return this->areInstancesVisible;
+}
+
+bool Chunk::isGeometryReady() const
+{
+    if (this->getState() != ChunkState::HAS_GEOMETRY || this->isMarkedForDestruction)
+    {
+        return false;
+    }
+    return this->terrainInstance->getHasBlas() && (this->waterInstance == nullptr || this->waterInstance->getHasBlas());
 }
 
 glm::ivec2 Chunk::getChunkPos() const
@@ -1710,6 +1724,27 @@ bool Region::containsChunk(glm::ivec2 chunkPos) const
 {
     return glm::all(glm::greaterThanEqual(chunkPos, this->regionPosChunks)) &&
            glm::all(glm::lessThanEqual(chunkPos, this->regionMaxPosChunks));
+}
+
+bool Region::isChunkGeometryReady(ivec2 chunkPos)
+{
+    const uint32_t chunkIdx = chunkPosToIdx(chunkPos - this->regionPosChunks);
+    if (this->readyGeometryChunks.test(chunkIdx))
+    {
+        return true;
+    }
+    const Chunk* chunk = this->chunks[chunkIdx].get();
+    if (chunk == nullptr || !chunk->isGeometryReady())
+    {
+        return false;
+    }
+    this->readyGeometryChunks.set(chunkIdx);
+    return true;
+}
+
+void Region::clearChunkGeometryReady(ivec2 chunkPos)
+{
+    this->readyGeometryChunks.reset(chunkPosToIdx(chunkPos - this->regionPosChunks));
 }
 
 uint32_t Region::getNumNeighborsSet() const

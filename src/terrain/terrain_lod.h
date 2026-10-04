@@ -7,7 +7,7 @@
 
 #include <vector>
 
-class Chunk;
+class Region;
 class Scene;
 class ToFreeList;
 struct Task;
@@ -26,7 +26,7 @@ void update(glm::ivec2 cameraChunkPos,
             int chunkDistance,
             int voxelDistance,
             int lodDistance,
-            Chunk* (*findChunk)(glm::ivec2 chunkPos),
+            Region* (*findChunkRegion)(glm::ivec2 chunkPos),
             ToFreeList& toFreeList,
             std::vector<Task>& outTasks);
 

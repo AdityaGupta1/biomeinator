@@ -237,10 +237,16 @@ static glm::ivec2 chunkToRegionPos(glm::ivec2 chunkPos)
     return glmUtil::floorDiv(chunkPos, glm::ivec2(regionSideLength));
 }
 
-static Chunk* findChunk(glm::ivec2 chunkPos)
+static Region* findChunkRegion(glm::ivec2 chunkPos)
 {
     const auto regionIter = regions.find(chunkToRegionPos(chunkPos));
-    return regionIter == regions.end() ? nullptr : regionIter->second->getChunk(chunkPos);
+    return regionIter == regions.end() ? nullptr : regionIter->second.get();
+}
+
+static Chunk* findChunk(glm::ivec2 chunkPos)
+{
+    Region* const region = findChunkRegion(chunkPos);
+    return region == nullptr ? nullptr : region->getChunk(chunkPos);
 }
 
 static Region* getOrCreateRegion(glm::ivec2 regionPos)
@@ -903,7 +909,7 @@ void update(ToFreeList& toFreeList)
         const int voxelDistance = static_cast<int>(
             std::round(SettingsManager::getAsFloat("lodVoxelDistanceScale") * static_cast<float>(distances.renderDistance)));
         TerrainLod::update(currentChunkPos, distances.createBlasDistance, voxelDistance,
-                           SettingsManager::getAsInt("lodDistance"), findChunk, toFreeList, lodTasks);
+                           SettingsManager::getAsInt("lodDistance"), findChunkRegion, toFreeList, lodTasks);
         // Ahead of the chunk backlog: LOD tiles are few and cheap, and the coarse ones are what covers
         // the world while it loads
         tasksToEnqueue.insert(tasksToEnqueue.begin(), lodTasks.begin(), lodTasks.end());

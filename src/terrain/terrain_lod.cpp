@@ -722,12 +722,15 @@ static std::vector<ivec2> displayedChunkPositions;
 static std::vector<LodTile*> prevDisplayedTiles;
 static std::vector<ivec2> prevDisplayedChunkPositions;
 
+// Tiles at or below this level lie within a single region, which the walk finds once for all of them
+inline constexpr int regionTileLevel = std::countr_zero(regionSideLength);
+
 struct UpdateContext
 {
     ivec2 cameraChunkPos;
     int chunkDistance;
     int voxelDistance;
-    Chunk* (*findChunk)(ivec2 chunkPos);
+    Region* (*findChunkRegion)(ivec2 chunkPos);
 
     // Chebyshev distances in chunks from the camera's chunk to the tile's nearest and farthest chunks
     int distanceTo(const LodTile& tile) const
@@ -746,17 +749,29 @@ struct UpdateContext
         return max(axisDistance.x, axisDistance.y);
     }
 
-    bool isChunkReady(ivec2 chunkPos) const
+    Chunk* findChunk(ivec2 chunkPos) const
     {
-        const Chunk* chunk = this->findChunk(chunkPos);
-        if (chunk == nullptr || chunk->getState() != ChunkState::HAS_GEOMETRY || chunk->getIsMarkedForDestruction())
-        {
-            return false;
-        }
-        const Instance* waterInstance = chunk->getWaterInstance();
-        return chunk->getTerrainInstance()->getHasBlas() && (waterInstance == nullptr || waterInstance->getHasBlas());
+        Region* const region = this->findChunkRegion(chunkPos);
+        return region == nullptr ? nullptr : region->getChunk(chunkPos);
+    }
+
+    // Null above regionTileLevel or where the region doesn't exist
+    Region* findTileRegion(const LodTile& tile) const
+    {
+        return tile.level <= regionTileLevel ? this->findChunkRegion(tile.getMinChunkPos()) : nullptr;
+    }
+
+    Region* findChildRegion(const LodTile& child, Region* parentRegion) const
+    {
+        return child.level < regionTileLevel ? parentRegion : this->findTileRegion(child);
     }
 };
+
+// region is the level-0 tile's, from findTileRegion
+static bool isChunkReady(const LodTile& tile, Region* region)
+{
+    return region != nullptr && region->isChunkGeometryReady(tile.tilePos);
+}
 
 void init(Scene* scene)
 {
@@ -809,7 +824,7 @@ static LodTile& getOrCreateChild(LodTile& tile, int childIdx, const UpdateContex
     return *tile.children[childIdx];
 }
 
-static bool isCoveredByExisting(const LodTile& tile, const UpdateContext& ctx);
+static bool isCoveredByExisting(const LodTile& tile, Region* region, const UpdateContext& ctx);
 
 // Calls func(chunkPos) for a voxel tile's chunks and the ring around them, row by row
 template<typename Func>
@@ -837,16 +852,16 @@ static bool requestSourceCells(const LodTile& tile, float priority)
 
 // Whether the tile's chunk (level 0) or existing children are ready to cover it, whether or not they are
 // still needed
-static bool areChildrenCoveredByExisting(const LodTile& tile, const UpdateContext& ctx)
+static bool areChildrenCoveredByExisting(const LodTile& tile, Region* region, const UpdateContext& ctx)
 {
     if (tile.level == 0)
     {
-        return ctx.isChunkReady(tile.tilePos);
+        return isChunkReady(tile, region);
     }
     for (int childIdx = 0; childIdx < 4; ++childIdx)
     {
         const LodTile* child = tile.children[childIdx];
-        if (child == nullptr || !isCoveredByExisting(*child, ctx))
+        if (child == nullptr || !isCoveredByExisting(*child, ctx.findChildRegion(*child, region), ctx))
         {
             return false;
         }
@@ -854,15 +869,16 @@ static bool areChildrenCoveredByExisting(const LodTile& tile, const UpdateContex
     return true;
 }
 
-static bool isCoveredByExisting(const LodTile& tile, const UpdateContext& ctx)
+static bool isCoveredByExisting(const LodTile& tile, Region* region, const UpdateContext& ctx)
 {
-    return tile.isReady() || areChildrenCoveredByExisting(tile, ctx);
+    return tile.isReady() || areChildrenCoveredByExisting(tile, region, ctx);
 }
 
 // Visits the tiles the camera needs below this one, creating any that are missing, and returns whether
 // the tile's area can be shown: by the tile itself or by its ready descendants and chunks. One tile
-// that can't be shown makes every ancestor show itself instead, so coverage must not lapse.
-static bool visitNeededTile(LodTile& tile, const UpdateContext& ctx)
+// that can't be shown makes every ancestor show itself instead, so coverage must not lapse. region is
+// the tile's, from findTileRegion.
+static bool visitNeededTile(LodTile& tile, Region* region, const UpdateContext& ctx)
 {
     tile.lastNeededFrame = frame;
     tile.isMarkedForDestruction = false;
@@ -877,7 +893,7 @@ static bool visitNeededTile(LodTile& tile, const UpdateContext& ctx)
     {
         if (tile.level == 0)
         {
-            childrenRenderable = ctx.isChunkReady(tile.tilePos);
+            childrenRenderable = isChunkReady(tile, region);
         }
         else
         {
@@ -885,14 +901,15 @@ static bool visitNeededTile(LodTile& tile, const UpdateContext& ctx)
             for (int childIdx = 0; childIdx < 4; ++childIdx)
             {
                 // Every child is visited, so none is left out of the needed tree
-                childrenRenderable &= visitNeededTile(getOrCreateChild(tile, childIdx, ctx), ctx);
+                LodTile& child = getOrCreateChild(tile, childIdx, ctx);
+                childrenRenderable &= visitNeededTile(child, ctx.findChildRegion(child, region), ctx);
             }
         }
     }
     else
     {
         // A tile that stopped subdividing before it was regenerated is still covered by what it showed
-        childrenRenderable = areChildrenCoveredByExisting(tile, ctx);
+        childrenRenderable = areChildrenCoveredByExisting(tile, region, ctx);
     }
     tile.childrenRenderable = childrenRenderable;
 
@@ -1180,7 +1197,7 @@ void update(ivec2 cameraChunkPos,
             int chunkDistance,
             int voxelDistance,
             int lodDistance,
-            Chunk* (*findChunk)(ivec2 chunkPos),
+            Region* (*findChunkRegion)(ivec2 chunkPos),
             ToFreeList& toFreeList,
             std::vector<Task>& outTasks)
 {
@@ -1192,7 +1209,7 @@ void update(ivec2 cameraChunkPos,
         .cameraChunkPos = cameraChunkPos,
         .chunkDistance = chunkDistance,
         .voxelDistance = voxelDistance,
-        .findChunk = findChunk,
+        .findChunkRegion = findChunkRegion,
     };
 
     const int rootLevel = getRootLevel(lodDistance);
@@ -1205,7 +1222,7 @@ void update(ivec2 cameraChunkPos,
         for (int rootX = minRootPos.x; rootX <= maxRootPos.x; ++rootX)
         {
             LodTile& root = getOrCreateTile(ivec2(rootX, rootZ), rootLevel, ctx);
-            visitNeededTile(root, ctx);
+            visitNeededTile(root, ctx.findTileRegion(root), ctx);
             roots.push_back(&root);
         }
     }

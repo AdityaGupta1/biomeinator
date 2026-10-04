@@ -35,6 +35,8 @@ inline constexpr size_t maxRequestsConsidered = 1024;
 // Unrequested chunks are dropped and give up their claims once every this many updates, which saves
 // walking the whole cache every frame
 inline constexpr uint64_t dropUnneededIntervalUpdates = 32;
+// Cells are only dropped this far out, as a multiple of the keep distance, so a camera turning back finds them
+inline constexpr float cellsDropDistanceScale = 1.25f;
 
 VoxelCell SurfaceChunkCells::cellAt(ivec2 cellXZ, int cellY) const
 {
@@ -568,6 +570,7 @@ static void startRequestedGeneration(ivec2 cameraChunkPos, std::vector<Task>& ou
 
 static void dropUnneeded(ivec2 cameraChunkPos, int keepDistance)
 {
+    const int cellsDropDistance = static_cast<int>(static_cast<float>(keepDistance) * cellsDropDistanceScale);
     // Chunks no longer requested give up their claim on their neighbors' terrain
     for (const auto& [chunkPos, surfaceChunk] : surfaceChunks)
     {
@@ -585,7 +588,7 @@ static void dropUnneeded(ivec2 cameraChunkPos, int keepDistance)
                             surfaceChunk.isWaitingForCells || surfaceChunk.numTerrainUsers > 0 ||
                             surfaceChunk.numPins > 0 || surfaceChunk.lastRequestedUpdate == updateIdx;
         if (!isBusy && (surfaceChunk.cells == nullptr ||
-                        glmUtil::chebyshevDistance(surfaceChunk.chunkPos, cameraChunkPos) > keepDistance))
+                        glmUtil::chebyshevDistance(surfaceChunk.chunkPos, cameraChunkPos) > cellsDropDistance))
         {
             iter = surfaceChunks.erase(iter);
             continue;
