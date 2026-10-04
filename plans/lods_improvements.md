@@ -26,7 +26,7 @@ snow layers and block shapes in voxel tiles, and ring generation speed (see `kno
 2. Decorators in LOD tiles (deferred)
 3. Voxel mode regolding
 4. World import/export with LODs
-5. Smaller items: seam ledge, water seam, sea ice outline, Tianzi spikes, water fade, dawn/dusk fog boost
+5. Smaller items: water seam, sea ice outline, Tianzi spikes, water fade, dawn/dusk fog boost
 6. Possible further speedups
 
 ### 1. Distance fog to a neutral color
@@ -124,10 +124,6 @@ Not yet checked with LODs on. Things to verify:
 
 ### 5. Smaller items
 
-- Seam ledge: vertical rounding is gone with the fill heights, but a cell takes its tallest column's
-  height, so a step of up to a block remains where columns differ. Fills below the real blocks would crack
-  the seam from the chunk side. Candidate: mesh each tile's outermost 2-block strip at full resolution
-  from the real blocks, so the step moves inside the tile where culling is exact.
 - Water seam: a thin bright line across open water near the camera, seen right after loading (a lake
   next to snowy shore). Possibly at a chunk/tile boundary in the water surface. Not yet investigated.
 - Sea ice outline: sea ice in heightfield tiles still shows a dark outline along shores after the
