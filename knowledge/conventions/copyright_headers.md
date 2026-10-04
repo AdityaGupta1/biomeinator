@@ -1,4 +1,4 @@
-_Last edited: 2026-10-03_
+_Last edited: 2026-10-04_
 
 # Copyright Headers
 
@@ -13,7 +13,8 @@ whole project, so its range is the project's lifetime rather than any one file's
 last changed: `2026` for a file created and only edited in 2026, `2025-2026` for one created in
 2025 and edited since, `2025` for one untouched after 2025.
 
-- **Header-only commits don't count.** The April 2026 GPL-to-MIT switch rewrote every header
+- **Header-only commits don't count**, whether they change the license text or only fix the
+  years. The April 2026 GPL-to-MIT switch rewrote every header
   without touching code, and stamped `2025-2026` on all of them regardless of history; that is
   how many 2026-only files ended up with the wrong range.
 - **Renames and moves keep the start year.** A file moved to a new folder or renamed is the
