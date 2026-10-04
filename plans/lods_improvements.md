@@ -22,34 +22,23 @@ Known issues not covered below:
 
 ## Recommended order
 
-1. Fog (biggest visual win for the least work)
+1. Fog (constant all day; dawn/dusk boost later)
 2. Seam between full-res chunks and voxel tiles (cracks done; ledge later)
 3. Decorator emulation
 4. Per-chunk surface-only pipeline (ring generation speed)
 
 ## 1. Fog
 
-Problem: far LODs are too visible, so their coarseness shows (spiky heightfield peaks, faceting). The
-user likes the look where nearby detail is sharp and distant terrain is a hazy silhouette (reference:
-the Minecraft shader / Distant Horizons screenshots they shared, with valley mist and aerial haze).
+Done for now: fog strength no longer fades with time of day, so it is on all day, with the user's tuned
+defaults (base sigma 0.0016, scale height 30, anisotropy 0.4, ambient strength 0.7). Goldens include fog,
+so they need regolding.
 
-Current model (`src/shaders/light/fog_density.hlsli`, `computeFogSigmaS` in
-`src/rendering/renderer/renderer.cpp`):
-- One medium: density peaks at sea level (linear ramp from 24 blocks below), exponential falloff above
-  with `--fogScaleHeight` 40.
-- Strength `fogPeakSigmaS` 0.004, full only within 30 s of sunrise/sunset and zero from 120 s away. At
-  midday there is no fog at all, which is when far LODs look worst.
-- Marched with sun shadow rays per step (`computeFogInScatter` in `fog.hlsli`, 8 steps).
-- Voxel bounds (used for miss-ray fog distance) already cover the LOD area when LODs are on.
+Tried and rejected: a separate aerial haze (constant density, half at 3k blocks) plus a thin ground mist
+(scale height 10, then 25). Lit by the horizon sky color the haze made an orange band at the horizon; lit
+by sun phase plus zenith sky it still looked bad, and the thin mist lost the god rays over terrain above
+sea level.
 
-Proposal: two components, constant through the day (optionally a small dawn/dusk boost on top):
-- Aerial haze: thin and nearly height-independent (very large scale height), so distance alone fades
-  terrain, roughly half extinction at 2-4k blocks (sigma around 2e-4 per block; tune). Light it
-  analytically (sun phase + sky ambient, no shadow rays): over kilometre-long segments a few shadow
-  tested steps would be noisy, and occlusion matters little at that scale.
-- Ground mist: dense with a small scale height, concentrated near and below a low altitude (sea level
-  and valleys). Keep the shadow-tested march for it, which gives the god rays.
-- Fog is voxel mode only, and goldens include fog, so changing it means regolding.
+Possible later: a dawn/dusk boost on top of the constant fog.
 
 ## 2. Seam between full-res chunks and voxel tiles
 

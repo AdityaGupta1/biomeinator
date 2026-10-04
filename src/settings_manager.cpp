@@ -91,13 +91,13 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
                bool,
                "true");
     ADD_OPTION("fogScatteringMultiplier",
-               "Fog scattering multiplier on the time-of-day fog strength (0 disables fog; voxel mode only)",
+               "Fog scattering multiplier (0 disables fog; voxel mode only)",
                float,
                "1");
-    ADD_OPTION("fogScaleHeight", "Fog density falloff scale height in blocks above sea level", float, "40");
-    ADD_OPTION("fogG", "Fog Henyey-Greenstein anisotropy", float, "0.5");
+    ADD_OPTION("fogScaleHeight", "Fog density falloff scale height in blocks above sea level", float, "30");
+    ADD_OPTION("fogG", "Fog Henyey-Greenstein anisotropy", float, "0.4");
     ADD_OPTION("fogMarchSteps", "Fog in-scattering march steps on the primary segment", uint32_t, "8");
-    ADD_OPTION("fogAmbientStrength", "Strength of the fog ambient sky in-scattering term", float, "0.3");
+    ADD_OPTION("fogAmbientStrength", "Strength of the fog ambient sky in-scattering term", float, "0.7");
     ADD_OPTION("skyStrength", "Multiplier on sky radiance, excluding the sun disk", float, "1.3");
     ADD_OPTION("clouds", "Enable clouds", bool, "true");
     ADD_OPTION("cloudCoverage", "Cloud coverage threshold", float, "0.3");
