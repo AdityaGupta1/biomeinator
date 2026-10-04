@@ -99,6 +99,15 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
     ADD_OPTION("fogMarchSteps", "Fog in-scattering march steps on the primary segment", uint32_t, "8");
     ADD_OPTION("fogAmbientStrength", "Strength of the fog ambient sky in-scattering term", float, "0.7");
     ADD_OPTION("skyStrength", "Multiplier on sky radiance, excluding the sun disk", float, "1.3");
+    ADD_OPTION("hazeHalfDistance",
+               "Distance in blocks of air past the haze start over which aerial haze halves what is behind it "
+               "(0 disables it; voxel mode only)",
+               float,
+               "3000");
+    ADD_OPTION("hazeStartDistance", "Distance in blocks of air before aerial haze begins", float, "400");
+    ADD_OPTION("hazeWhiteness", "How far aerial haze desaturates the sky color it takes, from 0 to 1", float, "0.5");
+    ADD_OPTION("hazeBrightness", "Multiplier on the aerial haze color", float, "2");
+    ADD_OPTION("hazeSkyBand", "Sine of the elevation above which the sky gets no aerial haze", float, "0.05");
     ADD_OPTION("clouds", "Enable clouds", bool, "true");
     ADD_OPTION("cloudCoverage", "Cloud coverage threshold", float, "0.3");
     ADD_OPTION("cloudExtinction", "Cloud extinction coefficient per block", float, "0.002");
@@ -248,6 +257,11 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         COPY_SETTING("fogMarchSteps", uint32_t);
         COPY_SETTING("fogAmbientStrength", float);
         COPY_SETTING("skyStrength", float);
+        COPY_SETTING("hazeHalfDistance", float);
+        COPY_SETTING("hazeStartDistance", float);
+        COPY_SETTING("hazeWhiteness", float);
+        COPY_SETTING("hazeBrightness", float);
+        COPY_SETTING("hazeSkyBand", float);
         COPY_SETTING("clouds", bool);
         COPY_SETTING("cloudCoverage", float);
         COPY_SETTING("cloudExtinction", float);

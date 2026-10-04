@@ -183,6 +183,11 @@ void imguiEndFrame(double deltaTime)
                 radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog anisotropy", "fogG", -0.99f, 0.99f);
                 radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Fog march steps", "fogMarchSteps", 1, 16);
                 radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog ambient strength", "fogAmbientStrength", 0.f, 2.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Haze half distance", "hazeHalfDistance", 0.f, 10000.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Haze start distance", "hazeStartDistance", 0.f, 2000.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Haze whiteness", "hazeWhiteness", 0.f, 1.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Haze brightness", "hazeBrightness", 0.f, 4.f);
+                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Haze sky band", "hazeSkyBand", 0.f, 1.f);
             }
         }
 

@@ -21,7 +21,8 @@ snow layers and block shapes in voxel tiles, and ring generation speed (see `kno
 
 ## Remaining work
 
-1. Distance fog that fades far terrain to a neutral color
+1. Distance fog that fades far terrain to a neutral color (done: aerial haze, see
+   `knowledge/shaders/path_tracing.md`)
 2. Decorator emulation
 3. Voxel mode regolding
 4. World import/export with LODs

@@ -222,9 +222,14 @@ struct RenderParams
     float fogAmbientStrength;
 
     float skyStrength;
+    float hazeSigmaS;
+    float hazeStartDistance;
+    float hazeWhiteness;
+
+    float hazeBrightness;
+    float hazeSkyBand;
     uint pad0;
     uint pad1;
-    uint pad2;
 
     CloudSettings cloudSettings;
 

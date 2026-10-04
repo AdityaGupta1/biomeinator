@@ -1,4 +1,4 @@
-_Last edited: 2026-10-03_
+_Last edited: 2026-10-04_
 
 # Path Tracing Shader
 
@@ -109,6 +109,11 @@ The following are gated on `sceneParams.voxelMode == 1` and return zero/noop in 
   - In-scattering (sun march + ambient) runs only at path depths ≤ 1 (half steps on bounce segments); deeper bounces keep transmittance only.
   - `renderParams.fogSigmaS` is a fixed coefficient times the `fogScatteringMultiplier` setting, constant through the day. `fogSigmaS = 0` (multiplier 0) must skip the entire fog block (including the march's RNG draws) so renders stay bit-identical with fog off.
   - Sea level comes from `SEA_LEVEL` in `common_settings.h` (shared with `chunk_generator.cpp`); fog height math adds `globalInstanceOffset.y` to get true world Y.
+- **Aerial haze** (`light/haze.hlsli`) — fades distant terrain toward the desaturated zenith sky color, so far LODs read as silhouettes. It is not a lit medium: each path accumulates the air distance it crosses (through delta reflections and refractions, never underwater) and applies `T = exp(-sigma * max(0, d - start))` once, at its first non-delta hit, a miss, or entering water, adding `(1 - T) * hazeColor` weighted by the path weight in front of that surface. Non-obvious rules:
+  - Zenith rather than the horizon or view-direction sky: the horizon LUT is warm and brightest toward the sun, which turned distant terrain into an orange band.
+  - Misses would be hazed out to the voxel bounds, whose top is the world height, tinting most of the sky; their strength fades to zero at `hazeSkyBand` (sine of elevation), so only the horizon blends into the hazed terrain.
+  - Entering water applies it with the weight from before the surface's tint or BSDF: the haze lies in front of the surface.
+  - Like primary fog in-scatter, haze applied on the primary segment adds radiance only in path split 0; SHARC updates skip it.
 
 ---
 

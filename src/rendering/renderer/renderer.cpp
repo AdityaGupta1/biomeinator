@@ -671,6 +671,12 @@ void render()
     renderParams->fogMarchSteps = SettingsManager::getAsUint("fogMarchSteps");
     renderParams->fogAmbientStrength = SettingsManager::getAsFloat("fogAmbientStrength");
     renderParams->skyStrength = SettingsManager::getAsFloat("skyStrength");
+    const float hazeHalfDistance = SettingsManager::getAsFloat("hazeHalfDistance");
+    renderParams->hazeSigmaS = hazeHalfDistance > 0.f ? std::log(2.f) / hazeHalfDistance : 0.f;
+    renderParams->hazeStartDistance = SettingsManager::getAsFloat("hazeStartDistance");
+    renderParams->hazeWhiteness = SettingsManager::getAsFloat("hazeWhiteness");
+    renderParams->hazeBrightness = SettingsManager::getAsFloat("hazeBrightness");
+    renderParams->hazeSkyBand = SettingsManager::getAsFloat("hazeSkyBand");
     renderParams->cloudSettings.enableClouds = SettingsManager::getAsBool("clouds") ? 1 : 0;
     renderParams->cloudSettings.coverage = SettingsManager::getAsFloat("cloudCoverage");
     renderParams->cloudSettings.extinction = SettingsManager::getAsFloat("cloudExtinction");
