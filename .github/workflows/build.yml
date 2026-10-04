@@ -16,7 +16,7 @@ jobs:
     env:
       LFS_BUILD_INPUTS: external/**/*.lib,external/dxc/bin/**
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Fetch build submodules
         run: git submodule update --init --recursive --depth 1 -- external
@@ -25,7 +25,7 @@ jobs:
         shell: bash
         run: git lfs ls-files --long --include="${{ env.LFS_BUILD_INPUTS }}" > lfs-external.txt
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .git/lfs/objects
           key: lfs-external-${{ hashFiles('lfs-external.txt') }}
