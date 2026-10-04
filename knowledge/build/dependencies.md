@@ -1,4 +1,4 @@
-_Last edited: 2026-09-22_
+_Last edited: 2026-10-03_
 
 # Third-Party Dependencies
 
@@ -35,6 +35,9 @@ in the SDK folder:
 2. library directory in `target_link_directories`
 3. library name in `target_link_libraries`
 4. DLL path in `RUNTIME_DLLS`, so the post-build copy places it beside the exe
+
+If the SDK ships a tool that runs during the build, its LFS files must also be added to CI's
+download list; see [ci.md](ci.md).
 
 ## WinPixEventRuntime
 
