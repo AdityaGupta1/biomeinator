@@ -32,7 +32,7 @@ using namespace glm;
 // A tile at level L covers 2^L x 2^L chunks with at most 2^maxCellsPerSideLog2 cells per side, so cells
 // are single blocks up to the level where that many cells span the tile and double in size every
 // level above it
-inline constexpr int maxCellsPerSideLog2 = 7;
+inline constexpr int maxCellsPerSideLog2 = 8;
 // A tile is replaced by its children within this many of its own widths of the camera, so a cell spans
 // about the same angle wherever its level is shown
 inline constexpr int subdivideDistanceTiles = 2;

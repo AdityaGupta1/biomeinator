@@ -1,4 +1,4 @@
-_Last edited: 2026-10-03_
+_Last edited: 2026-10-04_
 
 # Terrain LODs
 
@@ -41,7 +41,7 @@ surface cave. That keeps the seam with full-resolution chunks small for the near
 
 ## Voxel tiles near the chunks
 
-Within `--lodVoxelDistance`, tiles are subdivided down to `maxVoxelTileLevel` and built from real chunks
+Within `--lodVoxelDistanceScale` times the render distance (2 by default), tiles are subdivided down to `maxVoxelTileLevel` and built from real chunks
 instead of the noise, downsampled 2x into voxels. That carries trees, structures, pillars and overhangs
 past the chunk distance, where heightfields dropped them at a hard edge.
 
@@ -108,8 +108,10 @@ past the chunk distance, where heightfields dropped them at a hard edge.
 
 ## Quadtree and selection
 
-A tile at level L covers 2^L × 2^L chunks with at most 128 cells per side, so cells are one block up to
-level 3 and double each level after. A tile subdivides when the camera is within two of its widths,
+A tile at level L covers 2^L × 2^L chunks with at most 256 cells per side, so cells are one block up to
+level 4 and double each level after. At 128 cells, a cell covered 3-6 pixels at 1440p where its level
+starts, enough to show faceting; 256 brings it near a pixel for about 1.2 GB more VRAM at render
+distance 30 (BLAS, indices and vertices of the heightfield tiles) and no measurable frame time. A tile subdivides when the camera is within two of its widths,
 which keeps a cell's angular size roughly constant, or when it reaches into the chunk distance (the
 BLAS distance, since every chunk with a BLAS can be shown); a level-0 tile's only child is its chunk.
 Selection is by distance on the CPU rather than screen-space error: secondary rays see terrain behind

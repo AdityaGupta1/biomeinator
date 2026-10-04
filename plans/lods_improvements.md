@@ -7,11 +7,11 @@ Design and gotchas of what exists are in `knowledge/terrain/terrain_lod.md`; rea
 
 - Full-res chunks out to the BLAS distance (render distance + 1). Chunks leaving it linger until the LOD
   tiles covering them are ready.
-- Voxel ring out to `--lodVoxelDistance` (default 64 chunks): level 0-2 tiles meshed from
+- Voxel ring out to `--lodVoxelDistanceScale` times the render distance (default 2): level 0-2 tiles meshed from
   `SurfaceChunkCache`, which generates surface-only chunks a task per chunk, downsamples them into cells
   that keep block shape heights, and caches cells and compact neighbor terrain. Carries trees,
   structures, pillars and overhangs past the chunk distance.
-- Beyond: smooth heightfield tiles from noise samples (`ChunkGenerator::sampleLodColumns`), up to 128
+- Beyond: smooth heightfield tiles from noise samples (`ChunkGenerator::sampleLodColumns`), up to 256
   cells per side, flat-shaded where steep.
 - Fog is on all day with the user's tuned defaults (base sigma 0.0016, scale height 30, anisotropy 0.4,
   ambient strength 0.7).
