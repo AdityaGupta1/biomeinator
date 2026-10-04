@@ -62,6 +62,14 @@ past the chunk distance, where heightfields dropped them at a hard edge.
   holds no terrain, and a chunk's cells are never regenerated while its old terrain lives.
 - Only the highest-priority request may exceed the cap on chunks holding terrain, so neighborhoods that
   later requests left half generated can't stall every request.
+- Regeneration, not per-chunk work, is what the ring costs: each chunk's terrain is needed by up to nine
+  structure passes requested at different times. Freeing terrain as soon as no waiting chunk claimed it
+  generated each chunk's terrain 4-5 times, and dropping cells after a timeout regenerated them when the
+  camera passed and the chunks left the chunk distance behind it. Unused terrain is now kept in a least
+  recently used queue under the cap (512 chunks: about 2.7 terrain generations per chunk, 2.3 at 1024
+  for about 150 MB more), and cells are kept by distance, over the whole area out to the ring's edge.
+- A request claims its neighborhood before freeing unused terrain to make room, or it could free the
+  very terrain it was about to use.
 - Placeholders inside the chunk distance start above the voxel levels: voxel tiles there would be
   replaced by chunks almost as soon as they were built.
 - Downsampling keeps the most common block that fills from the bottom (any shape but plants and models),

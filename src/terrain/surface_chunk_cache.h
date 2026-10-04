@@ -86,8 +86,10 @@ void pinCells(glm::ivec2 chunkPos);
 void unpinCells(glm::ivec2 chunkPos);
 
 // Main thread, after this frame's requests. Starts generation for the requests, highest priority first,
-// appending the tasks to enqueue, and drops what is no longer needed.
-void update(std::vector<Task>& outTasks);
+// appending the tasks to enqueue, and drops what is no longer needed. Cells are kept, even unrequested,
+// within keepDistance chunks of the camera: tiles need them again when the camera passes and the chunks
+// leave the chunk distance behind it.
+void update(glm::ivec2 cameraChunkPos, int keepDistance, std::vector<Task>& outTasks);
 
 // No generation task may be queued or running
 void reset();

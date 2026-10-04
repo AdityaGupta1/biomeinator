@@ -279,9 +279,11 @@ private:
     void markStructureNeighborsReady(uint32_t neighborBits);
     void markNeighborsWithBlocks(uint32_t neighborBits);
 
-    void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
+    // Returns the height from which every block it left is air
+    uint32_t fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
     void generateTerrainBlocks(ThreadMemoryAllocator& threadMemoryAlloc);
-    void buildTerrainAirMask();
+    // Every block from airFromY up must be air
+    void buildTerrainAirMask(uint32_t airFromY = chunkSizeY);
     // The structure neighbor containing a world XZ position, and that position within it
     const Chunk* structureNeighborAt_WS(glm::ivec2 posXZ_WS, glm::ivec2& outPosXZ_CS) const;
     bool getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const;

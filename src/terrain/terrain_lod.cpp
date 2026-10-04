@@ -1157,7 +1157,8 @@ void update(ivec2 cameraChunkPos,
     applyDisplayed(ctx);
     removeUnneededTiles(toFreeList);
     startGeneratingTiles(toFreeList, outTasks);
-    SurfaceChunkCache::update(outTasks);
+    // Voxel tiles reach out to the voxel distance plus a tile, each reading the ring of chunks around it
+    SurfaceChunkCache::update(cameraChunkPos, voxelDistance + (1 << maxVoxelTileLevel) + 1, outTasks);
 }
 
 void reset(ToFreeList& toFreeList)

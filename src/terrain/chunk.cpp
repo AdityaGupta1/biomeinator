@@ -223,8 +223,8 @@ void Chunk::generateTerrainBlocks(ThreadMemoryAllocator& threadMemoryAlloc)
     this->caveDecoration.prepare();
     this->snow.prepare();
 
-    this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
-    this->buildTerrainAirMask();
+    const uint32_t airFromY = this->fillTerrainBlocksAndCreateStructures(threadMemoryAlloc);
+    this->buildTerrainAirMask(airFromY);
 }
 
 void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
@@ -246,22 +246,31 @@ void Chunk::generateTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
     }
 }
 
-void Chunk::buildTerrainAirMask()
+void Chunk::buildTerrainAirMask(uint32_t airFromY)
 {
     this->terrainAirMask.assign(terrainMaskWords, 0);
     this->terrainSolidCubeMask.assign(terrainMaskWords, 0);
-    for (uint32_t blockIdx = 0; blockIdx < numChunkBlocks; ++blockIdx)
+    // Most of a column is the air above the terrain, whose words are filled whole
+    constexpr uint32_t wordsPerColumn = chunkSizeY / 64;
+    const uint32_t firstAirWord = (airFromY + 63) / 64;
+    for (uint32_t columnIdx = 0; columnIdx < chunkSizeXZSquare; ++columnIdx)
     {
-        const Block block = this->blocks[blockIdx];
-        if (block == Block::AIR)
+        const uint32_t baseWordIdx = columnIdx * wordsPerColumn;
+        std::fill(this->terrainAirMask.begin() + baseWordIdx + firstAirWord,
+                  this->terrainAirMask.begin() + baseWordIdx + wordsPerColumn, ~uint64_t(0));
+        for (uint32_t blockIdx = baseWordIdx * 64; blockIdx < (baseWordIdx + firstAirWord) * 64; ++blockIdx)
         {
-            this->terrainAirMask[blockIdx / 64] |= uint64_t(1) << (blockIdx % 64);
-        }
-        else
-        {
-            const BlockData& blockData = Blocks::getBlockData(block);
-            if (blockData.type == BlockType::SOLID && blockData.shape == BlockShape::CUBE)
-                this->terrainSolidCubeMask[blockIdx / 64] |= uint64_t(1) << (blockIdx % 64);
+            const Block block = this->blocks[blockIdx];
+            if (block == Block::AIR)
+            {
+                this->terrainAirMask[blockIdx / 64] |= uint64_t(1) << (blockIdx % 64);
+            }
+            else
+            {
+                const BlockData& blockData = Blocks::getBlockData(block);
+                if (blockData.type == BlockType::SOLID && blockData.shape == BlockShape::CUBE)
+                    this->terrainSolidCubeMask[blockIdx / 64] |= uint64_t(1) << (blockIdx % 64);
+            }
         }
     }
 }

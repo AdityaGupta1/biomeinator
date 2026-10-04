@@ -688,7 +688,7 @@ static void forEachExposedSurface(const std::vector<Block>& blocks, uint baseBlo
     }
 }
 
-void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
+uint32_t Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
     const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
@@ -1667,6 +1667,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             }
         }
     }
+    return maxFillY + 1;
 }
 
 void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numSamplesXZ, LodColumn* outColumns,

@@ -13,6 +13,7 @@
 #include "util/packing.h"
 
 #include <algorithm>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -22,10 +23,9 @@ using namespace glm;
 // Tasks queued or running at once. Each is short, so this only bounds how far ahead of the workers the
 // cache commits to an order.
 inline constexpr uint32_t maxTasksInFlight = 64;
-// Chunks holding full blocks at once. Their buffers stay pooled afterward, so this bounds that memory.
-inline constexpr uint32_t maxChunksWithTerrain = 256;
-// Cells nobody requested for this many updates are dropped; regenerating them is cheap
-inline constexpr uint64_t keepUnrequestedCellsUpdates = 600;
+// Chunks holding full blocks at once, including unused terrain kept for later neighbors. Their buffers
+// stay pooled afterward, so this bounds that memory.
+inline constexpr uint32_t maxChunksWithTerrain = 512;
 // Only this many of the highest-priority requests are ordered and considered each update; the tasks in
 // flight run out well before
 inline constexpr size_t maxRequestsConsidered = 1024;
@@ -245,6 +245,7 @@ public:
     uint32_t numTerrainUsers{ 0 };
     // Tiles meshing from the cells
     uint32_t numPins{ 0 };
+    bool isInUnusedTerrainQueue{ false };
     uint64_t lastRequestedUpdate{ 0 };
     float priority{ 0.f };
     // Position in this update's requests, which breaks priority ties
@@ -269,6 +270,10 @@ static std::vector<SurfaceChunk*> requests;
 static uint64_t updateIdx{ 1 };
 static uint32_t numTasksInFlight{ 0 };
 static uint32_t numChunksWithTerrain{ 0 };
+// Chunks whose terrain no waiting chunk claims, oldest first. Neighbors requested later reuse it; without
+// it, each chunk's terrain was generated four to five times. Entries go stale when their terrain is claimed
+// again, and a chunk is queued once at a time.
+static std::deque<ivec2> unusedTerrainChunks;
 
 static std::vector<SurfaceChunk*> finishedChunks;
 static std::mutex finishedChunksMutex;
@@ -298,13 +303,46 @@ static void forEachInNeighborhood(const SurfaceChunk& surfaceChunk, const Func& 
     }
 }
 
-static void freeTerrainIfUnused(SurfaceChunk& surfaceChunk)
+static bool isTerrainUnused(const SurfaceChunk& surfaceChunk)
 {
-    if (surfaceChunk.hasTerrain() && surfaceChunk.numTerrainUsers == 0)
+    return surfaceChunk.hasTerrain() && surfaceChunk.numTerrainUsers == 0;
+}
+
+static void markTerrainIfUnused(SurfaceChunk& surfaceChunk)
+{
+    if (isTerrainUnused(surfaceChunk) && !surfaceChunk.isInUnusedTerrainQueue)
     {
-        surfaceChunk.terrain = nullptr;
-        --numChunksWithTerrain;
+        unusedTerrainChunks.push_back(surfaceChunk.chunkPos);
+        surfaceChunk.isInUnusedTerrainQueue = true;
     }
+}
+
+// Returns whether any was freed
+static bool freeLeastRecentlyUsedTerrain()
+{
+    while (!unusedTerrainChunks.empty())
+    {
+        const auto iter = surfaceChunks.find(unusedTerrainChunks.front());
+        unusedTerrainChunks.pop_front();
+        if (iter == surfaceChunks.end())
+        {
+            continue;
+        }
+        iter->second->isInUnusedTerrainQueue = false;
+        if (isTerrainUnused(*iter->second))
+        {
+            iter->second->terrain = nullptr;
+            --numChunksWithTerrain;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void startWaitingForCells(SurfaceChunk& surfaceChunk)
+{
+    forEachInNeighborhood(surfaceChunk, [](SurfaceChunk& neighbor) { ++neighbor.numTerrainUsers; });
+    surfaceChunk.isWaitingForCells = true;
 }
 
 static void stopWaitingForCells(SurfaceChunk& surfaceChunk)
@@ -313,7 +351,7 @@ static void stopWaitingForCells(SurfaceChunk& surfaceChunk)
         [](SurfaceChunk& neighbor)
         {
             --neighbor.numTerrainUsers;
-            freeTerrainIfUnused(neighbor);
+            markTerrainIfUnused(neighbor);
         });
     surfaceChunk.isWaitingForCells = false;
 }
@@ -384,7 +422,7 @@ static void processFinishedChunks()
         if (surfaceChunk->isGeneratingTerrain)
         {
             surfaceChunk->isGeneratingTerrain = false;
-            freeTerrainIfUnused(*surfaceChunk);
+            markTerrainIfUnused(*surfaceChunk);
         }
         else
         {
@@ -402,9 +440,9 @@ static void startGenerating(SurfaceChunk& surfaceChunk, void (*func)(const Task&
 }
 
 // Highest priority first, and in request order on ties, which keeps a tile's chunks together so they share
-// their neighbors' terrain. A request claims its neighborhood's terrain only once it fits under the cap on
-// chunks holding terrain, so claims never pile up half generated; the first unclaimed request may exceed
-// the cap, so some request always progresses.
+// their neighbors' terrain. A request keeps its claim on its neighborhood's terrain only if the terrain it
+// lacks fits under the cap on chunks holding terrain, after freeing unused terrain, so claims never pile up
+// half generated; the first unclaimed request may exceed the cap, so some request always progresses.
 static void startRequestedGeneration(std::vector<Task>& outTasks)
 {
     const auto consideredEnd = requests.begin() + std::min(requests.size(), maxRequestsConsidered);
@@ -428,16 +466,20 @@ static void startRequestedGeneration(std::vector<Task>& outTasks)
         }
         if (!surfaceChunk->isWaitingForCells)
         {
+            // Claimed first, so freeing unused terrain to make room spares this neighborhood's
+            startWaitingForCells(*surfaceChunk);
             uint32_t numMissingTerrain = 0;
             forEachInNeighborhood(*surfaceChunk,
                 [&](const SurfaceChunk& neighbor) { numMissingTerrain += neighbor.terrain == nullptr ? 1 : 0; });
+            while (numChunksWithTerrain + numMissingTerrain > maxChunksWithTerrain && freeLeastRecentlyUsedTerrain())
+            {
+            }
             if (numChunksWithTerrain + numMissingTerrain > maxChunksWithTerrain && !mayExceedTerrainCap)
             {
+                stopWaitingForCells(*surfaceChunk);
                 continue;
             }
             mayExceedTerrainCap = false;
-            forEachInNeighborhood(*surfaceChunk, [](SurfaceChunk& neighbor) { ++neighbor.numTerrainUsers; });
-            surfaceChunk->isWaitingForCells = true;
         }
 
         bool isNeighborhoodReady = true;
@@ -472,7 +514,7 @@ static void startRequestedGeneration(std::vector<Task>& outTasks)
     requests.clear();
 }
 
-static void dropUnneeded()
+static void dropUnneeded(ivec2 cameraChunkPos, int keepDistance)
 {
     // Chunks no longer requested give up their claim on their neighbors' terrain
     for (const auto& [chunkPos, surfaceChunk] : surfaceChunks)
@@ -489,9 +531,9 @@ static void dropUnneeded()
         SurfaceChunk& surfaceChunk = *iter->second;
         const bool isBusy = surfaceChunk.terrain != nullptr || surfaceChunk.isGeneratingCells ||
                             surfaceChunk.isWaitingForCells || surfaceChunk.numTerrainUsers > 0 ||
-                            surfaceChunk.numPins > 0;
+                            surfaceChunk.numPins > 0 || surfaceChunk.lastRequestedUpdate == updateIdx;
         if (!isBusy && (surfaceChunk.cells == nullptr ||
-                        updateIdx - surfaceChunk.lastRequestedUpdate > keepUnrequestedCellsUpdates))
+                        glmUtil::chebyshevDistance(surfaceChunk.chunkPos, cameraChunkPos) > keepDistance))
         {
             iter = surfaceChunks.erase(iter);
             continue;
@@ -500,13 +542,13 @@ static void dropUnneeded()
     }
 }
 
-void update(std::vector<Task>& outTasks)
+void update(ivec2 cameraChunkPos, int keepDistance, std::vector<Task>& outTasks)
 {
     processFinishedChunks();
     startRequestedGeneration(outTasks);
     if (updateIdx % dropUnneededIntervalUpdates == 0)
     {
-        dropUnneeded();
+        dropUnneeded(cameraChunkPos, keepDistance);
     }
     ++updateIdx;
 }
@@ -516,6 +558,7 @@ void reset()
     surfaceChunks.clear();
     requests.clear();
     finishedChunks.clear();
+    unusedTerrainChunks.clear();
     numTasksInFlight = 0;
     numChunksWithTerrain = 0;
 }
