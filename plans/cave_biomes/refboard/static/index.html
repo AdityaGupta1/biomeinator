@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Biome Refs</title>
+<style>
+  :root {
+    --bg: #f4f2ee; --card: #ffffff; --text: #1d1c1a; --muted: #6b6760;
+    --border: #dedad3; --accent: #3f6ea8; --chip: #e8e4dc; --danger: #b04040; --cool: #e0a800;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141416; --card: #1f1f23; --text: #ecebe8; --muted: #9a978f;
+      --border: #33333a; --accent: #7aa7e0; --chip: #2a2a30; --danger: #e07a7a; --cool: #f0c040;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, system-ui, sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--border); padding: 10px 16px 8px; }
+  h1 { font-size: 17px; margin: 0 0 8px; }
+  nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+  nav button { flex: none; border: 0; border-radius: 999px; padding: 6px 12px; background: var(--chip); color: var(--text); font: inherit; font-size: 13px; }
+  nav button.active { background: var(--accent); color: #fff; }
+  main { max-width: 1100px; margin: 0 auto; padding: 12px 16px 60px; }
+  .blurb { color: var(--muted); margin: 4px 0 12px; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .card .frame { position: relative; overflow: hidden; background: var(--chip); }
+  .card.cool { border-color: var(--cool); box-shadow: 0 0 0 2px var(--cool); }
+  .card.ignore { opacity: .4; }
+  .rate { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; }
+  .rate button { display: flex; width: 36px; height: 36px; align-items: center; justify-content: center; border: 0; border-radius: 50%; background: rgba(0,0,0,.45); color: #fff; padding: 0; }
+  .rate button svg { width: 20px; height: 20px; }
+  .rate button.cool.on { background: var(--cool); color: #1d1c1a; }
+  .rate button.ignore.on { background: var(--danger); }
+  .card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; cursor: zoom-in; transition: filter .3s; }
+  .card img.placeholder { filter: blur(12px); transform: scale(1.05); }
+  .body { padding: 10px 12px 12px; }
+  .caption { font-weight: 600; }
+  .source { font-size: 12px; color: var(--accent); word-break: break-all; }
+  .comments { margin: 8px 0 0; padding: 0; list-style: none; }
+  .comments li { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-top: 1px solid var(--border); }
+  .comments .text { flex: 1; white-space: pre-wrap; }
+  .comments .ts { font-size: 11px; color: var(--muted); }
+  .comments .del { border: 0; background: none; color: var(--danger); font-size: 18px; line-height: 1; padding: 0 4px; }
+  form { display: flex; gap: 6px; margin-top: 8px; }
+  textarea { flex: 1; min-height: 38px; resize: vertical; border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: var(--bg); color: var(--text); font: inherit; }
+  form button { border: 0; border-radius: 8px; padding: 0 14px; background: var(--accent); color: #fff; font: inherit; }
+  .general { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 14px; }
+  .empty { color: var(--muted); font-style: italic; }
+  #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: none; align-items: center; justify-content: center; z-index: 10; }
+  #lightbox.open { display: flex; }
+  #lightbox img { max-width: 100%; max-height: 100%; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Biome Refs</h1>
+  <nav id="tabs"></nav>
+</header>
+<main id="main"></main>
+<div id="lightbox"><img alt=""></div>
+
+<script>
+let data = null;
+let activeBiome = localStorage.getItem("activeBiome");
+
+async function refresh() {
+  const response = await fetch("api/data", { cache: "no-store" });
+  data = await response.json();
+  if (!data.biomes.some(b => b.id === activeBiome)) {
+    activeBiome = data.biomes[0].id;
+  }
+  render();
+}
+
+function el(tag, props = {}, children = []) {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+}
+
+function commentBlock(target) {
+  const list = el("ul", { className: "comments" });
+  for (const comment of data.comments.filter(c => c.target === target)) {
+    const del = el("button", { className: "del", textContent: "×", title: "Delete" });
+    del.onclick = async () => {
+      await post("api/comments/delete", { id: comment.id });
+      refresh();
+    };
+    list.append(el("li", {}, [
+      el("div", { className: "text" }, [comment.text, el("div", { className: "ts", textContent: comment.ts })]),
+      del,
+    ]));
+  }
+
+  const input = el("textarea", { placeholder: "Comment…", rows: 1 });
+  const form = el("form", {}, [input, el("button", { type: "submit", textContent: "Add" })]);
+  form.onsubmit = async event => {
+    event.preventDefault();
+    if (!input.value.trim()) {
+      return;
+    }
+    await post("api/comments", { target, text: input.value });
+    input.value = "";
+    refresh();
+  };
+  return [list, form];
+}
+
+function render() {
+  thumbObserver.disconnect();
+  const tabs = document.getElementById("tabs");
+  tabs.replaceChildren(...data.biomes.map(biome => {
+    const count = data.images.filter(i => i.biome === biome.id).length;
+    const button = el("button", { textContent: `${biome.name} (${count})` });
+    button.classList.toggle("active", biome.id === activeBiome);
+    button.onclick = () => {
+      activeBiome = biome.id;
+      localStorage.setItem("activeBiome", activeBiome);
+      render();
+      window.scrollTo(0, 0);
+    };
+    return button;
+  }));
+
+  const biome = data.biomes.find(b => b.id === activeBiome);
+  const images = data.images.filter(i => i.biome === biome.id);
+  const general = el("div", { className: "general" }, [
+    el("div", { className: "caption", textContent: "General notes on this biome" }),
+    ...commentBlock("biome:" + biome.id),
+  ]);
+
+  const grid = el("div", { className: "grid" }, images.map(image => {
+    const gridUrl = thumbUrl("grid", image);
+    const img = el("img", { src: gridUrl, alt: image.caption });
+    if (!loadedThumbs.has(gridUrl)) {
+      img.src = thumbUrl("tiny", image);
+      img.className = "placeholder";
+      img.dataset.src = gridUrl;
+      thumbObserver.observe(img);
+    }
+    img.onclick = () => openLightbox(image);
+    const card = el("div", { className: "card" }, [
+      el("div", { className: "frame" }, [img, ratingButtons(image)]),
+      el("div", { className: "body" }, [
+        el("div", { className: "caption", textContent: image.caption }),
+        sourceNode(image.source),
+        ...commentBlock(image.id),
+      ]),
+    ]);
+    if (image.rating) {
+      card.classList.add(image.rating);
+    }
+    return card;
+  }));
+
+  document.getElementById("main").replaceChildren(
+    el("div", { className: "blurb", textContent: biome.blurb }),
+    general,
+    images.length ? grid : el("div", { className: "empty", textContent: "No images yet." }),
+  );
+}
+
+const RATING_ICONS = {
+  cool: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.9L12 17.8 5.8 21.1 7 14.2 2 9.3l6.9-1z"/></svg>',
+  ignore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9M6.6 6.6C3.8 8.4 2 12 2 12s4 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>',
+};
+
+// Tapping the active rating again clears it.
+function ratingButtons(image) {
+  return el("div", { className: "rate" }, ["cool", "ignore"].map(rating => {
+    const button = el("button", { className: rating, title: rating, innerHTML: RATING_ICONS[rating] });
+    button.classList.toggle("on", image.rating === rating);
+    button.onclick = () => {
+      const next = image.rating === rating ? null : rating;
+      image.rating = next ?? undefined;
+      render();
+      post("api/rating", { id: image.id, rating: next });
+    };
+    return button;
+  }));
+}
+
+function thumbUrl(size, image) {
+  return `thumbs/${size}/${image.file.split("/").pop()}`;
+}
+
+// Grid thumbnails already fetched, so a re-render (e.g. after commenting) doesn't re-blur them.
+const loadedThumbs = new Set();
+
+// Swaps the blurred placeholder for the grid thumbnail once a card is near the viewport.
+const thumbObserver = new IntersectionObserver(entries => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) {
+      continue;
+    }
+    const img = entry.target;
+    thumbObserver.unobserve(img);
+    const loader = new Image();
+    loader.onload = () => {
+      loadedThumbs.add(img.dataset.src);
+      img.src = loader.src;
+      img.classList.remove("placeholder");
+    };
+    loader.src = img.dataset.src;
+  }
+}, { rootMargin: "400px" });
+
+function sourceNode(source) {
+  if (!source.startsWith("http")) {
+    return el("div", { className: "source", textContent: source });
+  }
+  return el("a", { className: "source", href: source, target: "_blank", rel: "noopener", textContent: new URL(source).hostname });
+}
+
+async function post(url, body) {
+  await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
+const lightbox = document.getElementById("lightbox");
+// Show the already-cached grid thumbnail immediately, then swap in the full image once it has loaded.
+function openLightbox(image) {
+  const view = lightbox.querySelector("img");
+  view.src = thumbUrl("grid", image);
+  lightbox.classList.add("open");
+  const full = new Image();
+  full.onload = () => {
+    if (view.src.endsWith(thumbUrl("grid", image))) {
+      view.src = full.src;
+    }
+  };
+  full.src = image.file;
+}
+lightbox.onclick = () => lightbox.classList.remove("open");
+
+refresh();
+</script>
+</body>
+</html>
