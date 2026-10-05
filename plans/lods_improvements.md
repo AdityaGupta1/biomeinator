@@ -18,7 +18,8 @@ Design and gotchas of what exists are in `knowledge/terrain/terrain_lod.md`; rea
 
 Done in this round: seam cracks at the voxel ring, constant fog, coarse tiles popping in near the player,
 snow layers and block shapes in voxel tiles, ring generation speed, the sea ice outline and grass sides
-on LOD tiles (see `knowledge/terrain/terrain_lod.md`).
+on LOD tiles, and the water fade distances. The water seam seen while loading is deferred as known
+(see `knowledge/terrain/terrain_lod.md`, Gotchas).
 
 ## Remaining work
 
@@ -27,7 +28,7 @@ on LOD tiles (see `knowledge/terrain/terrain_lod.md`).
 2. Decorators in LOD tiles (deferred)
 3. Voxel mode regolding
 4. World import/export with LODs
-5. Smaller items: water seam, Tianzi spikes, water fade, dawn/dusk fog boost
+5. Smaller items: Tianzi spikes, dawn/dusk fog boost
 6. Possible further speedups
 
 ### 1. Distance fog to a neutral color
@@ -125,13 +126,9 @@ Not yet checked with LODs on. Things to verify:
 
 ### 5. Smaller items
 
-- Water seam: a thin bright line across open water near the camera, seen right after loading (a lake
-  next to snowy shore). Possibly at a chunk/tile boundary in the water surface. Not yet investigated.
 - Tianzi spikes: heightfield tiles can't represent vertical walls, so Tianzi pillars come out spiky. A
   3D density isosurface (surface nets / dual contouring on the generator's density lattice) was
   discussed as the far representation that fixes this; deferred.
-- Water fade: the distance fade of the water's shading detail in `water_waves.hlsli` has a TODO; the
-  user isn't fully happy with it.
 - Dawn/dusk fog boost: optional extra fog strength around sunrise and sunset on top of the constant fog.
 
 ### 6. Possible further speedups

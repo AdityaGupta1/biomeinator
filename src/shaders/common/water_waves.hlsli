@@ -85,13 +85,12 @@ static const fnl_state MED_CHOP_NOISE_STATE = makeNoiseState(9001, FNL_FRACTAL_N
 static const fnl_state NOISE_WAVE_STATE = makeNoiseState(1337, FNL_FRACTAL_FBM, NOISE_WAVE_OCTAVES);
 
 // ===== Shading detail fade =====
-// TODO: revisit these fades; the look of far water isn't final yet.
 // Camera distances in blocks over which each band fades out of the shading normal, finest first:
 // detail that falls below a pixel only aliases into sparkle. The swells last longest, so far water
 // still reads as waves.
-static const float2 NOISE_FADE_DISTANCES = float2(48.f, 192.f);
-static const float2 CHOP_FADE_DISTANCES = float2(128.f, 512.f);
-static const float2 SWELL_FADE_DISTANCES = float2(1024.f, 4096.f);
+static const float2 NOISE_FADE_DISTANCES = float2(256.f, 512.f);
+static const float2 CHOP_FADE_DISTANCES = float2(256.f, 512.f);
+static const float2 SWELL_FADE_DISTANCES = float2(512.f, 1024.f);
 
 float shadingDetailWeight(float2 fadeDistances, float cameraDistance)
 {

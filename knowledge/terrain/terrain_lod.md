@@ -194,6 +194,9 @@ geometry is freed, except within `keepGeometryMarginChunks` of the edge (see abo
   side texture's strip of the top aliased into stripes on distant slopes.
 - Automated runs wait for `TerrainLod::isSettled` too, so `--renderToFile` with `--lodDistance` captures
   the finished LODs. `--fovY` reproduces a capture taken with zoom held (0.3 times the default 35).
+- Known and deferred: while the world loads, with coarse tiles still standing in near the camera, a thin
+  bright line can show across open water, likely where water surfaces of tiles at different levels meet.
+  It is gone once the tiles settle and hasn't been reproduced in a steady state.
 - With LODs on, the voxel bounds that water absorption and fog use for rays that miss everything cover
   the root tiles, not just the render distance. Underwater surfaces in LOD tiles otherwise got no
   absorption on their sky light, which showed as a line in the water at the render distance.
