@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <bit>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -30,8 +31,9 @@
 using namespace glm;
 
 // A tile at level L covers 2^L x 2^L chunks with at most 2^maxCellsPerSideLog2 cells per side, so cells
-// are single blocks up to the level where that many cells span the tile and double in size every
-// level above it
+// double in size every level above the one where that many cells span the tile. They are never finer
+// than voxel tiles' cells: heightfield tiles just past the voxel ring would otherwise show more detail
+// than the voxel tiles they replace.
 inline constexpr int maxCellsPerSideLog2 = 8;
 // A tile is replaced by its children within this many of its own widths of the camera, so a cell spans
 // about the same angle wherever its level is shown
@@ -52,6 +54,9 @@ inline constexpr int edgeSkirtDepthCells = 4;
 // Steeper cells show their slope's material rather than their top block: block terrain this steep shows
 // as much side as top
 inline constexpr float maxTopGradient = 1.f;
+// Dry cells whose heights span more than this many cell widths are cliffs, meshed as flat-topped columns
+// where the biome asks for it (BiomeData::lodCliffColumns)
+inline constexpr float minCliffDropCells = 2.f;
 inline constexpr uint32_t maxGeneratingTiles = 64;
 // Chunks voxel tiles request cells for each update, highest priority first. Requesting for every waiting
 // tile each update was a hash lookup per chunk for the whole ring, and only the first ones get generated.
@@ -59,7 +64,8 @@ inline constexpr int maxCellRequestsPerUpdate = 2048;
 
 static int cellSizeLog2(int level)
 {
-    return std::max(0, std::countr_zero(chunkSizeXZ) + level - maxCellsPerSideLog2);
+    return std::max(std::countr_zero(static_cast<uint32_t>(voxelCellSize)),
+                    std::countr_zero(chunkSizeXZ) + level - maxCellsPerSideLog2);
 }
 
 enum class LodTileState : uint8_t
@@ -347,6 +353,113 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
         return dot(gradient, gradient) >= maxTopGradient * maxTopGradient;
     };
 
+    // A heightfield turns a wall into long sloped triangles from its foot to its top, so pillars came out
+    // as spikes. Cliff cells are instead four flat quadrants, each at its nearest corner's height, with
+    // vertical walls between them: walls stand where the terrain drops, halfway between samples.
+    const auto isCliffCell = [&](ivec2 cellPos)
+    {
+        bool hasColumnBiome = false;
+        float minHeight = std::numeric_limits<float>::max();
+        float maxHeight = std::numeric_limits<float>::lowest();
+        for (const ivec2 cornerOffset : { ivec2(0, 0), ivec2(1, 0), ivec2(0, 1), ivec2(1, 1) })
+        {
+            const ivec2 cornerPos = cellPos + cornerOffset;
+            hasColumnBiome |= Biomes::getBiomeData(columnAt(cornerPos).biome).lodCliffColumns;
+            minHeight = std::min(minHeight, heightAt(cornerPos));
+            maxHeight = std::max(maxHeight, heightAt(cornerPos));
+        }
+        return hasColumnBiome && maxHeight - minHeight > minCliffDropCells * cellSizeF &&
+               cellWaterColumn(cellPos) == nullptr;
+    };
+    const auto localPos = [&](vec2 cellUnitsXZ, float y)
+    { return vec3(cellUnitsXZ.x * cellSizeF, y, cellUnitsXZ.y * cellSizeF); };
+    // A vertical wall from a to b (XZ in cell units) between yLow and yHigh, facing normalXZ
+    const auto addWall = [&](vec2 a, vec2 b, float yLow, float yHigh, vec2 normalXZ, const PerFaceData& faceData)
+    {
+        const vec3 normal(normalXZ.x, 0.f, normalXZ.y);
+        const std::array<vec3, 4> positions{
+            localPos(a, yHigh), localPos(b, yHigh), localPos(b, yLow), localPos(a, yLow)
+        };
+        std::array<uint32_t, 4> corners;
+        for (int i = 0; i < 4; ++i)
+        {
+            corners[i] =
+                addVertex(terrainGeometry, positions[i], normal, cornerTint(vec2(positions[i].x, positions[i].z)));
+        }
+        addFace(terrainGeometry, corners, faceData);
+    };
+    const auto addCliffCell = [&](ivec2 cellPos, const PerFaceData& wallFaceData)
+    {
+        const vec2 cellMin(cellPos);
+        for (const ivec2 cornerOffset : { ivec2(0, 0), ivec2(1, 0), ivec2(0, 1), ivec2(1, 1) })
+        {
+            const ivec2 cornerPos = cellPos + cornerOffset;
+            const float height = heightAt(cornerPos);
+            const vec2 quadrantMin = cellMin + 0.5f * vec2(cornerOffset);
+            addBoxFace(terrainGeometry,
+                       BlockFace::Y_POS,
+                       localPos(quadrantMin, height),
+                       localPos(quadrantMin + 0.5f, height),
+                       blockFaceData(columnAt(cornerPos).topBlock, BlockFace::Y_POS),
+                       cornerTint);
+        }
+
+        // Between each pair of neighboring quadrants, from the cell's center to its edge, facing the lower one
+        for (const auto& [offsetA, offsetB] : { std::pair{ ivec2(0, 0), ivec2(1, 0) },
+                                                std::pair{ ivec2(0, 1), ivec2(1, 1) },
+                                                std::pair{ ivec2(0, 0), ivec2(0, 1) },
+                                                std::pair{ ivec2(1, 0), ivec2(1, 1) } })
+        {
+            const float heightA = heightAt(cellPos + offsetA);
+            const float heightB = heightAt(cellPos + offsetB);
+            if (heightA == heightB)
+            {
+                continue;
+            }
+            const vec2 towardB(offsetB - offsetA);
+            addWall(cellMin + 0.5f,
+                    cellMin + 0.5f * vec2(offsetA + offsetB),
+                    std::min(heightA, heightB),
+                    std::max(heightA, heightB),
+                    heightA > heightB ? towardB : -towardB,
+                    wallFaceData);
+        }
+
+        // Toward a neighbor that is no cliff, whose edge runs straight between the two corners, each half of the
+        // edge leaves a sliver between the quadrant's flat top and that line
+        for (uint8_t faceIdx = 0; faceIdx < 4; ++faceIdx)
+        {
+            const ivec2 outward(blockFaceBases[faceIdx].normal.x, blockFaceBases[faceIdx].normal.z);
+            if (isCliffCell(cellPos + outward))
+            {
+                continue;
+            }
+            const ivec2 along(abs(outward.y), abs(outward.x));
+            const ivec2 cornerA = cellPos + max(outward, ivec2(0));
+            const ivec2 cornerB = cornerA + along;
+            const float heightA = heightAt(cornerA);
+            const float heightB = heightAt(cornerB);
+            if (heightA == heightB)
+            {
+                continue;
+            }
+            const float midHeight = 0.5f * (heightA + heightB);
+            const vec2 mid = 0.5f * vec2(cornerA + cornerB);
+            for (const auto& [cornerPos, height] : { std::pair{ cornerA, heightA }, std::pair{ cornerB, heightB } })
+            {
+                // Each sliver faces whichever side is lower there
+                const vec3 normal = vec3(outward.x, 0.f, outward.y) * (midHeight > height ? -1.f : 1.f);
+                for (const vec3 pos :
+                     { localPos(vec2(cornerPos), height), localPos(mid, height), localPos(mid, midHeight) })
+                {
+                    terrainGeometry.idxs.push_back(
+                        addVertex(terrainGeometry, pos, normal, cornerTint(vec2(pos.x, pos.z))));
+                }
+            }
+            terrainGeometry.perFaceDatas.push_back(wallFaceData);
+        }
+    };
+
     // What a cell shows: its top block where the slope is gentle enough for block terrain to show mostly
     // tops, otherwise the side of its top block where the slope stays within the topsoil, else rock. A cell
     // holding water is judged by its highest corner and the slope above the water, which is all that shows:
@@ -409,6 +522,11 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
                 std::rotate(corners.begin(), corners.begin() + 1, corners.end());
             }
 
+            if (isCliffCell(cellPos))
+            {
+                addCliffCell(cellPos, faceData);
+                continue;
+            }
             if (!isSteep)
             {
                 addFace(terrainGeometry,
@@ -464,10 +582,22 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
                 return addVertex(terrainGeometry, pos, vec3(outward.x, 0.f, outward.y),
                                  cornerTint(vec2(cornerPos) * cellSizeF));
             };
+            const PerFaceData& faceData = cellFaceDatas[cellPos.x + numCells * cellPos.y];
+            if (isCliffCell(cellPos))
+            {
+                // Follows the quadrants' flat tops, each half at its corner's height
+                const vec2 mid = 0.5f * vec2(cornerA + cornerB);
+                for (const ivec2 cornerPos : { cornerA, cornerB })
+                {
+                    const float height = heightAt(cornerPos);
+                    addWall(vec2(cornerPos), mid, std::max(height - skirtDepth, 0.f), height, vec2(outward), faceData);
+                }
+                continue;
+            }
             addFace(terrainGeometry,
                     { addSkirtVertex(cornerA, 0.f), addSkirtVertex(cornerB, 0.f), addSkirtVertex(cornerB, -skirtDepth),
                       addSkirtVertex(cornerA, -skirtDepth) },
-                    cellFaceDatas[cellPos.x + numCells * cellPos.y]);
+                    faceData);
         }
     }
 

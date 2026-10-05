@@ -27,6 +27,14 @@ Gentle cells share smooth vertex normals; steep cells are faceted with their tri
 heightfield turns a cliff into long thin triangles, and a smooth normal averaged with the ground above
 and below strays so far from theirs that it streaked their shading and shadows into spikes.
 
+Landforms built from vertical walls opt in to cliff columns (`BiomeData::lodCliffColumns`, Tianzi): there
+a cell dropping more than a couple of cell widths is four flat quadrants at its corners' heights with
+vertical walls between them, so walls stand halfway between samples and pillars keep flat tops. Sloped
+triangles spanning a pillar's foot to its top made every Tianzi pillar a spike. It is per biome rather
+than by slope because the same drop is a cone on quartz spikes and a ramp on mesa walls, which columns
+turned into rectangles and stair patches set into smooth slopes. Where a column cell meets a sloped one,
+slivers fill the gap between the flat quadrant tops and the neighbor's straight edge.
+
 A cell still shows one block, chosen as block terrain at that slope would mostly look: its top block
 where the slope is gentle (under 45 degrees, where block terrain shows more top than side); where it is
 steeper, the side of its top block if the cell drops no more than the topsoil depth (snowy grass under a
@@ -113,8 +121,10 @@ past the chunk distance, where heightfields dropped them at a hard edge.
 
 ## Quadtree and selection
 
-A tile at level L covers 2^L × 2^L chunks with at most 256 cells per side, so cells are one block up to
-level 4 and double each level after. At 128 cells, a cell covered 3-6 pixels at 1440p where its level
+A tile at level L covers 2^L × 2^L chunks with at most 256 cells per side, so cells double each level
+after level 4, and are never finer than voxel tiles' 2-block cells. One-block cells on the level-4 tiles
+just past the voxel ring showed more detail than the voxel tiles that replace them, most visibly on cliff
+columns. At 128 cells, a cell covered 3-6 pixels at 1440p where its level
 starts, enough to show faceting; 256 brings it near a pixel for about 1.2 GB more VRAM at render
 distance 30 (BLAS, indices and vertices of the heightfield tiles) and no measurable frame time. A tile subdivides when the camera is within two of its widths,
 which keeps a cell's angular size roughly constant, or when it reaches into the chunk distance (the
