@@ -351,7 +351,7 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
                                               const float3 surfGeoNor_WS,
                                               const RayCone rayCone,
                                               const bool canPassthrough,
-                                              const bool startUnderwater,
+                                              const SurfaceMedia surfMedia,
                                               const bool acceptsBacksideLight,
                                               inout RandomNumberGenerator rng)
 {
@@ -381,7 +381,7 @@ DirectLightingSample sampleDirectLightingRtsl(const float3 surfPos_WS,
 
     float3 Le;
     const bool didHit = traceToLight(
-        surfPos_WS, surfGeoNor_WS, wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, startUnderwater, rng, Le);
+        surfPos_WS, surfGeoNor_WS, wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, surfMedia, rng, Le);
     if (!didHit)
     {
         return result;

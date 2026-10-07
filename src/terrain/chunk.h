@@ -246,6 +246,12 @@ private:
 
     Instance* terrainInstance{ nullptr };
     Instance* waterInstance{ nullptr };
+    // Side faces of volume blocks next to a water top, split at the water surface. Deformable so the
+    // split moves with the waves; see knowledge/terrain/greedy_meshing.md
+    Instance* waterlineInstance{ nullptr };
+    // Waterline faces meshed by createInstances, moved into a waterline instance on the main thread
+    // only when there are any (few chunks have them)
+    HostGeometry waterlineGeometry{};
 
     static constexpr uint32_t structureNeighborSideLength = 2 * structureMaxChunkRadius + 1;
     static constexpr uint32_t numStructureNeighbors = structureNeighborSideLength * structureNeighborSideLength;
@@ -277,7 +283,9 @@ private:
     void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures, CaveStructureType type);
     void runStructuresAndDecoratorPass();
 
-    bool shouldGenerateFace(glm::ivec3 thisPos_CS, BlockType thisBlockType, BlockShape thisBlockShape, glm::ivec3 neighborPos_CS, int faceIdx);
+    // Neighbors above or below the chunk read as air
+    const BlockData& getNeighborBlockData(glm::ivec3 neighborPos_CS, int faceIdx) const;
+    glm::ivec3 getTransformOffset() const;
 
     bool isRegionAllBlockType(const glm::uvec3 startPos, const glm::uvec3 endPos, BlockType blockType, BlockShape blockShape = BlockShape::COUNT);
     bool isSegmentSurroundedBySolid(const glm::uvec3 startPos,
@@ -306,10 +314,13 @@ public:
 
     void setInstances(Instance* terrainInstance, Instance* waterInstance);
     void createInstances();
+    // Main thread, after createInstances
+    void createWaterlineInstance(Scene* scene, ToFreeList& toFreeList);
     void destroyInstances(ToFreeList& toFreeList);
     void cleanUnusedInstances(ToFreeList& toFreeList);
     Instance* getTerrainInstance() const;
-    Instance* getWaterInstance() const;
+    // Water and waterline instances; null when the chunk has no such faces
+    std::array<Instance*, 2> getDeformableInstances() const;
 
     ChunkState getState() const;
     void setState(ChunkState newState);

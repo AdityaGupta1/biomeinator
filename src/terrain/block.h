@@ -5,6 +5,7 @@
 
 #include "block_ids.h"
 #include "block_orientation.h"
+#include "rendering/common/common_enums.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -24,6 +25,8 @@ enum class BlockType : uint8_t
     // Opaque-alpha cubes rendered as glass (specular reflection + refraction); see
     // knowledge/terrain/block_system.md
     GLASS,
+    // Opaque-alpha cubes filled with a scattering medium, rendered as a translucent surface (ice)
+    SCATTERING,
 
     COUNT
 };
@@ -90,6 +93,7 @@ struct BlockData
     // Color comes from a world-space ramp rather than the block's texture (see getProceduralColor)
     bool proceduralColor{ false };
     bool randomJitter{ false };
+    Medium medium{ Medium::AIR }; // what fills the cell; non-air only for water and volume blocks
     BlockStateKind stateKind{ BlockStateKind::NONE };
     uint32_t modelIdx{ ~0u };
     std::array<uint8_t, 4> rotationY{ 0, 0, 0, 0 }; // quarter turns
@@ -98,10 +102,16 @@ struct BlockData
     Block upperHalf{ Block::AIR };
 };
 
-// These shapes never hide a neighboring solid, cutout, or glass cube face.
+// These shapes never hide a neighboring solid, cutout, or volume cube face.
 constexpr bool isDecoratorShape(BlockShape shape)
 {
     return shape == BlockShape::X_SHAPED || shape == BlockShape::DECORATOR_CUSTOM;
+}
+
+// Cubes filled with a transmissive medium, whose faces are interfaces between media
+constexpr bool isVolumeType(BlockType type)
+{
+    return type == BlockType::GLASS || type == BlockType::SCATTERING;
 }
 
 // Face direction ordering matches chunk neighbor directions: +X,+Z,-X,-Z,+Y,-Y.
@@ -111,7 +121,7 @@ constexpr bool blockFaceVisible(BlockType type, BlockShape shape, BlockType neig
 {
     const BlockFace face = static_cast<BlockFace>(faceIdx);
     if (neighborType == BlockType::AIR) return true;
-    if ((type == BlockType::SOLID || type == BlockType::TRANSPARENT_CUTOUT || type == BlockType::GLASS) &&
+    if ((type == BlockType::SOLID || type == BlockType::TRANSPARENT_CUTOUT || isVolumeType(type)) &&
         isDecoratorShape(neighborShape)) return true;
     // A layer fills only the bottom of its cell, so it hides no side or bottom face of a non-solid
     // neighbor (leaves, glass, water). Solid neighbors get this from the height comparison below.
@@ -133,7 +143,14 @@ constexpr bool blockFaceVisible(BlockType type, BlockShape shape, BlockType neig
         return neighborType != BlockType::TRANSPARENT_CUTOUT || neighborShape != BlockShape::CUBE ||
                face == BlockFace::X_POS || face == BlockFace::Z_POS || face == BlockFace::Y_POS;
     case BlockType::GLASS:
-        return neighborType != BlockType::GLASS && neighborType != BlockType::SOLID;
+    case BlockType::SCATTERING:
+        if (neighborType == type || neighborType == BlockType::SOLID)
+        {
+            return false;
+        }
+        // Two different volume blocks share one interface face, owned like a cutout boundary.
+        return !isVolumeType(neighborType) ||
+               face == BlockFace::X_POS || face == BlockFace::Z_POS || face == BlockFace::Y_POS;
     case BlockType::WATER:
         return shape == BlockShape::LIQUID_TOP && face == BlockFace::Y_POS;
     default:

@@ -89,7 +89,7 @@ bool traceToLight(const float3 surfPos_WS,
                   const AreaLight light,
                   const RayCone rayCone,
                   const bool canPassthrough,
-                  const bool startUnderwater,
+                  const SurfaceMedia surfMedia,
                   inout RandomNumberGenerator rng,
                   out float3 Le)
 {
@@ -117,12 +117,11 @@ bool traceToLight(const float3 surfPos_WS,
     }
 
     Payload lightPayload;
-    lightPayload.flags =
-        (canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0) |
-        (startUnderwater ? PAYLOAD_FLAG_UNDERWATER : 0);
+    lightPayload.flags = canPassthrough ? PAYLOAD_FLAG_REFRACTION_PASSTHROUGH : 0;
     lightPayload.pathWeight = float3(1.f, 1.f, 1.f);
     lightPayload.rng = rng;
-    lightPayload.waterEntryT = startUnderwater ? 0.f : RAY_DEFAULT_TMAX;
+    lightPayload.waterEntryT =
+        isShadowRayStartUnderwater(surfMedia, wi_WS, surfGeoNor_WS) ? 0.f : RAY_DEFAULT_TMAX;
     lightPayload.waterExitT = RAY_DEFAULT_TMAX;
     lightPayload.rayCone = rayCone;
     if (isSegmentOccluded(ray, lightPayload))
@@ -155,7 +154,7 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
                                                  const float3 surfGeoNor_WS,
                                                  const RayCone rayCone,
                                                  const bool canPassthrough,
-                                                 const bool startUnderwater,
+                                                 const SurfaceMedia surfMedia,
                                                  const bool acceptsBacksideLight,
                                                  inout RandomNumberGenerator rng)
 {
@@ -176,7 +175,7 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
 
     float3 Le;
     const bool didHitLight = traceToLight(
-        surfPos_WS, surfGeoNor_WS, result.wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, startUnderwater, rng, Le);
+        surfPos_WS, surfGeoNor_WS, result.wi_WS, pointOnLight_WS, lightBary2, light, rayCone, canPassthrough, surfMedia, rng, Le);
     if (!didHitLight)
     {
         return result;

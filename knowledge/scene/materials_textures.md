@@ -1,4 +1,4 @@
-_Last edited: 2026-09-23_
+_Last edited: 2026-09-30_
 
 # Materials and Textures
 
@@ -77,8 +77,8 @@ texels come from `marble.normal.png` or `stone.normal.png`, respectively. Their 
 and bottom faces reuse those source normal maps directly through the block textures.
 
 `auxTextureId` normally holds an emissive color texture; `MATERIAL_FLAG_PACKED_AUX` makes it a linear packed aux texture instead:
-r = per-texel emissive strength, g = biome tint mask, b = roughness for faces shaded as glass
-(read only there, so every other block's zero-filled b costs nothing). Aux data is authored as an optional
+r = per-texel emissive strength, g = biome tint mask, b = roughness for faces shaded as glass or as
+a scattering surface (read only there, so every other block's zero-filled b costs nothing). Aux data is authored as an optional
 `<name>.aux.png` companion next to each block texture — most textures have none, and missing
 files load as zero-filled slices. Emission *color* comes from the base
 color texture — the shader zeroes diffuse wherever aux.r > 0, preserving the old

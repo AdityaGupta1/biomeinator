@@ -496,7 +496,8 @@ void Chunk::placeSnowLayers()
         Block& topBlock = this->blocks[baseBlockIdx + topY];
         const BlockData& topBlockData = Blocks::getBlockData(topBlock);
         if (topBlockData.shape != BlockShape::CUBE ||
-            (topBlockData.type != BlockType::SOLID && topBlockData.type != BlockType::TRANSPARENT_CUTOUT))
+            (topBlockData.type != BlockType::SOLID && topBlockData.type != BlockType::TRANSPARENT_CUTOUT &&
+             topBlockData.type != BlockType::SCATTERING))
         {
             continue;
         }
@@ -1046,13 +1047,11 @@ static inline Vertex makeVertex(const glm::vec3& pos, const glm::vec3& nor, cons
     return { vec3ToDirectX(pos), Util::octEncode(vec3ToDirectX(nor)), { uv.x, uv.y } };
 }
 
-bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockShape thisBlockShape, ivec3 neighborPos_CS, int faceIdx)
+const BlockData& Chunk::getNeighborBlockData(ivec3 neighborPos_CS, int faceIdx) const
 {
-    ASSERT(thisBlockType != BlockType::AIR); // AIR should be skipped before this function is even called
-
     if (neighborPos_CS.y < 0 || neighborPos_CS.y >= chunkSizeY)
     {
-        return true;
+        return Blocks::getBlockData(Block::AIR);
     }
 
     Block neighborBlock;
@@ -1073,9 +1072,38 @@ bool Chunk::shouldGenerateFace(ivec3 thisPos_CS, BlockType thisBlockType, BlockS
         neighborBlock = blocks[Chunk::blockPosToIdx(uvec3(neighborPos_CS))];
     }
 
-    const BlockData& neighborBlockData = Blocks::getBlockData(neighborBlock);
-    return blockFaceVisible(thisBlockType, thisBlockShape, neighborBlockData.type,
-                            neighborBlockData.shape, faceIdx);
+    return Blocks::getBlockData(neighborBlock);
+}
+
+// Media on both sides of a cube face. In front is the neighbor's medium, except where a partial-height
+// block leaves the rest of a cell open to air. Only faces of medium-filled blocks are boundaries:
+// light never crosses an opaque face, and a diffuse sample dipping below its shading normal must not
+// pull the path out of the water it is in.
+static uint32_t makeFaceMediaFlags(const Medium front, const Medium back)
+{
+    return (static_cast<uint32_t>(front) << FACE_MEDIUM_FRONT_SHIFT) | (static_cast<uint32_t>(back) << FACE_MEDIUM_BACK_SHIFT);
+}
+
+static uint32_t getFaceMediaFlags(const BlockData& block, const BlockData& neighbor, int faceIdx)
+{
+    if (block.medium == Medium::AIR)
+    {
+        return 0;
+    }
+    const BlockFace face = static_cast<BlockFace>(faceIdx);
+    const bool frontIsAir = (face == BlockFace::Y_POS && blockShapeTopHeight(block.shape) < 1.f) ||
+                            (face == BlockFace::Y_NEG && blockShapeTopHeight(neighbor.shape) < 1.f);
+    return makeFaceMediaFlags(frontIsAir ? Medium::AIR : neighbor.medium, block.medium);
+}
+
+static void appendQuadIdxs(std::vector<uint32_t>& idxs, uint32_t baseVertIdx)
+{
+    idxs.emplace_back(baseVertIdx + 0u);
+    idxs.emplace_back(baseVertIdx + 1u);
+    idxs.emplace_back(baseVertIdx + 2u);
+    idxs.emplace_back(baseVertIdx + 0u);
+    idxs.emplace_back(baseVertIdx + 2u);
+    idxs.emplace_back(baseVertIdx + 3u);
 }
 
 inline constexpr ivec3 cubeFaceVertPositions[24] = {
@@ -1136,11 +1164,24 @@ static PerFaceData makeBlockFaceData(const BlockData& block, uint32_t slice, uin
     {
         flags |= FACE_FLAG_IS_GLASS;
     }
+    if (block.type == BlockType::SCATTERING)
+    {
+        flags |= FACE_FLAG_IS_SCATTERING;
+    }
 
     PerFaceData data{};
     data.setFlags(flags);
     data.setTexArraySliceIdx(slice);
     return data;
+}
+
+static void finalizeDeformableInstance(Instance* instance, const ivec3 transformOffset, const TerrainMaterial material)
+{
+    instance->setTransformOffset(transformOffset);
+    instance->setTrisPerFaceLog2(1);
+    instance->finalizeGeometry();
+    instance->setMaterialIdx(TerrainMaterials::getMaterialIdx(material));
+    instance->setIsDeformable(true);
 }
 
 void Chunk::createInstances()
@@ -1153,6 +1194,7 @@ void Chunk::createInstances()
     std::vector<Vertex>& waterVerts = this->waterInstance->hostGeometry.verts;
     std::vector<uint32_t>& waterIdxs = this->waterInstance->hostGeometry.idxs;
     std::vector<PerFaceData>& waterPerFaceDatas = this->waterInstance->hostGeometry.perFaceDatas;
+    this->waterlineGeometry = {};
 
     constexpr size_t numTerrainVertsToReserve = 1 << 14; // approximate size
     terrainVerts.reserve(numTerrainVertsToReserve);
@@ -1310,62 +1352,79 @@ void Chunk::createInstances()
                         std::vector<uint32_t>& idxs = isWater ? waterIdxs : terrainIdxs;
                         std::vector<PerFaceData>& perFaceDatas = isWater ? waterPerFaceDatas : terrainPerFaceDatas;
                         const float topHeight = blockShapeTopHeight(blockData.shape);
-                        const float topYSubtract = 1.f - topHeight;
-                        // A layer's side faces show the top strip of the texture instead of the whole
-                        // tile squeezed into 1/8 of a block. Lava tops keep the full tile, as before.
                         const bool cropSideUvs = (blockData.shape == BlockShape::LAYER);
 
                         for (uint faceIdx = 0; faceIdx < blockFaceCount; ++faceIdx)
                         {
                             const ivec3 neighborOffset = blockFaceBases[faceIdx].normal;
                             const ivec3 neighborPos_CS = ivec3(blockPos_CS) + neighborOffset;
+                            const BlockData& neighborData = this->getNeighborBlockData(neighborPos_CS, faceIdx);
 
-                            if (!shouldGenerateFace(blockPos_CS, blockData.type, blockData.shape, neighborPos_CS, faceIdx))
+                            if (!blockFaceVisible(blockData.type, blockData.shape, neighborData.type, neighborData.shape, faceIdx))
                             {
                                 continue;
                             }
 
-                            const uint baseVertIdx = static_cast<uint>(verts.size());
-
                             const ivec3* thisFaceVertPositions = cubeFaceVertPositions + (faceIdx * 4);
                             const uint32_t texArraySliceIdx = blockData.texSlices[glm::max(static_cast<int>(faceIdx) - 3, 0)];
-                            for (uint i = 0; i < 4; ++i)
+                            const bool isSideFace = faceIdx < 4;
+
+                            // Emits the face over [yBottom, yTop] of the cell. Side faces (+X, +Z, -X, -Z)
+                            // run v from vTop at the top edge to vBottom at the bottom.
+                            const auto appendFace = [&](std::vector<Vertex>& faceVerts, std::vector<uint32_t>& faceIdxs,
+                                                        const float yBottom, const float yTop, const float vTop, const float vBottom)
                             {
-                                vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + thisFaceVertPositions[i]);
-                                if (thisFaceVertPositions[i].y == 1)
+                                const uint baseVertIdx = static_cast<uint>(faceVerts.size());
+                                for (uint i = 0; i < 4; ++i)
                                 {
-                                    vertPos_CS.y -= topYSubtract;
+                                    const ivec3 corner = thisFaceVertPositions[i];
+                                    const bool isTopCorner = (corner.y == 1);
+                                    vec3 vertPos_CS = vec3(ivec3(blockPos_CS) + corner);
+                                    vertPos_CS.y += (isTopCorner ? yTop : yBottom) - static_cast<float>(corner.y);
+                                    vec2 uv = vec2(uvOffsets[i]);
+                                    if (isSideFace)
+                                    {
+                                        uv.y = isTopCorner ? vTop : vBottom;
+                                    }
+                                    faceVerts.emplace_back(makeVertex(vertPos_CS, vec3(neighborOffset), uv));
                                 }
+                                appendQuadIdxs(faceIdxs, baseVertIdx);
+                            };
 
-                                vec2 uv = vec2(uvOffsets[i]);
-                                // Side faces (+X, +Z, -X, -Z) run v = 0 at the top edge to 1 at the bottom
-                                if (cropSideUvs && faceIdx < 4 && thisFaceVertPositions[i].y == 0)
+                            // A volume block's side next to a water top borders water below the surface and air
+                            // above it, so it is split into two bands at the surface. Their v counts down from
+                            // the cell's top edge, which keeps the texture still as the bands follow the waves.
+                            if (isVolumeType(blockData.type) && isSideFace &&
+                                neighborData.type == BlockType::WATER && neighborData.shape == BlockShape::LIQUID_TOP)
+                            {
+                                const float surfaceHeight = blockShapeTopHeight(neighborData.shape);
+                                const auto appendBand = [&](const float yBottom, const float yTop, const Medium frontMedium)
                                 {
-                                    uv.y = topHeight;
-                                }
-
-                                verts.emplace_back(makeVertex(vertPos_CS, vec3(neighborOffset), uv));
+                                    appendFace(this->waterlineGeometry.verts, this->waterlineGeometry.idxs, yBottom, yTop,
+                                               1.f - yTop, 1.f - yBottom);
+                                    this->waterlineGeometry.perFaceDatas.emplace_back(makeBlockFaceData(
+                                        blockData, texArraySliceIdx, makeFaceMediaFlags(frontMedium, blockData.medium)));
+                                };
+                                appendBand(0.f, surfaceHeight, neighborData.medium);
+                                appendBand(surfaceHeight, 1.f, Medium::AIR);
+                                continue;
                             }
 
                             const uint32_t triangleIdx = static_cast<uint32_t>(idxs.size() / 3u);
+                            // A layer's side faces show the top strip of the texture instead of the whole tile
+                            // squeezed into 1/8 of a block. Lava tops keep the full tile.
+                            appendFace(verts, idxs, 0.f, topHeight, 0.f, cropSideUvs ? topHeight : 1.f);
 
-                            idxs.emplace_back(baseVertIdx + 0u);
-                            idxs.emplace_back(baseVertIdx + 1u);
-                            idxs.emplace_back(baseVertIdx + 2u);
-                            idxs.emplace_back(baseVertIdx + 0u);
-                            idxs.emplace_back(baseVertIdx + 2u);
-                            idxs.emplace_back(baseVertIdx + 3u);
-
-                            uint32_t waterFlags = 0;
+                            uint32_t faceFlags = getFaceMediaFlags(blockData, neighborData, faceIdx);
                             if (isWater)
                             {
-                                waterFlags |= FACE_FLAG_IS_WATER;
+                                faceFlags |= FACE_FLAG_IS_WATER;
                                 if (faceIdx == blockFaceIndex(BlockFace::Y_POS))
                                 {
-                                    waterFlags |= FACE_FLAG_IS_WATER_TOP;
+                                    faceFlags |= FACE_FLAG_IS_WATER_TOP;
                                 }
                             }
-                            perFaceDatas.emplace_back(makeBlockFaceData(blockData, texArraySliceIdx, waterFlags));
+                            perFaceDatas.emplace_back(makeBlockFaceData(blockData, texArraySliceIdx, faceFlags));
 
                             if (useOmms && !isWater)
                             {
@@ -1396,9 +1455,6 @@ void Chunk::createInstances()
     }
     this->terrainInstance->setIsOpaque(useOmms && !hasCutoutFaces);
 
-    const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
-    const ivec3 transformOffset = ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/);
-
     // The packed form is the geometry: the fp32 copy that builds the BLAS and the area lights is
     // decoded from it so every consumer sees the same quantized positions and UVs
     std::vector<PackedTerrainVertex>& terrainPackedVerts = this->terrainInstance->hostGeometry.packedTerrainVerts;
@@ -1406,7 +1462,7 @@ void Chunk::createInstances()
     std::transform(terrainVerts.begin(), terrainVerts.end(), terrainPackedVerts.begin(), Util::packTerrainVertex);
     std::transform(terrainPackedVerts.begin(), terrainPackedVerts.end(), terrainVerts.begin(), Util::unpackTerrainVertex);
 
-    terrainInstance->setTransformOffset(transformOffset);
+    terrainInstance->setTransformOffset(this->getTransformOffset());
     terrainInstance->setTrisPerFaceLog2(1);
     terrainInstance->finalizeGeometry();
     terrainInstance->setMaterialIdx(TerrainMaterials::getMaterialIdx(TerrainMaterial::DEFAULT));
@@ -1414,24 +1470,38 @@ void Chunk::createInstances()
 
     if (!waterVerts.empty())
     {
-        waterInstance->setTransformOffset(transformOffset);
-        waterInstance->setTrisPerFaceLog2(1);
-        waterInstance->finalizeGeometry();
-        waterInstance->setMaterialIdx(TerrainMaterials::getMaterialIdx(TerrainMaterial::WATER));
-        waterInstance->setIsDeformable(true);
+        finalizeDeformableInstance(this->waterInstance, this->getTransformOffset(), TerrainMaterial::WATER);
     }
 
     Terrain::addChunkWithNewGeometry(this);
+}
+
+void Chunk::createWaterlineInstance(Scene* scene, ToFreeList& toFreeList)
+{
+    ASSERT(this->waterlineInstance == nullptr);
+    if (this->waterlineGeometry.verts.empty())
+    {
+        return;
+    }
+
+    this->waterlineInstance = scene->requestNewInstance(toFreeList, HostGeometrySize::SMALL);
+    this->waterlineInstance->hostGeometry = std::move(this->waterlineGeometry);
+    finalizeDeformableInstance(this->waterlineInstance, this->getTransformOffset(), TerrainMaterial::DEFAULT);
+    this->waterlineInstance->setIsOpaque(true); // volume block textures have no cutouts
+    this->waterlineInstance->setVisible(this->areInstancesVisible);
 }
 
 void Chunk::destroyInstances(ToFreeList& toFreeList)
 {
     toFreeList.pushInstance(this->terrainInstance);
     this->terrainInstance = nullptr;
-    if (this->waterInstance != nullptr)
+    for (Instance** instance : { &this->waterInstance, &this->waterlineInstance })
     {
-        toFreeList.pushInstance(this->waterInstance);
-        this->waterInstance = nullptr;
+        if (*instance != nullptr)
+        {
+            toFreeList.pushInstance(*instance);
+            *instance = nullptr;
+        }
     }
     this->setState(ChunkState::NEEDS_GEOMETRY);
     this->setIsMarkedForDestruction(false);
@@ -1452,9 +1522,15 @@ Instance* Chunk::getTerrainInstance() const
     return this->terrainInstance;
 }
 
-Instance* Chunk::getWaterInstance() const
+ivec3 Chunk::getTransformOffset() const
 {
-    return this->waterInstance;
+    const ivec2 chunkBlockPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
+    return ivec3(chunkBlockPos_WS.x, 0, chunkBlockPos_WS.y /*z*/);
+}
+
+std::array<Instance*, 2> Chunk::getDeformableInstances() const
+{
+    return { this->waterInstance, this->waterlineInstance };
 }
 
 ChunkState Chunk::getState() const
@@ -1523,9 +1599,12 @@ void Chunk::setInstancesVisible(bool visible)
     {
         this->terrainInstance->setVisible(visible);
     }
-    if (this->waterInstance != nullptr)
+    for (Instance* instance : this->getDeformableInstances())
     {
-        this->waterInstance->setVisible(visible);
+        if (instance != nullptr)
+        {
+            instance->setVisible(visible);
+        }
     }
 }
 

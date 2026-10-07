@@ -761,7 +761,7 @@ void render()
 
     auto& sceneParams = paramBlockManager.sceneParams;
     sceneParams->numAreaLights = renderState.scene.getNumAreaLights();
-    sceneParams->cameraUnderwater = 0;
+    sceneParams->cameraMedium = static_cast<uint32_t>(Medium::AIR);
     sceneParams->voxelBoundsMin_WS = { 0, 0, 0 };
     sceneParams->voxelBoundsMax_WS = { 0, 0, 0 };
     sceneParams->biomeMapTexelsPerSide = 0;
@@ -772,7 +772,7 @@ void render()
         const glm::ivec3 voxelBoundsMax_WS = Terrain::getVoxelRenderBoundsMax_WS();
         const glm::ivec3 globalInstanceOffset = renderState.scene.getGlobalInstanceOffset();
 
-        sceneParams->cameraUnderwater = Terrain::isCameraUnderwater() ? 1 : 0;
+        sceneParams->cameraMedium = static_cast<uint32_t>(Terrain::getCameraMedium());
 
         const glm::ivec2 biomeMapOrigin = BiomeMap::getOriginBlocksXZ_WS();
         sceneParams->biomeMapOriginBlocksXZ_WS = { biomeMapOrigin.x, biomeMapOrigin.y /*z*/ };

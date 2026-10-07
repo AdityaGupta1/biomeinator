@@ -1,4 +1,5 @@
 {
     "textures": "white_crystal",
-    "type": "glass"
+    "type": "glass",
+    "medium": "glass"
 }

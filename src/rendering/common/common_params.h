@@ -110,7 +110,7 @@ struct SceneParams
 {
     uint voxelMode;
     uint numAreaLights;
-    uint cameraUnderwater;
+    uint cameraMedium; // Medium
     uint pad0;
 
     int3 voxelBoundsMin_WS;

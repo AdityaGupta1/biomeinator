@@ -97,7 +97,6 @@ static void createMaterials(Scene* scene)
         waterMaterial.setHasDiffuse(false);
         waterMaterial.setHasGlossyReflection(true);
         waterMaterial.setHasGlossyTransmission(true);
-        waterMaterial.ior = 1.33f;
         MATERIAL_IDX(TerrainMaterial::WATER) = scene->addMaterial(toFreeList, &waterMaterial);
     }
 

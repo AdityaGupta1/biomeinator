@@ -7,12 +7,11 @@
 
 #include "common/global_params.hlsli"
 #include "common/payload.hlsli"
-
-static const float3 waterSigmaA = float3(0.35f, 0.06f, 0.02f) * 0.4f;
+#include "materials/media.hlsli"
 
 float3 computeWaterAbsorption(const float dist)
 {
-    return exp(-waterSigmaA * dist);
+    return exp(-getMediumSigmaA(Medium::WATER) * dist);
 }
 
 float getDistanceToVoxelBounds(const float3 origin, const float3 dir)
@@ -43,26 +42,53 @@ float getSegmentVolumeDistance(const Payload payload, const float3 rayOrigin, co
         : getDistanceToVoxelBounds(rayOrigin, rayDir);
 }
 
-void setUnderwaterFromHit(inout Payload payload, const bool wasBackfaceHit)
+// The medium on the far side of the hit face, which a transmitted path enters. Thin sheets (foliage, alpha
+// passthrough) have the same medium on both sides.
+Medium getFarSideMedium(const Payload payload, const PerFaceData perFaceData)
 {
-    if (wasBackfaceHit)
+    if (!perFaceData.isMediumBoundary())
     {
-        payload.flags &= ~PAYLOAD_FLAG_UNDERWATER;
+        return getPayloadMedium(payload);
     }
-    else
-    {
-        payload.flags |= PAYLOAD_FLAG_UNDERWATER;
-    }
+    return bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT) ? perFaceData.getFrontMedium() : perFaceData.getBackMedium();
+}
+
+void transmitThroughFace(inout Payload payload, const PerFaceData perFaceData)
+{
+    setPayloadMedium(payload, getFarSideMedium(payload, perFaceData));
+}
+
+// The media on the side of a surface the path arrived from (which its oriented geometric normal faces)
+// and on the far side
+struct SurfaceMedia
+{
+    Medium nearSide;
+    Medium farSide;
+};
+
+SurfaceMedia getSurfaceMedia(const Payload payload, const PerFaceData perFaceData)
+{
+    SurfaceMedia media;
+    media.nearSide = getPayloadMedium(payload);
+    media.farSide = getFarSideMedium(payload, perFaceData);
+    return media;
+}
+
+// A shadow ray starts in the medium on whichever side it leaves into
+bool isShadowRayStartUnderwater(const SurfaceMedia surfMedia, const float3 wi_WS, const float3 surfGeoNor_WS)
+{
+    return ((dot(wi_WS, surfGeoNor_WS) >= 0.f) ? surfMedia.nearSide : surfMedia.farSide) == Medium::WATER;
 }
 
 float3 computeSegmentAbsorption(const Payload payload, const float3 rayOrigin, const float3 rayDir)
 {
-    if (!bool(payload.flags & PAYLOAD_FLAG_UNDERWATER))
+    const Medium medium = getPayloadMedium(payload);
+    if (medium == Medium::AIR)
     {
         return float3(1.f, 1.f, 1.f);
     }
 
-    return computeWaterAbsorption(getSegmentVolumeDistance(payload, rayOrigin, rayDir));
+    return exp(-getMediumSigmaA(medium) * getSegmentVolumeDistance(payload, rayOrigin, rayDir));
 }
 
 float3 computePassthroughAbsorption(const Payload payload, const float rayEndT)
