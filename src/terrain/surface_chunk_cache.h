@@ -38,6 +38,17 @@ struct VoxelCell
     }
 };
 
+// The floor plants on a cell column's surface, which tiles show as cards: cells hold no plants
+struct CellPlants
+{
+    // The most common one, standing on the ground (the lower half of a two-tall plant)
+    Block block{ Block::AIR };
+    // Which of the column's blocks hold a plant, bit x + voxelCellSize * z
+    uint8_t blockMask{ 0 };
+    // The highest of their bases
+    int16_t baseY{ 0 };
+};
+
 // A surface-only chunk downsampled into cells, over the band of heights where its surface lies. Below the
 // band is solid rock, above it air.
 struct SurfaceChunkCells
@@ -49,6 +60,7 @@ struct SurfaceChunkCells
     std::vector<VoxelCell> cells;
     // Biome tint per cell column
     std::array<uint32_t, cellsPerChunkSide * cellsPerChunkSide> packedTints{};
+    std::array<CellPlants, cellsPerChunkSide * cellsPerChunkSide> plants{};
     // The real blocks along each side (+X, +Z, -X, -Z, as block faces), over the band: tiles cull the faces
     // beside the chunk against them rather than against its cells, which cover more. Indexed by position
     // along the side + chunkSizeXZ * (y - minBlockY).

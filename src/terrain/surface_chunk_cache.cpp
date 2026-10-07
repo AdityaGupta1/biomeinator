@@ -205,6 +205,43 @@ static std::unique_ptr<SurfaceChunkCells> downsampleChunk(const Chunk& chunk)
     {
         for (int x = 0; x < cellsPerChunkSide; ++x)
         {
+            CellPlants& plants = cells->plants[x + cellsPerChunkSide * z];
+            std::array<std::pair<Block, int>, voxelCellSize * voxelCellSize> plantCounts{};
+            for (int blockIdx = 0; blockIdx < voxelCellSize * voxelCellSize; ++blockIdx)
+            {
+                const uvec2 posXZ(x * voxelCellSize + blockIdx % voxelCellSize, z * voxelCellSize + blockIdx / voxelCellSize);
+                const Block* column = chunk.getGeneratedColumn(posXZ);
+                int topY = static_cast<int>(chunkSizeY) - 1;
+                while (topY > 0 && column[topY] == Block::AIR)
+                {
+                    --topY;
+                }
+                if (Blocks::getBlockData(column[topY]).shape != BlockShape::X_SHAPED)
+                {
+                    continue;
+                }
+                // The top of a two-tall plant stands on its lower half
+                if (topY > 0 && Blocks::getBlockData(column[topY - 1]).upperHalf == column[topY])
+                {
+                    --topY;
+                }
+                const Block plant = column[topY];
+                plants.blockMask |= static_cast<uint8_t>(1u << blockIdx);
+                plants.baseY = static_cast<int16_t>(std::max(static_cast<int>(plants.baseY), topY));
+                for (auto& [countedPlant, count] : plantCounts)
+                {
+                    if (count == 0 || countedPlant == plant)
+                    {
+                        countedPlant = plant;
+                        ++count;
+                        break;
+                    }
+                }
+            }
+            const auto mostCommon = std::max_element(plantCounts.begin(), plantCounts.end(),
+                [](const auto& a, const auto& b) { return a.second < b.second; });
+            plants.block = mostCommon->second > 0 ? mostCommon->first : Block::AIR;
+
             const Biome biome = chunk.getBiomes()[x * voxelCellSize + chunkSizeXZ * (z * voxelCellSize)];
             const vec3& tint = Biomes::getBiomeData(biome).grassTint;
             cells->packedTints[x + cellsPerChunkSide * z] = Util::packUnorm8Rgb(tint.r, tint.g, tint.b);

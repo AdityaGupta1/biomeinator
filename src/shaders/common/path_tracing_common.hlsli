@@ -265,8 +265,11 @@ bool acceptHitCandidate(inout Payload payload,
 
     const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, rayT);
     const PerFaceData perFaceData = loadPerFaceData(instanceData, primitiveIdx);
-    const float4 baseColor = getMaterialBaseColorAtHit(
-        material, instanceData, perFaceData, primitiveIdx, barycentrics, computeMipLevel(coneWidth));
+    // LOD tiles have no OMMs, so they test cutouts here against the finest mip as OMMs do: with OMMs on, a
+    // cutout texture's lower mips are opaque, which drew distant LOD plants as solid cards
+    const bool testsFinestMip = !testRefractionPassthrough && instanceData.vertexFormat == VERTEX_FORMAT_PACKED_LOD_TERRAIN;
+    const float4 baseColor = getMaterialBaseColorAtHit(material, instanceData, perFaceData, primitiveIdx, barycentrics,
+                                                       testsFinestMip ? 0.f : computeMipLevel(coneWidth));
 
     if (testRefractionPassthrough)
     {

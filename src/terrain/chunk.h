@@ -301,6 +301,10 @@ private:
     bool tryPlaceDecorator(uint32_t baseBlockIdx, uint32_t blockY, Block block);
     void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures, CaveStructureType type);
     void runStructuresAndDecoratorPass();
+    // Surface-only chunks have no cave air, so where a cave opens at the surface their plants differ from
+    // the full chunk's
+    void placeFloorDecorators();
+    void placeCaveDecorators();
     void fillBlocksFromStructureNeighbors();
 
     bool shouldGenerateFace(glm::ivec3 thisPos_CS, BlockType thisBlockType, BlockShape thisBlockShape, glm::ivec3 neighborPos_CS, int faceIdx);

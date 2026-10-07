@@ -98,7 +98,7 @@ past the chunk distance, where heightfields dropped them at a hard edge.
   replaced by chunks almost as soon as they were built.
 - Downsampling keeps the most common block that fills from the bottom (any shape but plants and models),
   ties to the higher, so canopies, trunks and thin pillars survive (slightly thickened) and surfaces keep
-  their top block. Plants vanish.
+  their top block. Plants are left out of cells and kept per cell column instead (see below).
 - A cell is not a cube: it fills from its bottom to its highest column, in eighths of a block, counting a
   block in the upper row as standing on a full one. Shapes keep their heights that way (a snow layer on
   the ground is an eighth of a block thick, not a full cell of snow), which works for any shape anchored
@@ -117,7 +117,17 @@ past the chunk distance, where heightfields dropped them at a hard edge.
 - Each chunk's cells cover only its own height band, with solid rock below. A tile meshes each chunk from
   the lowest band among it and its four neighbors, or a cliff wall facing a lower neighbor would be left
   out.
-- Leaves keep their cutout, without OMMs, so a tile with leaf faces runs the anyhit alpha test.
+- Leaves keep their cutout, without OMMs, so a tile with leaf faces runs the anyhit alpha test. With
+  OMMs on, a cutout texture's lower mips are opaque (OMMs test the finest one), so LOD geometry tests
+  cutouts against mip 0 in the anyhit; at the lower mips distant LOD plants drew as solid cards, darker than
+  the chunks beside them.
+- Surface-only chunks run the floor decorator pass (not the cave one), and each cell column records its
+  plants: which blocks hold one, the most common one and their highest base. Tiles show them as one or two
+  axis-aligned cards through the column's center, whose position-derived UVs repeat the plant once per
+  block, so a 2-block card is two plants: a quarter of the quads of per-plant crossed pairs. The number of
+  plants shown was calibrated against chunks by average screen color: a flat card covers less than a crossed
+  pair, so cards show about a quarter more plants than the column has. Only the most common plant shows, so
+  lone flowers in grass are lost.
 
 ## Quadtree and selection
 

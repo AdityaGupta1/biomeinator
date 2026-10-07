@@ -591,13 +591,18 @@ void Chunk::runStructuresAndDecoratorPass()
     // Before decorators, which only fill air: a layer keeps plants off the ground it covers
     this->placeSnowLayers();
 
-    // Decorators vanish at the distances surface-only chunks are seen from, and the cave pass needs the
-    // cave data they skip
+    this->placeFloorDecorators();
+
+    // Cave decorators need the cave data surface-only chunks skip
     if (this->isSurfaceOnly)
     {
         return;
     }
+    this->placeCaveDecorators();
+}
 
+void Chunk::placeFloorDecorators()
+{
     const uint worldSeed = SettingsManager::getWorldSeed();
     RandomNumberGenerator decoratorRng = initRng(worldSeed ^ hash(198594190), this->chunkPos.x, this->chunkPos.y /*z*/);
     for (uint blockZ = 0; blockZ < chunkSizeXZ; ++blockZ)
@@ -642,7 +647,11 @@ void Chunk::runStructuresAndDecoratorPass()
             }
         }
     }
+}
 
+void Chunk::placeCaveDecorators()
+{
+    const uint worldSeed = SettingsManager::getWorldSeed();
     const ivec2 chunkOriginXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
     const auto getBlock = [&](ivec3 pos_CS) -> Block
     {

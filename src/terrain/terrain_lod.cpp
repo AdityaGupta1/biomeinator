@@ -766,12 +766,71 @@ bool LodTile::meshVoxels()
     const PerFaceData waterFaceData =
         blockFaceData(Block::WATER_TOP, BlockFace::Y_POS, FACE_FLAG_IS_WATER | FACE_FLAG_IS_WATER_TOP);
     bool hasCutoutFaces = false;
+
+    // A cell column's plants are cards through its center along the axes. The texture repeats once per
+    // block, so a card shows a plant per block it spans: one or two cards of one or two blocks, crossed when
+    // there are two. A flat card covers less than the crossed pair chunks draw per plant, so the cards show a
+    // quarter more plants than the cell has (up to four); as many again made the tiles brighter than the
+    // chunks beside them, and twice as many darker.
+    const auto addPlantCards = [&](ivec2 cellXZ, const CellPlants& plants, uint32_t packedTint)
+    {
+        const vec2 cellMinXZ = vec2(cellXZ) * static_cast<float>(voxelCellSize);
+        const vec2 cellCenter = cellMinXZ + 0.5f * static_cast<float>(voxelCellSize);
+        const int numPlants = std::min((std::popcount(plants.blockMask) * 5 + 2) / 4, voxelCellSize * voxelCellSize);
+        // The first card's axis, varied by position so cards don't all face one way
+        const bool firstAlongX = ((cellXZ.x ^ cellXZ.y) & 1) == 0;
+        const int firstBlockIdx = std::countr_zero(plants.blockMask);
+        for (int cardIdx = 0, plantsLeft = numPlants; plantsLeft > 0; ++cardIdx)
+        {
+            const bool alongX = (cardIdx == 0) == firstAlongX;
+            const int length = std::min(plantsLeft, voxelCellSize);
+            plantsLeft -= length;
+            // A one-block card stands on a block holding a plant
+            const int firstAlong = length == voxelCellSize ? 0
+                                   : alongX              ? firstBlockIdx % voxelCellSize
+                                                         : firstBlockIdx / voxelCellSize;
+            const vec2 axis = alongX ? vec2(1.f, 0.f) : vec2(0.f, 1.f);
+            const float alongMin = (alongX ? cellMinXZ.x : cellMinXZ.y) + static_cast<float>(firstAlong);
+            const vec2 start = alongX ? vec2(alongMin, cellCenter.y) : vec2(cellCenter.x, alongMin);
+            const vec2 end = start + axis * static_cast<float>(length);
+            const vec3 normal = alongX ? vec3(0.f, 0.f, 1.f) : vec3(1.f, 0.f, 0.f);
+
+            Block block = plants.block;
+            for (float bottomY = static_cast<float>(plants.baseY); block != Block::AIR; bottomY += 1.f)
+            {
+                std::array<uint32_t, 4> corners;
+                const std::array<vec3, 4> positions{ vec3(start.x, bottomY + 1.f, start.y), vec3(end.x, bottomY + 1.f, end.y),
+                                                     vec3(end.x, bottomY, end.y), vec3(start.x, bottomY, start.y) };
+                for (int i = 0; i < 4; ++i)
+                {
+                    corners[i] = addVertex(terrainGeometry, positions[i], normal, packedTint);
+                }
+                addFace(terrainGeometry, corners, blockFaceData(block, alongX ? BlockFace::Z_POS : BlockFace::X_POS));
+                block = Blocks::getBlockData(block).upperHalf;
+            }
+        }
+        hasCutoutFaces = true;
+    };
+
     for (int chunkZ = 0; chunkZ < sideChunks; ++chunkZ)
     {
         for (int chunkX = 0; chunkX < sideChunks; ++chunkX)
         {
             const ivec2 chunkOffset(chunkX, chunkZ);
             const SurfaceChunkCells& cells = chunkCells(chunkOffset);
+            for (int localZ = 0; localZ < cellsPerChunkSide; ++localZ)
+            {
+                for (int localX = 0; localX < cellsPerChunkSide; ++localX)
+                {
+                    const int columnIdx = localX + cellsPerChunkSide * localZ;
+                    const CellPlants& plants = cells.plants[columnIdx];
+                    if (plants.block != Block::AIR)
+                    {
+                        addPlantCards(chunkOffset * cellsPerChunkSide + ivec2(localX, localZ), plants,
+                                      cells.packedTints[columnIdx]);
+                    }
+                }
+            }
             // Below its band the chunk is solid, so its sides show down to the lowest neighboring band
             int minBlockY = cells.minBlockY;
             for (uint8_t sideIdx = 0; sideIdx < 4; ++sideIdx)
