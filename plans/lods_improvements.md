@@ -25,7 +25,7 @@ on LOD tiles, the water fade distances, and Tianzi spikes in heightfield tiles. 
 
 1. Distance fog that fades far terrain to a neutral color (done: aerial haze, see
    `knowledge/shaders/path_tracing.md`)
-2. Decorators in LOD tiles (deferred)
+2. Structure stand-ins and plant darkening on heightfield tiles
 3. Voxel mode regolding
 4. World import/export with LODs
 5. Possible further speedups
@@ -47,25 +47,23 @@ neutral color (blue-white, from a small set of settings or a gentle time-of-day 
 rather than one derived from the sky LUT. Fade by distance alone, with the fade start and strength as
 GUI settings so it can be tuned live.
 
-### 2. Decorators in LOD tiles (deferred)
+### 2. Decorators and structures in LOD tiles
 
-Symptom: dense grass/flower decorators on full-res chunks darken and texture the ground; surface-only
-chunks skip decorators and 2x downsampling would drop them anyway, so voxel tiles (and heightfields)
-look brighter and flatter. The difference is sharpest right at the full-res seam.
+Done for voxel tiles: surface-only chunks run the floor decorator pass and tiles show the plants as
+axis-aligned cards (see `knowledge/terrain/terrain_lod.md`), which closed the brightness seam with the
+full-res chunks. Voxel tiles already carry structures.
 
-Leaning towards a hybrid: real decorators merged into the nearest voxel tiles (levels 0-1, just past the
-chunks), statistical darkening beyond (level-2 voxel tiles and heightfields). At 1440p a block 500 blocks
-away is about 3 pixels wide and about 1.5 at 1,000, so far tufts would only show as shimmering speckle.
-Open questions: real decorators over the whole voxel ring or only near the seam; whether to accept the
-anyhit alpha-test cost at first (LOD tiles have no OMMs) or reuse the chunks' decorator OMMs.
-
-Real decorators, merged into tile geometry:
-- Surface-only chunks already run the structure pass; the floor decorator pass could run in the same
-  cells task (they skip it only because the cave half needs skipped data), so placement matches chunks.
-- An X-shaped decorator is 4 triangles; merged in, roughly as many triangles as the voxel terrain
-  itself, a few hundred MB for the ring. Fewer, larger tufts (e.g. 1 in 4 at 2x size) keep the coverage
-  for fewer triangles.
-- Cutouts run the anyhit alpha test without OMMs, on every ray type including shadows.
+Remaining, for heightfield tiles, which have neither:
+- Structure stand-ins, so forests don't end at the voxel ring. Default grid placement is a pure function
+  of world position (one jittered candidate per grid cell, filtered by biome, ground height, water and the
+  treeline), so heightfield tiles can compute the same candidates from their noise samples without
+  generating chunks; only ledge-scanning placement (Tianzi) and real-block support/clearance checks are
+  lost.
+  - Nearest heightfield level (5): proxy trees, a canopy box sized per structure type plus maybe a trunk,
+    about 10-20 triangles each; estimated +40-70% triangles on forested level-5 tiles only.
+  - Level 6 and beyond: a canopy shell, raising forested cells by the biome's canopy height with a leaf
+    material, so forests read as a lifted dark-green mass. No extra geometry.
+- Plants: statistical darkening (below), since plants there are under a pixel.
 
 Statistical darkening, how it would be computed:
 1. Coverage per (biome, ground block): summed weight of the `Decorator` entries that can stand on that
