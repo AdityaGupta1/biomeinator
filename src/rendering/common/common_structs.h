@@ -90,7 +90,7 @@ struct InstanceData
 
     uint materialIdx;
     uint tangentsBufferOffset; // separate VertexTangent array, or TANGENT_BUFFER_OFFSET_INVALID
-    uint trisPerFaceLog2; // triangle index >> this = PerFaceData index; 0 for glTF, 1 for terrain quads
+    uint trisPerFaceLog2; // triangle index >> this = PerFaceData index; 0 for glTF, 1 for terrain quads (implicit indices)
     uint vertexFormat; // VERTEX_FORMAT_*, selects which typed view of the verts buffer to read
 };
 

@@ -1,14 +1,22 @@
-_Last edited: 2026-09-09_
+_Last edited: 2026-10-06_
 
 # Custom decorator models
 
 `block_model.h/cpp` loads geometry once and caches four floor rotations for ordinary
 custom decorators, or six attachment directions with four quarter-turn vertex arrays
-each for `surface_mount` blocks, all with shared local indices. `Chunk::createInstances` chooses a variant, translates
-its vertices, rebases its indices, and appends triangle metadata to the ordinary
-terrain instance. Chunk BLAS/upload ownership remains unchanged. The immutable CPU
+each for `surface_mount` blocks. `Chunk::createInstances` chooses a variant, translates
+its vertices, and appends face metadata to the ordinary terrain instance. Chunk BLAS/upload ownership remains unchanged. The immutable CPU
 cache can be read concurrently without locks and survives chunk unload/reimport.
 Only block-system initialization resets it, before workers start.
+
+Terrain faces have implicit quad indices ([greedy_meshing.md](greedy_meshing.md)), so
+loading regroups the model's triangles into quads (`triangle_quads.h`): two triangles
+sharing an edge with opposite winding become one face, and each leftover triangle becomes
+a face whose second triangle is degenerate. Paired faces come first, so `numPairedFaces`
+alone tells meshing which faces have an emissive second triangle; the degenerate one is
+never hit and never listed as a light. Pairing prefers the lowest-index partner because
+exporters emit a split quad's halves consecutively. The load log reports both counts per
+model; genuinely triangular geometry, as in the glowshroom, is expected to stay lone.
 
 GLB is the authoring interchange format, not a new scene-loading path. The importer
 flattens hierarchy transforms, inverse-transforms normals, reverses winding under
@@ -46,7 +54,7 @@ from it. The jitter hash is independent of the rotation hash.
 
 Opaque atlases are validated before meshing on all GPUs, including without OMM
 support. Custom UVs cannot reuse the pair of OMMs baked for full-tile quads.
-Their triangles append FULLY_OPAQUE indices when sharing an OMM-linked chunk.
+Their faces append FULLY_OPAQUE indices when sharing an OMM-linked chunk.
 Supporting cutout models later needs per-model UV-aware micromaps or a separate
 geometry path; do not feed them to the existing quad OMM helper.
 

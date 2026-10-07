@@ -39,7 +39,7 @@ struct HostGeometry
     // lights, see knowledge/scene/instance.md
     std::vector<PackedTerrainVertex> packedTerrainVerts;
     std::vector<VertexTangent> tangents; // optional, indexed like verts
-    std::vector<uint32_t> idxs;
+    std::vector<uint32_t> idxs; // empty for quad faces, see Instance::hasQuadFaces()
     // One entry per 1 << Instance::trisPerFaceLog2 triangles
     std::vector<PerFaceData> perFaceDatas;
     // Per-triangle OMM Array indices (or special indices); empty for non-OMM geometry
@@ -84,6 +84,10 @@ private:
     bool isOpaque{ false };
     // See HostGeometry::perFaceDatas
     uint32_t trisPerFaceLog2{ 0 };
+
+    // Quad faces are four consecutive verts split into (0, 1, 2) and (0, 2, 3), so their indices
+    // are implicit rather than stored
+    bool hasQuadFaces() const;
 
     Instance(::Scene* scene, uint32_t id);
 

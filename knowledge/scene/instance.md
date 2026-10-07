@@ -1,4 +1,4 @@
-_Last edited: 2026-10-02_
+_Last edited: 2026-10-06_
 
 # Instance
 
@@ -53,8 +53,10 @@ holds a raw pointer, `pendingTlasEntryAdds` included, before erasing it.
 `PerFaceData` is stored per mesh face, not per triangle: glTF instances have one entry per
 triangle (`trisPerFaceLog2 == 0`), terrain and water one per quad (`== 1`), which halves the
 buffer for terrain since both triangles of a quad always carried identical data. The shader
-maps `PrimitiveIndex() >> trisPerFaceLog2` to the entry. Custom decorator models with an odd
-triangle count get a degenerate padding triangle so every quad's first triangle stays even.
+maps `PrimitiveIndex() >> trisPerFaceLog2` to the entry. A quad's first triangle is always
+even; a custom model's lone triangle fills a whole face with a degenerate second triangle.
+`trisPerFaceLog2 == 1` also means the indices are implicit (`Instance::hasQuadFaces`), so
+`hostGeometry.idxs` stays empty for terrain and water.
 
 ## Area Lights
 

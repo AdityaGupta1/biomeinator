@@ -1146,22 +1146,18 @@ static PerFaceData makeBlockFaceData(const BlockData& block, uint32_t slice, uin
 void Chunk::createInstances()
 {
     std::vector<Vertex>& terrainVerts = this->terrainInstance->hostGeometry.verts;
-    std::vector<uint32_t>& terrainIdxs = this->terrainInstance->hostGeometry.idxs;
     std::vector<PerFaceData>& terrainPerFaceDatas = this->terrainInstance->hostGeometry.perFaceDatas;
     std::vector<uint16_t>& terrainOmmIdxs = this->terrainInstance->hostGeometry.ommIdxs;
     std::vector<uint32_t> terrainEmissiveTriangleIdxs;
     std::vector<Vertex>& waterVerts = this->waterInstance->hostGeometry.verts;
-    std::vector<uint32_t>& waterIdxs = this->waterInstance->hostGeometry.idxs;
     std::vector<PerFaceData>& waterPerFaceDatas = this->waterInstance->hostGeometry.perFaceDatas;
 
     constexpr size_t numTerrainVertsToReserve = 1 << 14; // approximate size
     terrainVerts.reserve(numTerrainVertsToReserve);
-    terrainIdxs.reserve(numTerrainVertsToReserve * 6 / 4);
     terrainPerFaceDatas.reserve(numTerrainVertsToReserve / 4);
 
     constexpr size_t numWaterVertsToReserve = 1 << 8;
     waterVerts.reserve(numWaterVertsToReserve);
-    waterIdxs.reserve(numWaterVertsToReserve * 6 / 4);
     waterPerFaceDatas.reserve(numWaterVertsToReserve / 4);
 
     terrainEmissiveTriangleIdxs.reserve(512);
@@ -1231,8 +1227,8 @@ void Chunk::createInstances()
                                      tangentJitter.y * vec3(mountBasis.tangentZ);
                         }
                         const vec3 offset = vec3(blockPos_CS) + vec3(.5f) - .5f * mountNormal + jitter;
-                        const auto baseVertex = static_cast<uint32_t>(terrainVerts.size());
-                        const auto baseTriangle = static_cast<uint32_t>(terrainIdxs.size() / 3);
+                        const auto baseVertex = terrainVerts.size();
+                        const auto baseTriangle = static_cast<uint32_t>(terrainPerFaceDatas.size() * 2);
                         const auto& vertices = model.getOrientation(mountFaceIdx, turn);
                         terrainVerts.insert(terrainVerts.end(), vertices.begin(), vertices.end());
                         for (size_t i = baseVertex; i < terrainVerts.size(); ++i)
@@ -1242,28 +1238,29 @@ void Chunk::createInstances()
                             pos.y += offset.y;
                             pos.z += offset.z;
                         }
-                        const size_t baseIndex = terrainIdxs.size();
-                        terrainIdxs.insert(terrainIdxs.end(), model.indices.begin(), model.indices.end());
-                        for (size_t i = baseIndex; i < terrainIdxs.size(); ++i) terrainIdxs[i] += baseVertex;
-                        const auto data = makeBlockFaceData(blockData, blockData.texSlices[0]);
-                        const auto triangleCount = static_cast<uint32_t>(model.indices.size() / 3);
+                        const uint32_t numFaces = model.getNumFaces();
                         if (blockData.markAsEmitter)
-                            for (uint32_t i = 0; i < triangleCount; ++i) terrainEmissiveTriangleIdxs.push_back(baseTriangle + i);
-                        // Faces are triangle pairs, so an odd model gets a degenerate triangle that keeps
-                        // the next face aligned; it is never hit and not emissive
-                        const uint32_t paddedTriangleCount = (triangleCount + 1u) & ~1u;
-                        if (paddedTriangleCount != triangleCount)
                         {
-                            terrainIdxs.insert(terrainIdxs.end(), 3, baseVertex);
+                            for (uint32_t face = 0; face < numFaces; ++face)
+                            {
+                                terrainEmissiveTriangleIdxs.push_back(baseTriangle + face * 2);
+                                // A lone triangle's degenerate second triangle is never hit
+                                if (face < model.numPairedFaces)
+                                {
+                                    terrainEmissiveTriangleIdxs.push_back(baseTriangle + face * 2 + 1);
+                                }
+                            }
                         }
-                        terrainPerFaceDatas.insert(terrainPerFaceDatas.end(), paddedTriangleCount / 2, data);
+                        terrainPerFaceDatas.insert(terrainPerFaceDatas.end(), numFaces,
+                                                   makeBlockFaceData(blockData, blockData.texSlices[0]));
                         // Custom UVs cannot use the full-quad cutout OMM pair. Startup validates opacity.
-                        if (useOmms) terrainOmmIdxs.insert(terrainOmmIdxs.end(), paddedTriangleCount, TerrainOmm::OMM_IDX_FULLY_OPAQUE);
+                        if (useOmms)
+                        {
+                            terrainOmmIdxs.insert(terrainOmmIdxs.end(), numFaces * 2, TerrainOmm::OMM_IDX_FULLY_OPAQUE);
+                        }
                     }
                     else if (blockData.shape == BlockShape::X_SHAPED)
                     {
-                        const uint baseVertIdx = static_cast<uint>(terrainVerts.size());
-
                         // Jitter is hashed from world XZ so vertically stacked X-shaped blocks stay aligned.
                         const ivec2 columnPos_WS = this->chunkPos * static_cast<int>(chunkSizeXZ) + ivec2(blockX, blockZ);
                         vec2 jitter(0.f);
@@ -1284,17 +1281,6 @@ void Chunk::createInstances()
                                 makeVertex(vertPos_CS, xShapedFaceNormals[i / 4], vec2(uvOffsets[i % 4])));
                         }
 
-                        for (uint j = 0; j < 2; ++j)
-                        {
-                            const uint offset = j * 4;
-                            terrainIdxs.emplace_back(baseVertIdx + offset + 0u);
-                            terrainIdxs.emplace_back(baseVertIdx + offset + 1u);
-                            terrainIdxs.emplace_back(baseVertIdx + offset + 2u);
-                            terrainIdxs.emplace_back(baseVertIdx + offset + 0u);
-                            terrainIdxs.emplace_back(baseVertIdx + offset + 2u);
-                            terrainIdxs.emplace_back(baseVertIdx + offset + 3u);
-                        }
-
                         terrainPerFaceDatas.insert(terrainPerFaceDatas.end(), 2,
                                                    makeBlockFaceData(blockData, texArraySliceIdx));
 
@@ -1307,7 +1293,6 @@ void Chunk::createInstances()
                     {
                         const bool isWater = (blockData.type == BlockType::WATER);
                         std::vector<Vertex>& verts = isWater ? waterVerts : terrainVerts;
-                        std::vector<uint32_t>& idxs = isWater ? waterIdxs : terrainIdxs;
                         std::vector<PerFaceData>& perFaceDatas = isWater ? waterPerFaceDatas : terrainPerFaceDatas;
                         const float topHeight = blockShapeTopHeight(blockData.shape);
                         const float topYSubtract = 1.f - topHeight;
@@ -1324,8 +1309,6 @@ void Chunk::createInstances()
                             {
                                 continue;
                             }
-
-                            const uint baseVertIdx = static_cast<uint>(verts.size());
 
                             const ivec3* thisFaceVertPositions = cubeFaceVertPositions + (faceIdx * 4);
                             const uint32_t texArraySliceIdx = blockData.texSlices[glm::max(static_cast<int>(faceIdx) - 3, 0)];
@@ -1347,14 +1330,7 @@ void Chunk::createInstances()
                                 verts.emplace_back(makeVertex(vertPos_CS, vec3(neighborOffset), uv));
                             }
 
-                            const uint32_t triangleIdx = static_cast<uint32_t>(idxs.size() / 3u);
-
-                            idxs.emplace_back(baseVertIdx + 0u);
-                            idxs.emplace_back(baseVertIdx + 1u);
-                            idxs.emplace_back(baseVertIdx + 2u);
-                            idxs.emplace_back(baseVertIdx + 0u);
-                            idxs.emplace_back(baseVertIdx + 2u);
-                            idxs.emplace_back(baseVertIdx + 3u);
+                            const uint32_t triangleIdx = static_cast<uint32_t>(perFaceDatas.size() * 2u);
 
                             uint32_t waterFlags = 0;
                             if (isWater)
@@ -1386,7 +1362,6 @@ void Chunk::createInstances()
     }
 
     ASSERT(terrainVerts.size() > 0);
-    ASSERT(terrainIdxs.size() > 0);
 
     if (useOmms && !hasCutoutFaces)
     {

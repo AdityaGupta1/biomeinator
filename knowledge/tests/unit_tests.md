@@ -1,4 +1,4 @@
-_Last edited: 2026-10-03_
+_Last edited: 2026-10-06_
 
 # CPU Unit Tests
 
@@ -10,7 +10,8 @@ so a single failure is visible by name and the suite can be selected without run
 
 Coverage protects deterministic, widely reused building blocks: integer boundary math,
 circular-buffer wrap/reset state, procedural RNG sequences and ranges, Halton generation,
-CPU/GPU-shared vertex packing, and block face/orientation rules. It also exercises the
+CPU/GPU-shared vertex packing, block face/orientation rules, and the pairing of custom model
+triangles into quads (checked by coverage and winding, not by one expected pairing). It also exercises the
 stateful bookkeeping extracted from GPU-facing classes: managed-buffer free ranges,
 mapped-array dirty ranges, and descriptor indices, plus the thread scratch allocator. Fixed
 expected RNG and packing values are compatibility checks, not statistical tests: world

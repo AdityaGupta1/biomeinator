@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Aditya Gupta
 #include "block_model.h"
 #include "block_orientation.h"
+#include "triangle_quads.h"
 
 #include "debug.h"
 #include "logger.h"
@@ -81,6 +82,11 @@ const std::vector<Vertex>& Model::getOrientation(uint8_t face, uint8_t turn) con
     return this->orientations[this->hasAllFaceOrientations ? face * 4 + turn : turn];
 }
 
+uint32_t Model::getNumFaces() const
+{
+    return static_cast<uint32_t>(this->orientations[0].size() / 4);
+}
+
 Model readGlb(const std::filesystem::path& path, bool allFaces)
 {
     try
@@ -97,6 +103,7 @@ Model readGlb(const std::filesystem::path& path, bool allFaces)
 
         Model result;
         result.hasAllFaceOrientations = allFaces;
+        std::vector<uint32_t> indices;
         std::vector<bool> visiting(gltf.nodes.size(), false);
         std::function<void(int, const glm::mat4&)> visit;
         visit = [&](int nodeIdx, const glm::mat4& parent)
@@ -183,30 +190,30 @@ Model readGlb(const std::filesystem::path& path, bool allFaces)
                             }
                         }
                     }
-                    const size_t firstIndex = result.indices.size();
+                    const size_t firstIndex = indices.size();
                     if (primitive.indices >= 0)
                     {
-                        const auto indices = accessor(gltf, primitive.indices, TINYGLTF_TYPE_SCALAR);
-                        require(indices.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE ||
-                                indices.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT ||
-                                indices.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT, "invalid index type");
-                        const size_t size = tinygltf::GetComponentSizeInBytes(indices.componentType);
-                        for (size_t i = 0; i < indices.count; ++i)
+                        const auto idxAccessor = accessor(gltf, primitive.indices, TINYGLTF_TYPE_SCALAR);
+                        require(idxAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE ||
+                                idxAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT ||
+                                idxAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT, "invalid index type");
+                        const size_t size = tinygltf::GetComponentSizeInBytes(idxAccessor.componentType);
+                        for (size_t i = 0; i < idxAccessor.count; ++i)
                         {
                             uint32_t index = 0;
-                            std::memcpy(&index, indices.data + i * indices.stride, size);
+                            std::memcpy(&index, idxAccessor.data + i * idxAccessor.stride, size);
                             require(index < positions.count, "model index out of bounds");
-                            result.indices.push_back(base + index);
+                            indices.push_back(base + index);
                         }
                     }
                     else
-                        for (uint32_t i = 0; i < positions.count; ++i) result.indices.push_back(base + i);
-                    require((result.indices.size() - firstIndex) % 3 == 0, "incomplete triangle primitive");
-                    for (size_t i = firstIndex; i < result.indices.size(); i += 3)
+                        for (uint32_t i = 0; i < positions.count; ++i) indices.push_back(base + i);
+                    require((indices.size() - firstIndex) % 3 == 0, "incomplete triangle primitive");
+                    for (size_t i = firstIndex; i < indices.size(); i += 3)
                     {
-                        if (determinant < 0) std::swap(result.indices[i + 1], result.indices[i + 2]);
+                        if (determinant < 0) std::swap(indices[i + 1], indices[i + 2]);
                         const auto point = [&](size_t j) {
-                            const auto& p = result.getOrientation(blockFaceIndex(BlockFace::Y_POS), 0)[result.indices[j]].pos_OS;
+                            const auto& p = result.getOrientation(blockFaceIndex(BlockFace::Y_POS), 0)[indices[j]].pos_OS;
                             return glm::vec3(p.x, p.y, p.z);
                         };
                         require(glm::length(glm::cross(point(i + 1) - point(i), point(i + 2) - point(i))) > 1e-10f,
@@ -219,7 +226,24 @@ Model readGlb(const std::filesystem::path& path, bool allFaces)
         };
         const auto& scene = gltf.scenes.at(gltf.defaultScene >= 0 ? gltf.defaultScene : 0);
         for (int root : scene.nodes) visit(root, glm::mat4(1.f));
-        require(!result.indices.empty(), "block model has no triangles");
+        require(!indices.empty(), "block model has no triangles");
+
+        const TriangleQuads quads = pairTrianglesIntoQuads(indices);
+        for (std::vector<Vertex>& orientation : result.orientations)
+        {
+            if (orientation.empty())
+            {
+                continue;
+            }
+            std::vector<Vertex> quadVertices;
+            quadVertices.reserve(quads.quadIdxs.size());
+            for (const uint32_t idx : quads.quadIdxs)
+            {
+                quadVertices.push_back(orientation[idx]);
+            }
+            orientation = std::move(quadVertices);
+        }
+        result.numPairedFaces = quads.numPairedQuads;
         return result;
     }
     catch (const std::exception& e)
@@ -241,8 +265,8 @@ uint32_t load(const std::filesystem::path& path, bool allFaces)
     }
     auto model = readGlb(path, allFaces);
     const auto id = static_cast<uint32_t>(models.size());
-    Logger::log("Loaded block model %s: %zu vertices, %zu triangles, %u cached orientations",
-                key.c_str(), model.orientations[0].size(), model.indices.size() / 3, allFaces ? 24u : 4u);
+    Logger::log("Loaded block model %s: %u paired quads, %u lone triangles, %u cached orientations",
+                key.c_str(), model.numPairedFaces, model.getNumFaces() - model.numPairedFaces, allFaces ? 24u : 4u);
     models.push_back(std::move(model));
     ids.emplace(key, id);
     return id;
