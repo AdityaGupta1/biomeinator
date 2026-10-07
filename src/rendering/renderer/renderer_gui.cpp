@@ -278,7 +278,7 @@ void imguiEndFrame(double deltaTime)
                                     static_cast<int>(renderState.frameNumber) - static_cast<int>(renderState.frameTimeBuffer.getMaxSize()),
                                     renderState.frameNumber,
                                     ImGuiCond_Always);
-            ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 20);
+            ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 30);
             ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
             ImPlot::PlotShaded("Frame time",
                                &renderState.frameTimeBuffer.getData()[0].frameIdx,
