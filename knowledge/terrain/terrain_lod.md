@@ -109,7 +109,10 @@ past the chunk distance, where heightfields dropped them at a hard edge.
 - A cell covers only the bounds of the columns holding its blocks (its footprint): otherwise one-block
   trunks, cacti and pillars doubled in width at their full height and trees looked squat. A neighbor hides
   a face only if its footprint is full, and a narrowed cell's inner sides always show; diagonal or L-shaped
-  footprints keep the whole cell, so it is still one box per cell.
+  footprints keep the whole cell, so it is still one box per cell. Columns holding only a different cutout
+  block don't count: the cell shows only its own block, so the leaves around a redwood trunk widened its
+  log box to the whole cell. A cell's top shows the most common of its columns' top blocks, not the
+  highest one's, or a trunk poking above each tier of leaves stamped a log top over the tier.
 - Taking the highest column means tiles cover at least the real blocks. Faces out of a tile are culled
   against the real blocks beside it (each chunk keeps its four outer block slices for this), not the
   neighbors' cells, which cover more and would hide faces where the neighboring chunks are air, cracking

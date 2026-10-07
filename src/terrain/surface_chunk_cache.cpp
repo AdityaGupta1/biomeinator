@@ -126,7 +126,10 @@ static VoxelCell downsampleBlocks(const std::array<Block, 8>& blocks)
         for (const int i : { column + 4, column })
         {
             const BlockData& blockData = Blocks::getBlockData(blocks[i]);
-            if (!fillsFromBottom(blockData))
+            // Other cutout blocks are left out: the cell shows only its own block, so leaves beside a trunk
+            // would widen a log box to the whole cell
+            if (!fillsFromBottom(blockData) ||
+                (blocks[i] != cell.block && blockData.type == BlockType::TRANSPARENT_CUTOUT))
             {
                 continue;
             }
