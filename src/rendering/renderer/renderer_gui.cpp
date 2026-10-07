@@ -108,148 +108,202 @@ void imguiBeginFrame()
     ImGui::NewFrame();
 }
 
+static bool drawPathTracingTab()
+{
+    bool radianceSettingsChanged = false;
+
+    SettingsGuiHelpers::SectionTitle("Path tracing");
+    radianceSettingsChanged |= SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
+    radianceSettingsChanged |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
+    renderState.needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "doPathSplitting");
+    radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Refraction indirect passthrough", "refractionIndirectPassthrough");
+
+    SettingsGuiHelpers::SectionTitle("SHaRC");
+    if (renderState.sharc.supported)
+    {
+        bool changed = SettingsGuiHelpers::Checkbox("Enable SHaRC", "sharc");
+        changed |= SettingsGuiHelpers::SliderUint("Cache capacity log2", "sharcCapacityLog2", 16, 24);
+        changed |= SettingsGuiHelpers::SliderUint("Update stride", "sharcDownscale", 1, 16);
+        changed |= SettingsGuiHelpers::SliderFloat("Grid scale", "sharcSceneScale", 1.f, 200.f);
+        changed |= SettingsGuiHelpers::SliderUint("History frames", "sharcAccumulationFrames", 1, 128);
+        changed |= SettingsGuiHelpers::SliderUint("Stale frames", "sharcStaleFrames", 8, 256);
+        const bool viewChanged = SettingsGuiHelpers::ComboUint("SHaRC view", "sharcDebug", { "Beauty", "Cache hits", "Bounce count", "Hash grid", "Cached radiance" });
+        if (ImGui::Button("Reset cache"))
+        {
+            changed = true;
+        }
+        renderState.sharc.resetRequested |= changed;
+        renderState.didPathTracingSettingsChange |= changed || viewChanged;
+    }
+    else
+    {
+        ImGui::TextWrapped("SHaRC unavailable (native fp16 / int64 atomics required)");
+    }
+
+    return radianceSettingsChanged;
+}
+
+static void drawImageTab()
+{
+    SettingsGuiHelpers::SectionTitle("Antialiasing");
+    const bool didAntialiasingChange = SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
+    renderState.needsResize |= didAntialiasingChange; // technically should need resize only when switching to or from DLSS, but whatever
+    renderState.didPathTracingSettingsChange |= didAntialiasingChange;
+    const AntialiasingMode antialiasingMode = static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
+
+    if (antialiasingMode == AntialiasingMode::ACCUMULATE)
+    {
+        ImGui::Text("accumulated frames: %u", renderState.accumulatedFrameNumber);
+        renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Max accumulated frames", "maxAccumulatedFrames", 1, 2048);
+    }
+    else if (antialiasingMode == AntialiasingMode::DLSS)
+    {
+        renderState.needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
+        renderState.needsResize |= SettingsGuiHelpers::ComboUint("DLSS preset", "dlssPreset", dlssPresetOptions);
+        if (renderState.frameGen.supported)
+        {
+            SettingsGuiHelpers::Checkbox("Frame generation", "frameGeneration");
+        }
+        else
+        {
+            ImGui::PushTextWrapPos();
+            ImGui::TextDisabled("Frame generation not supported:\n- %s", renderState.frameGen.unsupportedReason.c_str());
+            ImGui::PopTextWrapPos();
+        }
+    }
+
+    SettingsGuiHelpers::SectionTitle("Tonemapping");
+    SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
+}
+
+static bool drawAtmosphereTab()
+{
+    bool radianceSettingsChanged = false;
+
+    SettingsGuiHelpers::SectionTitle("Sky");
+    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Sky strength", "skyStrength", 0.f, 10.f);
+
+    {
+        const SettingsGuiHelpers::ScopedId id("clouds");
+
+        SettingsGuiHelpers::SectionTitle("Clouds");
+        radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Enable clouds", "clouds");
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Coverage", "cloudCoverage", 0.f, 1.f);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Base height", "cloudBaseHeight", 0.f, 10000.f);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Thickness", "cloudThickness", 10.f, 10000.f);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cell size", "cloudCellSize", 64.f, 4096.f);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Pattern scale", "cloudPatternScale", 256.f, 131072.f);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Pattern seed", "cloudSeed", 0, 65535);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Wind X", "cloudWindX", -50.f, 50.f);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Wind Z", "cloudWindZ", -50.f, 50.f);
+
+        SettingsGuiHelpers::SectionTitle("Cloud lighting");
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Extinction", "cloudExtinction", 0.f, 0.1f);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Lighting samples", "cloudSamples", 1, 32);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Ambient strength", "cloudAmbient", 0.f, 2.f);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Anisotropy", "cloudPhaseG", 0.f, 0.95f);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Multiple scattering", "cloudMultiScatterStrength", 0.f, 2.f);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Draw distance", "cloudDrawDistance", 100.f, 100000.f);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Shadow distance", "cloudShadowDistance", 100.f, 20000.f);
+    }
+
+    {
+        const SettingsGuiHelpers::ScopedId id("fog");
+
+        SettingsGuiHelpers::SectionTitle("Fog");
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Scattering", "fogScatteringMultiplier", 0.f, 10.f);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Scale height", "fogScaleHeight", 1.f, 200.f);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Anisotropy", "fogG", -0.99f, 0.99f);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("March steps", "fogMarchSteps", 1, 16);
+        radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Ambient strength", "fogAmbientStrength", 0.f, 2.f);
+    }
+
+    return radianceSettingsChanged;
+}
+
+static void drawCameraTab()
+{
+    SettingsGuiHelpers::SectionTitle("Movement");
+    SettingsGuiHelpers::SliderFloat("Movement speed", "movementSpeed", 1.f, 250.f);
+}
+
+static bool drawDebugTab()
+{
+    bool radianceSettingsChanged = false;
+
+    SettingsGuiHelpers::SectionTitle("Debug view");
+    SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
+    SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
+    SettingsGuiHelpers::Checkbox("Debug view apply tonemap", "debugViewApplyTonemap");
+    if (renderState.voxelMode)
+    {
+        radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Color chunks", "debugColorChunks");
+    }
+
+    SettingsGuiHelpers::SectionTitle("Debug values");
+    radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
+    radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
+    radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
+    radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Debug bool 3", "debugBool3");
+    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Debug float 0", "debugFloat0", -100.f, 100.f);
+    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Debug float 1", "debugFloat1", -100.f, 100.f);
+    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Debug float 2", "debugFloat2", -100.f, 100.f);
+    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Debug float 3", "debugFloat3", -100.f, 100.f);
+
+    return radianceSettingsChanged;
+}
+
 void imguiEndFrame(double deltaTime)
 {
     renderState.didPathTracingSettingsChange = false;
     bool radianceSettingsChanged = false;
 
-    ImGui::SetNextWindowPos(ImVec2(10, 10));
+    constexpr float windowMargin = 10.f;
+    constexpr float settingsWindowWidth = 420.f;
+    constexpr float performanceWindowHeight = 240.f;
+
+    const float settingsWindowMaxHeight = renderState.viewport.Height - performanceWindowHeight - 3.f * windowMargin;
+    ImGui::SetNextWindowPos(ImVec2(windowMargin, windowMargin));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(settingsWindowWidth, 0.f), ImVec2(settingsWindowWidth, settingsWindowMaxHeight));
 
     constexpr ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_NoNavFocus;
     if (ImGui::Begin("Settings", nullptr, windowFlags | ImGuiWindowFlags_AlwaysAutoResize))
     {
-        radianceSettingsChanged |= SettingsGuiHelpers::InputUint("Max path depth", "maxPathDepth", 1, 16);
-        SettingsGuiHelpers::ComboUint("Tonemapping", "tonemapping", tonemappingComboOptions);
-        renderState.needsResize |= SettingsGuiHelpers::Checkbox("Enable path splitting", "doPathSplitting");
-
-        SettingsGuiHelpers::VerticalSpacing();
-        SettingsGuiHelpers::SectionTitle("SHaRC");
-        if (renderState.sharc.supported)
+        if (ImGui::BeginTabBar("SettingsTabs"))
         {
-            bool changed = SettingsGuiHelpers::Checkbox("Enable SHaRC", "sharc");
-            bool viewChanged = false;
-            if (ImGui::CollapsingHeader("SHaRC settings"))
+            if (ImGui::BeginTabItem("Path tracing"))
             {
-                changed |= SettingsGuiHelpers::SliderUint("Cache capacity log2", "sharcCapacityLog2", 16, 24);
-                changed |= SettingsGuiHelpers::SliderUint("Update stride", "sharcDownscale", 1, 16);
-                changed |= SettingsGuiHelpers::SliderFloat("Grid scale", "sharcSceneScale", 1.f, 200.f);
-                changed |= SettingsGuiHelpers::SliderUint("History frames", "sharcAccumulationFrames", 1, 128);
-                changed |= SettingsGuiHelpers::SliderUint("Stale frames", "sharcStaleFrames", 8, 256);
-                viewChanged = SettingsGuiHelpers::ComboUint("SHaRC view", "sharcDebug", { "Beauty", "Cache hits", "Bounce count", "Hash grid", "Cached radiance" });
-                if (ImGui::Button("Reset cache"))
-                    changed = true;
+                radianceSettingsChanged |= drawPathTracingTab();
+                ImGui::EndTabItem();
             }
-            renderState.sharc.resetRequested |= changed;
-            renderState.didPathTracingSettingsChange |= changed || viewChanged;
-        }
-        else
-            ImGui::TextUnformatted("SHaRC unavailable (native fp16 / int64 atomics required)");
-        SettingsGuiHelpers::VerticalSpacing();
-        SettingsGuiHelpers::SectionTitle("Sampling");
-        radianceSettingsChanged |= SettingsGuiHelpers::ComboUint("Sampling mode", "samplingMode", samplingModeComboOptions);
-
-        SettingsGuiHelpers::VerticalSpacing();
-        SettingsGuiHelpers::SectionTitle("Materials");
-        radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Refraction indirect passthrough", "refractionIndirectPassthrough");
-
-        if (renderState.voxelMode)
-        {
-            SettingsGuiHelpers::VerticalSpacing();
-            SettingsGuiHelpers::SectionTitle("Atmosphere");
-            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Sky strength", "skyStrength", 0.f, 10.f);
-            if (ImGui::CollapsingHeader("Cloud settings"))
+            if (ImGui::BeginTabItem("Image"))
             {
-                radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Enable clouds", "clouds");
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud coverage", "cloudCoverage", 0.f, 1.f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud extinction", "cloudExtinction", 0.f, 0.1f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud base height", "cloudBaseHeight", 0.f, 10000.f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud thickness", "cloudThickness", 10.f, 10000.f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud cell size", "cloudCellSize", 64.f, 4096.f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud pattern scale", "cloudPatternScale", 256.f, 131072.f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Cloud pattern seed", "cloudSeed", 0, 65535);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud draw distance", "cloudDrawDistance", 100.f, 100000.f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud shadow distance", "cloudShadowDistance", 100.f, 20000.f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Cloud lighting samples", "cloudSamples", 1, 32);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud ambient strength", "cloudAmbient", 0.f, 2.f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud anisotropy", "cloudPhaseG", 0.f, 0.95f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud multiple scattering", "cloudMultiScatterStrength", 0.f, 2.f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud wind X", "cloudWindX", -50.f, 50.f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Cloud wind Z", "cloudWindZ", -50.f, 50.f);
+                drawImageTab();
+                ImGui::EndTabItem();
             }
-            if (ImGui::CollapsingHeader("Fog settings"))
+            if (renderState.voxelMode && ImGui::BeginTabItem("Atmosphere"))
             {
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog scattering", "fogScatteringMultiplier", 0.f, 10.f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog scale height", "fogScaleHeight", 1.f, 200.f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog anisotropy", "fogG", -0.99f, 0.99f);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderUint("Fog march steps", "fogMarchSteps", 1, 16);
-                radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Fog ambient strength", "fogAmbientStrength", 0.f, 2.f);
+                radianceSettingsChanged |= drawAtmosphereTab();
+                ImGui::EndTabItem();
             }
-        }
-
-        SettingsGuiHelpers::VerticalSpacing();
-        SettingsGuiHelpers::SectionTitle("Antialiasing");
-        const bool didAntialiasingChange = SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
-        renderState.needsResize |= didAntialiasingChange; // technically should need resize only when switching to or from DLSS, but whatever
-        renderState.didPathTracingSettingsChange |= didAntialiasingChange;
-        const AntialiasingMode antialiasingMode = static_cast<AntialiasingMode>(SettingsManager::getAsUint("antialiasingMode"));
-
-        if (antialiasingMode == AntialiasingMode::ACCUMULATE)
-        {
-            ImGui::Text("accumulated frames: %u", renderState.accumulatedFrameNumber);
-            renderState.didPathTracingSettingsChange |= SettingsGuiHelpers::SliderUint("Max accumulated frames", "maxAccumulatedFrames", 1, 2048);
-        }
-        else if (antialiasingMode == AntialiasingMode::DLSS)
-        {
-            renderState.needsResize |= SettingsGuiHelpers::ComboUint("DLSS mode", "dlssMode", dlssModeOptions);
-            renderState.needsResize |= SettingsGuiHelpers::ComboUint("DLSS preset", "dlssPreset", dlssPresetOptions);
-            if (renderState.frameGen.supported)
+            if (ImGui::BeginTabItem("Camera"))
             {
-                SettingsGuiHelpers::Checkbox("Frame generation", "frameGeneration");
+                drawCameraTab();
+                ImGui::EndTabItem();
             }
-            else
+            if (ImGui::BeginTabItem("Debug"))
             {
-                ImGui::TextDisabled("Frame generation not supported:\n- %s", renderState.frameGen.unsupportedReason.c_str());
+                radianceSettingsChanged |= drawDebugTab();
+                ImGui::EndTabItem();
             }
-        }
-
-        SettingsGuiHelpers::VerticalSpacing();
-        SettingsGuiHelpers::SectionTitle("World");
-        SettingsGuiHelpers::SliderFloat("Movement speed", "movementSpeed", 1.f, 250.f);
-
-        SettingsGuiHelpers::VerticalSpacing();
-
-        if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            SettingsGuiHelpers::SectionTitle("Debug view");
-            SettingsGuiHelpers::ComboString("Debug view", "debugView", debugViewComboOptions);
-            SettingsGuiHelpers::SliderFloat("Debug view scale", "debugViewScale", -1000.f, 1000.f);
-            SettingsGuiHelpers::Checkbox("Debug view apply tonemap", "debugViewApplyTonemap");
-
-            SettingsGuiHelpers::VerticalSpacing();
-
-            if (renderState.voxelMode)
-            {
-                radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Color chunks", "debugColorChunks");
-            }
-
-            SettingsGuiHelpers::VerticalSpacing();
-
-            radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Debug bool 0", "debugBool0");
-            radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Debug bool 1", "debugBool1");
-            radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Debug bool 2", "debugBool2");
-            radianceSettingsChanged |= SettingsGuiHelpers::Checkbox("Debug bool 3", "debugBool3");
-            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Debug float 0", "debugFloat0", -100.f, 100.f);
-            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Debug float 1", "debugFloat1", -100.f, 100.f);
-            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Debug float 2", "debugFloat2", -100.f, 100.f);
-            radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Debug float 3", "debugFloat3", -100.f, 100.f);
+            ImGui::EndTabBar();
         }
     }
     ImGui::End();
     renderState.sharc.resetRequested |= radianceSettingsChanged;
     renderState.didPathTracingSettingsChange |= radianceSettingsChanged;
 
-    constexpr int performanceWindowHeight = 240;
-    ImGui::SetNextWindowPos(ImVec2(10, renderState.viewport.Height - 10 - performanceWindowHeight));
+    ImGui::SetNextWindowPos(ImVec2(windowMargin, renderState.viewport.Height - windowMargin - performanceWindowHeight));
     ImGui::SetNextWindowSize(ImVec2(800, performanceWindowHeight));
 
     if (ImGui::Begin("Performance", nullptr, windowFlags))
@@ -288,8 +342,8 @@ void imguiEndFrame(double deltaTime)
     }
     ImGui::End();
 
-    constexpr int debugWindowWidth = 300;
-    ImGui::SetNextWindowPos(ImVec2(renderState.viewport.Width - 10 - debugWindowWidth, 10));
+    constexpr float debugWindowWidth = 300.f;
+    ImGui::SetNextWindowPos(ImVec2(renderState.viewport.Width - windowMargin - debugWindowWidth, windowMargin));
     ImGui::SetNextWindowSize(ImVec2(debugWindowWidth, -1));
 
     if (ImGui::Begin("Debug", nullptr, windowFlags))

@@ -1,4 +1,4 @@
-_Last edited: 2026-10-03_
+_Last edited: 2026-10-06_
 
 # Settings Manager
 
@@ -69,3 +69,5 @@ All settings and their defaults are defined in `parseArgs()` and are self-descri
 - `Checkbox`, `InputInt`, `SliderInt`, `InputUint`, `SliderUint`, `ComboUint`, `SliderFloat`, `ComboString`
 - All return `bool` indicating whether the value changed this frame.
 - `ScopedItemWidth` is a RAII helper for `ImGui::PushItemWidth` / `PopItemWidth`.
+
+The Settings window (`renderer_gui.cpp`) is a tab bar with one `draw*Tab()` function per tab. Only the selected tab's widgets are submitted, which is safe for the change flags because a widget can only report a change on a frame it is drawn and edited. Labels inside a tab are short (e.g. "Anisotropy" under both Clouds and Fog), so sections that repeat labels wrap themselves in `ScopedId`; without it ImGui would give both sliders the same ID and they would fight over input. The window has a fixed width and auto-fits its height up to the space above the Performance window, so switching tabs does not make it jump sideways and a long tab scrolls instead of running under the frame time plot.
