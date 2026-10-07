@@ -80,7 +80,8 @@ int blockFill(const BlockData& blockData)
 // canopies and thin pillars survive and surfaces keep their top blocks; else water if any; else air. The
 // cell fills up to its highest column, counting a block on top as standing on a full one, so it covers at
 // least the blocks it stands for and keeps their shapes' heights (a snow layer on the ground tops the
-// cell an eighth of a block above it), and that column's top block shows on top.
+// cell an eighth of a block above it). Its top shows the most common of its columns' top blocks, going to
+// the higher on ties: the highest column's alone put a trunk's log top over a whole tier of leaves.
 static VoxelCell downsampleBlocks(const std::array<Block, 8>& blocks)
 {
     VoxelCell cell;
@@ -119,6 +120,7 @@ static VoxelCell downsampleBlocks(const std::array<Block, 8>& blocks)
 
     int fill = 0;
     cell.footprint = 0;
+    std::array<std::pair<Block, int>, 4> columnTops{};
     for (int column = 0; column < 4; ++column)
     {
         for (const int i : { column + 4, column })
@@ -130,12 +132,26 @@ static VoxelCell downsampleBlocks(const std::array<Block, 8>& blocks)
             }
             cell.footprint |= static_cast<uint8_t>(1u << column);
             const int columnFill = (i >= 4 ? fillUnitsPerBlock : 0) + blockFill(blockData);
-            if (columnFill > fill)
-            {
-                fill = columnFill;
-                cell.topBlock = blocks[i];
-            }
+            columnTops[column] = { blocks[i], columnFill };
+            fill = std::max(fill, columnFill);
             break;
+        }
+    }
+    int bestTopCount = 0;
+    int bestTopFill = 0;
+    for (const auto& [top, topFill] : columnTops)
+    {
+        if (topFill == 0)
+        {
+            continue;
+        }
+        const int count = static_cast<int>(std::count_if(columnTops.begin(), columnTops.end(),
+            [&](const auto& other) { return other.second > 0 && other.first == top; }));
+        if (count > bestTopCount || (count == bestTopCount && topFill > bestTopFill))
+        {
+            cell.topBlock = top;
+            bestTopCount = count;
+            bestTopFill = topFill;
         }
     }
     cell.fill = static_cast<uint8_t>(fill);
