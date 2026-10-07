@@ -118,6 +118,7 @@ static VoxelCell downsampleBlocks(const std::array<Block, 8>& blocks)
     }
 
     int fill = 0;
+    cell.footprint = 0;
     for (int column = 0; column < 4; ++column)
     {
         for (const int i : { column + 4, column })
@@ -127,6 +128,7 @@ static VoxelCell downsampleBlocks(const std::array<Block, 8>& blocks)
             {
                 continue;
             }
+            cell.footprint |= static_cast<uint8_t>(1u << column);
             const int columnFill = (i >= 4 ? fillUnitsPerBlock : 0) + blockFill(blockData);
             if (columnFill > fill)
             {

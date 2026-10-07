@@ -106,6 +106,10 @@ past the chunk distance, where heightfields dropped them at a hard edge.
   other by comparing fills, as chunks compare shape heights. The cell's sides show its block and its top
   shows the tallest column's top block, preferring whole blocks for the former: otherwise a snow layer on
   leaves or grass, winning the tie, turned the whole cell into snow.
+- A cell covers only the bounds of the columns holding its blocks (its footprint): otherwise one-block
+  trunks, cacti and pillars doubled in width at their full height and trees looked squat. A neighbor hides
+  a face only if its footprint is full, and a narrowed cell's inner sides always show; diagonal or L-shaped
+  footprints keep the whole cell, so it is still one box per cell.
 - Taking the highest column means tiles cover at least the real blocks. Faces out of a tile are culled
   against the real blocks beside it (each chunk keeps its four outer block slices for this), not the
   neighbors' cells, which cover more and would hide faces where the neighboring chunks are air, cracking

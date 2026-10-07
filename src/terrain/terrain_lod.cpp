@@ -671,6 +671,23 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
     return false;
 }
 
+// The bounds of a cell's footprint in blocks from its corner, in XZ
+static std::pair<ivec2, ivec2> footprintBounds(uint8_t footprint)
+{
+    ivec2 boundsMin(voxelCellSize);
+    ivec2 boundsMax(0);
+    for (int column = 0; column < voxelCellSize * voxelCellSize; ++column)
+    {
+        if ((footprint >> column) & 1)
+        {
+            const ivec2 columnPos(column % voxelCellSize, column / voxelCellSize);
+            boundsMin = min(boundsMin, columnPos);
+            boundsMax = max(boundsMax, columnPos + 1);
+        }
+    }
+    return { boundsMin, boundsMax };
+}
+
 bool LodTile::meshVoxels()
 {
     const int sideChunks = this->getSideChunks();
@@ -690,9 +707,14 @@ bool LodTile::meshVoxels()
     const int numCellsXZ = sideChunks * cellsPerChunkSide;
 
     // Solid cells compare fills as chunks compare shape heights; anything else sees a partial cell as a
-    // layer, which hides nothing beside or below it
+    // layer, which hides nothing beside or below it. A cell that doesn't cover its whole footprint hides
+    // nothing.
     const auto isCellFaceVisible = [&](const VoxelCell& cell, const VoxelCell& neighbor, uint8_t faceIdx)
     {
+        if (!neighbor.hasFullFootprint())
+        {
+            return true;
+        }
         const BlockData& blockData = Blocks::getBlockData(cell.block);
         const BlockData& neighborData = Blocks::getBlockData(neighbor.block);
         if (blockData.type != BlockType::SOLID || neighborData.type != BlockType::SOLID)
@@ -719,6 +741,19 @@ bool LodTile::meshVoxels()
     const auto isFaceVisible = [&](ivec3 cellPos, const VoxelCell& cell, uint8_t faceIdx)
     {
         const ivec3 normal = blockFaceBases[faceIdx].normal;
+        // A side inside the cell's bounds faces the cell's own empty columns
+        if (normal.y == 0)
+        {
+            const auto [footprintMin, footprintMax] = footprintBounds(cell.footprint);
+            const bool reachesCellSide = normal.x > 0 ? footprintMax.x == voxelCellSize
+                                       : normal.x < 0 ? footprintMin.x == 0
+                                       : normal.z > 0 ? footprintMax.y == voxelCellSize
+                                                      : footprintMin.y == 0;
+            if (!reachesCellSide)
+            {
+                return true;
+            }
+        }
         const ivec3 neighborCellPos = cellPos + normal;
         if (neighborCellPos.x >= 0 && neighborCellPos.x < numCellsXZ && neighborCellPos.z >= 0 &&
             neighborCellPos.z < numCellsXZ)
@@ -851,9 +886,11 @@ bool LodTile::meshVoxels()
                             continue;
                         }
                         const ivec3 cellPos(chunkX * cellsPerChunkSide + localX, cellY, chunkZ * cellsPerChunkSide + localZ);
-                        const vec3 cellMin = vec3(cellPos) * static_cast<float>(voxelCellSize);
-                        const vec3 cellMax = cellMin + vec3(voxelCellSize, static_cast<float>(cell.fill) / fillUnitsPerBlock,
-                                                            voxelCellSize);
+                        const auto [footprintMin, footprintMax] = footprintBounds(cell.footprint);
+                        const vec3 cellOrigin = vec3(cellPos) * static_cast<float>(voxelCellSize);
+                        const vec3 cellMin = cellOrigin + vec3(footprintMin.x, 0.f, footprintMin.y);
+                        const vec3 cellMax = cellOrigin + vec3(footprintMax.x, static_cast<float>(cell.fill) / fillUnitsPerBlock,
+                                                               footprintMax.y);
                         const uint32_t packedTint = cells.packedTints[localX + cellsPerChunkSide * localZ];
                         const auto cellTint = [&](vec2) { return packedTint; };
 
@@ -861,9 +898,10 @@ bool LodTile::meshVoxels()
                         // holding both water and the ground under it
                         if (cell.waterFill > 0 && cellAt(cellPos + ivec3(0, 1, 0)).waterFill == 0)
                         {
-                            const float waterTopY = cellMin.y + static_cast<float>(cell.waterFill) / fillUnitsPerBlock;
-                            addBoxFace(waterGeometry, BlockFace::Y_POS, vec3(cellMin.x, waterTopY, cellMin.z),
-                                       vec3(cellMax.x, waterTopY, cellMax.z), waterFaceData, cellTint);
+                            const float waterTopY = cellOrigin.y + static_cast<float>(cell.waterFill) / fillUnitsPerBlock;
+                            addBoxFace(waterGeometry, BlockFace::Y_POS, vec3(cellOrigin.x, waterTopY, cellOrigin.z),
+                                       vec3(cellOrigin.x + voxelCellSize, waterTopY, cellOrigin.z + voxelCellSize),
+                                       waterFaceData, cellTint);
                         }
                         if (Blocks::getBlockData(cell.block).type == BlockType::WATER)
                         {

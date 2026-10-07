@@ -21,6 +21,8 @@ inline constexpr int cellsPerChunkSide = static_cast<int>(chunkSizeXZ) / voxelCe
 // Heights in a cell are in eighths of a block, the granularity of block shape heights
 inline constexpr int fillUnitsPerBlock = 8;
 inline constexpr int fullCellFill = voxelCellSize * fillUnitsPerBlock;
+// A cell's columns, bit x + voxelCellSize * z
+inline constexpr uint8_t fullCellFootprint = (1u << (voxelCellSize * voxelCellSize)) - 1;
 
 // A downsampled cell: filling the cell from its bottom up to fill, with its block's sides and the top of
 // the block on top, as a snow layer on grass shows snow above the grass's sides
@@ -31,10 +33,18 @@ struct VoxelCell
     uint8_t fill{ 0 };
     // Height of the cell's highest water above its bottom, 0 for none
     uint8_t waterFill{ 0 };
+    // The columns holding its blocks: the cell covers only their bounds, so a one-block trunk or cactus
+    // stays one block wide rather than doubling in width at its full height
+    uint8_t footprint{ fullCellFootprint };
 
     bool isFull() const
     {
         return this->fill == fullCellFill;
+    }
+
+    bool hasFullFootprint() const
+    {
+        return this->footprint == fullCellFootprint;
     }
 };
 
