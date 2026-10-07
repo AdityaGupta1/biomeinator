@@ -143,7 +143,7 @@ static bool drawPathTracingTab()
     return radianceSettingsChanged;
 }
 
-static void drawImageTab()
+static void drawPostprocessingTab()
 {
     SettingsGuiHelpers::SectionTitle("Antialiasing");
     const bool didAntialiasingChange = SettingsGuiHelpers::ComboUint("Antialiasing mode", "antialiasingMode", antialiasingModeComboOptions);
@@ -253,6 +253,8 @@ static bool drawDebugTab()
     return radianceSettingsChanged;
 }
 
+static bool isFirstGuiFrame = true;
+
 void imguiEndFrame(double deltaTime)
 {
     renderState.didPathTracingSettingsChange = false;
@@ -271,14 +273,17 @@ void imguiEndFrame(double deltaTime)
     {
         if (ImGui::BeginTabBar("SettingsTabs"))
         {
-            if (ImGui::BeginTabItem("Path tracing"))
+            const ImGuiTabItemFlags pathTracingTabFlags = isFirstGuiFrame ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+            isFirstGuiFrame = false;
+
+            if (ImGui::BeginTabItem("Camera"))
             {
-                radianceSettingsChanged |= drawPathTracingTab();
+                drawCameraTab();
                 ImGui::EndTabItem();
             }
-            if (ImGui::BeginTabItem("Image"))
+            if (ImGui::BeginTabItem("Path tracing", nullptr, pathTracingTabFlags))
             {
-                drawImageTab();
+                radianceSettingsChanged |= drawPathTracingTab();
                 ImGui::EndTabItem();
             }
             if (renderState.voxelMode && ImGui::BeginTabItem("Atmosphere"))
@@ -286,9 +291,9 @@ void imguiEndFrame(double deltaTime)
                 radianceSettingsChanged |= drawAtmosphereTab();
                 ImGui::EndTabItem();
             }
-            if (ImGui::BeginTabItem("Camera"))
+            if (ImGui::BeginTabItem("Postprocessing"))
             {
-                drawCameraTab();
+                drawPostprocessingTab();
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Debug"))
