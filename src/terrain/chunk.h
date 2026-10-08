@@ -228,6 +228,22 @@ private:
     // One immutable bit per block identifying terrain full cubes. This permits race-free
     // support checks while neighboring chunks concurrently fill structures into air/water.
     std::vector<uint64_t> terrainSolidCubeMask{};
+    // Surface-only chunks wait in SurfaceChunkCache long after their terrain pass, mostly needed only by
+    // neighbors, so they keep their terrain compacted there (see compactSurfaceOnlyTerrain): a column is a
+    // few runs of blocks, and its masks change within a word or two
+    struct BlockRun
+    {
+        Block block;
+        uint16_t length;
+    };
+    // Column by column from blockRunColumnStarts; held from the terrain pass until the structure pass
+    std::vector<BlockRun> blockRuns{};
+    std::vector<uint32_t> blockRunColumnStarts{};
+    // Per column, two bits per mask word (CompactMaskWord). Stored words are pairs of the air and the solid
+    // cube word in compactMaskWords, a column's first pair at compactMaskColumnStarts.
+    std::vector<uint16_t> compactMaskWordKinds{};
+    std::vector<uint64_t> compactMaskWords{};
+    std::vector<uint16_t> compactMaskColumnStarts{};
     CaveDecorationData caveDecoration{};
     SnowData snow{};
     // TODO: Consider replacing this unordered_map with a more cache-friendly sparse state store
@@ -287,7 +303,11 @@ private:
     void buildTerrainAirMask(uint32_t airFromY = chunkSizeY);
     // The structure neighbor containing a world XZ position, and that position within it
     const Chunk* structureNeighborAt_WS(glm::ivec2 posXZ_WS, glm::ivec2& outPosXZ_CS) const;
-    bool getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const;
+    bool getTerrainMaskBit_WS(glm::ivec3 pos_WS, bool isSolidCubeMask) const;
+    bool getTerrainMaskBit(uint32_t blockIdx, bool isSolidCubeMask) const;
+    void compactSurfaceOnlyTerrain();
+    void expandSurfaceOnlyBlocks();
+    void releaseMasks();
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
     void placeSurfaceStructures();
     // Mean terrain height on rings around a column minus its own: positive in hollows, negative on

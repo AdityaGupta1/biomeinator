@@ -68,8 +68,8 @@ past the chunk distance, where heightfields dropped them at a hard edge.
 - A chunk regenerated for a neighbor's structure pass after its own cells exist is only read for its
   immutable terrain, so its own structure pass never runs twice. Cells are dropped only once their chunk
   holds no terrain, and a chunk's cells are never regenerated while its old terrain lives.
-- Only the highest-priority request may exceed the cap on chunks holding terrain, so neighborhoods that
-  later requests left half generated can't stall every request.
+- Only the highest-priority request may exceed the terrain budget, so neighborhoods that later requests
+  left half generated can't stall every request.
 - Regeneration, not per-chunk work, is what the ring costs: each chunk's terrain is needed by up to nine
   structure passes requested at different times. Freeing terrain as soon as no waiting chunk claimed it
   generated each chunk's terrain 4-5 times, and dropping cells after a timeout regenerated them when the
@@ -77,19 +77,22 @@ past the chunk distance, where heightfields dropped them at a hard edge.
   - Cells are kept by distance, over the whole area out to the ring's edge and a quarter of that again
     past it, so a camera turning back finds them. Without the margin a turning walk built each chunk's
     cells 1.66 times; with it, 1.05, for about 13% more cells memory (cells are about 9 KB a chunk).
-  - Unused terrain is kept in least recently used queues. A neighbor's structure pass reads only a
-    chunk's masks, heights and structures, never its blocks, so a downsampled chunk gives its blocks back
-    and stays cached at about 35 KB instead of 300 KB. Compact terrain and terrain still holding blocks
-    have separate caps and queues: with one queue, freeing room for blocks discarded compact terrain first
-    and barely helped.
+  - Unused terrain is kept in a least recently used queue under a byte budget. Surface-only terrain is
+    compacted after its terrain pass: a column is a few runs of blocks (5.5 on average, against 512
+    blocks), and its masks differ from all-air, all-solid-cube or neither in about one 64-block word. So a
+    chunk waits for its own structure pass in about 17 KB instead of about 290 KB, and once downsampled
+    keeps only the compacted masks, heights and structures its neighbors read. The blocks are expanded
+    into a pooled full array for the structure pass. Most regeneration was edge-of-ring terrain generated
+    only as a neighbor and evicted with its blocks before its own cells task ran; with blocks compacted,
+    the same memory holds over ten times as many waiting chunks.
   - Requests are ordered by whole priority steps and then around the camera, so a chunk's neighbors are
-    requested soon after it.
+    requested soon after it, except that requests whose terrain already holds blocks go first: they need
+    no terrain generated, and running them gives their blocks back. Ordering by how much of each
+    neighborhood had terrain (a slow flood fill) did no better.
   
-  Together these took a 40 blocks/s turning walk from 4.6 terrain generations per chunk to 1.4. What is
-  left is about 1.36 per cells task, little of it from caps or released claims: quadrupling the compact
-  cap took it to 1.29 and the with-blocks cap to 1.28, and releasing claims of unrequested chunks frees
-  almost nothing. Most of it is terrain generated as a neighbor and evicted with its blocks before its own
-  cells task runs, which then needs the blocks again.
+  Together these took a 40 blocks/s turning walk from 4.6 terrain generations per chunk to 1.0 (1.03 per
+  cells task) with a 256 MB budget, the memory the uncompacted caps used for 1.26. Compaction is a linear
+  pass per chunk on the workers and didn't change frame times or stutter.
 - A request claims its neighborhood before freeing unused terrain to make room, or it could free the
   very terrain it was about to use.
 - Tasks only start once an update, so the cap on tasks in flight must cover a frame of work for every

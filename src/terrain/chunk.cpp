@@ -70,6 +70,35 @@ std::mutex bufferPoolMutex;
 std::vector<std::vector<Block>> blocksPool;
 std::vector<ChunkMasks> masksPool;
 
+// A mask word as compacted: the same in every bit of both masks, or stored
+enum class CompactMaskWord : uint16_t
+{
+    AIR,
+    SOLID_CUBE,
+    // Neither, e.g. water
+    OTHER,
+    STORED,
+};
+inline constexpr uint32_t terrainMaskWordsPerColumn = chunkSizeY / 64;
+static_assert(terrainMaskWordsPerColumn * 2 <= 16, "a column's compact mask word kinds must fit 16 bits");
+
+CompactMaskWord classifyMaskWord(uint64_t airWord, uint64_t solidCubeWord)
+{
+    if (airWord == ~uint64_t(0) && solidCubeWord == 0)
+    {
+        return CompactMaskWord::AIR;
+    }
+    if (airWord == 0 && solidCubeWord == ~uint64_t(0))
+    {
+        return CompactMaskWord::SOLID_CUBE;
+    }
+    if (airWord == 0 && solidCubeWord == 0)
+    {
+        return CompactMaskWord::OTHER;
+    }
+    return CompactMaskWord::STORED;
+}
+
 template<typename T>
 T takePooled(std::vector<T>& pool)
 {
@@ -94,6 +123,11 @@ ChunkMemory& ChunkMemory::operator+=(const ChunkMemory& other)
     return *this;
 }
 
+uint64_t ChunkMemory::getTotal() const
+{
+    return blocks + terrainMasks + generationScratch + structures + misc;
+}
+
 // Capacities are read without synchronization; only for diagnostics
 ChunkMemory Chunk::getMemory() const
 {
@@ -102,8 +136,11 @@ ChunkMemory Chunk::getMemory() const
         this->blockStates.size() * (sizeof(std::pair<const uint32_t, uint8_t>) + 2 * sizeof(void*)) +
         this->blockStates.bucket_count() * 2 * sizeof(void*);
     return {
-        .blocks = capacityBytes(this->blocks),
-        .terrainMasks = capacityBytes(this->terrainAirMask) + capacityBytes(this->terrainSolidCubeMask),
+        .blocks =
+            capacityBytes(this->blocks) + capacityBytes(this->blockRuns) + capacityBytes(this->blockRunColumnStarts),
+        .terrainMasks = capacityBytes(this->terrainAirMask) + capacityBytes(this->terrainSolidCubeMask) +
+                        capacityBytes(this->compactMaskWordKinds) + capacityBytes(this->compactMaskWords) +
+                        capacityBytes(this->compactMaskColumnStarts),
         .generationScratch = capacityBytes(this->caveDecoration.airMask) + capacityBytes(this->caveDecoration.noise) +
                              capacityBytes(this->caveDecoration.surfaceBias) + capacityBytes(this->snow.lineY) +
                              capacityBytes(this->snow.coldCover) + capacityBytes(this->snow.patch) +
@@ -144,6 +181,11 @@ Chunk::Chunk(ivec2 chunkPos, Region* region, bool isSurfaceOnly)
 Chunk::~Chunk()
 {
     this->releaseBlocks();
+    this->releaseMasks();
+}
+
+void Chunk::releaseMasks()
+{
     // Only full-size buffers: a chunk destroyed before it had terrain has nothing worth pooling
     if (this->terrainAirMask.capacity() >= terrainMaskWords && this->terrainSolidCubeMask.capacity() >= terrainMaskWords)
     {
@@ -153,6 +195,98 @@ Chunk::~Chunk()
             .terrainSolidCubeMask = std::move(this->terrainSolidCubeMask),
         });
     }
+    this->terrainAirMask = {};
+    this->terrainSolidCubeMask = {};
+}
+
+void Chunk::compactSurfaceOnlyTerrain()
+{
+    ASSERT(this->isSurfaceOnly);
+    // Counted first so the compact buffers are sized exactly
+    uint32_t numRuns = 0;
+    uint32_t numStoredMaskWords = 0;
+    for (uint32_t column = 0; column < chunkSizeXZSquare; ++column)
+    {
+        const Block* blocksColumn = this->blocks.data() + column * chunkSizeY;
+        for (uint32_t y = 0; y < chunkSizeY; ++y)
+        {
+            numRuns += (y == 0 || blocksColumn[y] != blocksColumn[y - 1]) ? 1 : 0;
+        }
+        for (uint32_t word = 0; word < terrainMaskWordsPerColumn; ++word)
+        {
+            const uint32_t wordIdx = column * terrainMaskWordsPerColumn + word;
+            numStoredMaskWords += classifyMaskWord(this->terrainAirMask[wordIdx],
+                                                   this->terrainSolidCubeMask[wordIdx]) == CompactMaskWord::STORED
+                                      ? 1
+                                      : 0;
+        }
+    }
+
+    this->blockRuns.resize(numRuns);
+    this->blockRunColumnStarts.resize(chunkSizeXZSquare + 1);
+    this->compactMaskWordKinds.resize(chunkSizeXZSquare);
+    this->compactMaskWords.resize(2 * numStoredMaskWords);
+    this->compactMaskColumnStarts.resize(chunkSizeXZSquare + 1);
+    uint32_t runIdx = 0;
+    uint32_t storedIdx = 0;
+    for (uint32_t column = 0; column < chunkSizeXZSquare; ++column)
+    {
+        this->blockRunColumnStarts[column] = runIdx;
+        const Block* blocksColumn = this->blocks.data() + column * chunkSizeY;
+        for (uint32_t y = 0; y < chunkSizeY; ++y)
+        {
+            if (y == 0 || blocksColumn[y] != blocksColumn[y - 1])
+            {
+                this->blockRuns[runIdx++] = { blocksColumn[y], 1 };
+            }
+            else
+            {
+                ++this->blockRuns[runIdx - 1].length;
+            }
+        }
+
+        this->compactMaskColumnStarts[column] = static_cast<uint16_t>(storedIdx);
+        uint16_t kinds = 0;
+        for (uint32_t word = 0; word < terrainMaskWordsPerColumn; ++word)
+        {
+            const uint32_t wordIdx = column * terrainMaskWordsPerColumn + word;
+            const CompactMaskWord kind =
+                classifyMaskWord(this->terrainAirMask[wordIdx], this->terrainSolidCubeMask[wordIdx]);
+            kinds |= static_cast<uint16_t>(static_cast<uint16_t>(kind) << (2 * word));
+            if (kind == CompactMaskWord::STORED)
+            {
+                this->compactMaskWords[2 * storedIdx] = this->terrainAirMask[wordIdx];
+                this->compactMaskWords[2 * storedIdx + 1] = this->terrainSolidCubeMask[wordIdx];
+                ++storedIdx;
+            }
+        }
+        this->compactMaskWordKinds[column] = kinds;
+    }
+    this->blockRunColumnStarts[chunkSizeXZSquare] = runIdx;
+    this->compactMaskColumnStarts[chunkSizeXZSquare] = static_cast<uint16_t>(storedIdx);
+
+    this->releaseBlocks();
+    this->releaseMasks();
+    // Surface-only chunks have no cave air to record
+    this->caveDecoration.release();
+}
+
+void Chunk::expandSurfaceOnlyBlocks()
+{
+    this->blocks = takePooled(blocksPool);
+    this->blocks.resize(numChunkBlocks);
+    for (uint32_t column = 0; column < chunkSizeXZSquare; ++column)
+    {
+        Block* blocksColumn = this->blocks.data() + column * chunkSizeY;
+        for (uint32_t runIdx = this->blockRunColumnStarts[column]; runIdx < this->blockRunColumnStarts[column + 1];
+             ++runIdx)
+        {
+            const BlockRun run = this->blockRuns[runIdx];
+            blocksColumn = std::fill_n(blocksColumn, run.length, run.block);
+        }
+    }
+    this->blockRuns = {};
+    this->blockRunColumnStarts = {};
 }
 
 void Chunk::releaseBlocks()
@@ -299,7 +433,7 @@ const Chunk* Chunk::structureNeighborAt_WS(glm::ivec2 posXZ_WS, glm::ivec2& outP
     return this->structureNeighbors[(chunkOffset.y + radius) * sideLength + (chunkOffset.x + radius)];
 }
 
-bool Chunk::getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const
+bool Chunk::getTerrainMaskBit_WS(glm::ivec3 pos_WS, bool isSolidCubeMask) const
 {
     if (pos_WS.y < 0 || pos_WS.y >= static_cast<int>(chunkSizeY))
     {
@@ -308,19 +442,52 @@ bool Chunk::getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> 
 
     glm::ivec2 posXZ_CS;
     const Chunk* chunk = this->structureNeighborAt_WS(glm::ivec2(pos_WS.x, pos_WS.z), posXZ_CS);
-    const uint32_t blockIdx = blockPosToIdx(glm::uvec3(posXZ_CS.x, pos_WS.y, posXZ_CS.y /*z*/));
-    const std::vector<uint64_t>& terrainMask = chunk->*mask;
-    return (terrainMask[blockIdx / 64] >> (blockIdx % 64)) & 1;
+    return chunk->getTerrainMaskBit(blockPosToIdx(glm::uvec3(posXZ_CS.x, pos_WS.y, posXZ_CS.y /*z*/)), isSolidCubeMask);
+}
+
+bool Chunk::getTerrainMaskBit(uint32_t blockIdx, bool isSolidCubeMask) const
+{
+    const uint32_t wordIdx = blockIdx / 64;
+    const uint32_t bitIdx = blockIdx % 64;
+    if (this->compactMaskWordKinds.empty())
+    {
+        const std::vector<uint64_t>& mask = isSolidCubeMask ? this->terrainSolidCubeMask : this->terrainAirMask;
+        return (mask[wordIdx] >> bitIdx) & 1;
+    }
+
+    const uint32_t column = wordIdx / terrainMaskWordsPerColumn;
+    const uint32_t word = wordIdx % terrainMaskWordsPerColumn;
+    const uint16_t kinds = this->compactMaskWordKinds[column];
+    switch (static_cast<CompactMaskWord>((kinds >> (2 * word)) & 3))
+    {
+        case CompactMaskWord::AIR:
+            return !isSolidCubeMask;
+        case CompactMaskWord::SOLID_CUBE:
+            return isSolidCubeMask;
+        case CompactMaskWord::OTHER:
+            return false;
+        case CompactMaskWord::STORED:
+        {
+            uint32_t storedIdx = this->compactMaskColumnStarts[column];
+            for (uint32_t lowerWord = 0; lowerWord < word; ++lowerWord)
+            {
+                storedIdx +=
+                    static_cast<CompactMaskWord>((kinds >> (2 * lowerWord)) & 3) == CompactMaskWord::STORED ? 1 : 0;
+            }
+            return (this->compactMaskWords[2 * storedIdx + (isSolidCubeMask ? 1 : 0)] >> bitIdx) & 1;
+        }
+    }
+    return false;
 }
 
 bool Chunk::isTerrainAir_WS(glm::ivec3 pos_WS) const
 {
-    return this->getTerrainMaskBit_WS(pos_WS, &Chunk::terrainAirMask);
+    return this->getTerrainMaskBit_WS(pos_WS, false);
 }
 
 bool Chunk::isTerrainSolidCube_WS(glm::ivec3 pos_WS) const
 {
-    return this->getTerrainMaskBit_WS(pos_WS, &Chunk::terrainSolidCubeMask);
+    return this->getTerrainMaskBit_WS(pos_WS, true);
 }
 
 uint32_t Chunk::structureNeighborBit(glm::ivec2 offset)
@@ -631,8 +798,9 @@ void Chunk::placeFloorDecorators()
                 {
                     Block decoratorBlock = Block::AIR;
                     // Cave-air cells are handled by the all-face pass below. Everything else at or
-                    // above terrain top is the ordinary surface-biome floor pass.
-                    if (!this->caveDecoration.isCaveAir(columnIdx, blockY))
+                    // above terrain top is the ordinary surface-biome floor pass. Surface-only chunks have
+                    // no cave air.
+                    if (this->isSurfaceOnly || !this->caveDecoration.isCaveAir(columnIdx, blockY))
                     {
                         decoratorBlock = decorator.getBlock(
                             decoratorRng.nextFloat(), columnPos_WS, worldSeed, bottomBlock, DECORATOR_SURFACE_FLOOR);
@@ -788,11 +956,13 @@ void Chunk::generateSurfaceOnlyTerrain(ThreadMemoryAllocator& threadMemoryAlloc)
 {
     ASSERT(this->isSurfaceOnly);
     this->generateTerrainBlocks(threadMemoryAlloc);
+    this->compactSurfaceOnlyTerrain();
 }
 
 void Chunk::fillSurfaceOnlyStructures(const ConstStructureNeighborhood& neighborhood)
 {
     ASSERT(this->isSurfaceOnly);
+    this->expandSurfaceOnlyBlocks();
     this->structureNeighbors.assign(neighborhood.begin(), neighborhood.end());
     this->runStructuresAndDecoratorPass();
     this->structureNeighbors = {};
