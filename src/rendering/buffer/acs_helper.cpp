@@ -298,14 +298,15 @@ void buildOmmArray(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, 
     toFreeList.pushResource(inputBuffer);
 }
 
-// Fp32 positions a BLAS build reads; the resident verts section unless the build sources them elsewhere
-struct BlasVertsSource
+// Fp32 positions or R32 indices a BLAS build reads; the resident section unless the build sources them
+// elsewhere
+struct BlasBuildSource
 {
     D3D12_GPU_VIRTUAL_ADDRESS gpuVa{ 0 };
     uint32_t count{ 0 };
 };
 
-static BlasVertsSource residentVertsSource(const GeometryWrapper* geoWrapper)
+static BlasBuildSource residentVertsSource(const GeometryWrapper* geoWrapper)
 {
     return {
         .gpuVa = geoWrapper->vertsBufferSection.getGpuVirtualAddress(),
@@ -313,37 +314,44 @@ static BlasVertsSource residentVertsSource(const GeometryWrapper* geoWrapper)
     };
 }
 
-static void makeBlasBuildInputs(AcsBuildInfo* buildInfo,
-                                const GeometryWrapper* geoWrapper,
-                                const BlasVertsSource vertsSource,
-                                bool allowUpdate,
-                                bool allowCompaction)
+// None for unindexed geometry
+static BlasBuildSource residentIdxsSource(const GeometryWrapper* geoWrapper, const BlasBuildSource vertsSource)
 {
-    const ManagedBufferSection idxsBufferSection = geoWrapper->idxsBufferSection;
-    const ManagedBufferSection ommIdxsBufferSection = geoWrapper->ommIdxsBufferSection;
-    const bool hasOmms = (ommIdxsBufferSection.sizeBytes > 0);
-
-    uint32_t idxCount = 0;
-    D3D12_GPU_VIRTUAL_ADDRESS idxsGpuVa = 0;
     if (geoWrapper->hasQuadIdxs)
     {
         ASSERT(vertsSource.count % vertsPerQuad == 0 && vertsSource.count / vertsPerQuad <= numQuadIdxsQuads);
-        idxCount = vertsSource.count / vertsPerQuad * idxsPerQuad;
-        idxsGpuVa = sharedQuadIdxsBuffer.getGpuVirtualAddress();
+        return {
+            .gpuVa = sharedQuadIdxsBuffer.getGpuVirtualAddress(),
+            .count = vertsSource.count / vertsPerQuad * idxsPerQuad,
+        };
     }
-    else if (idxsBufferSection.isValid())
+    if (geoWrapper->idxsBufferSection.isValid())
     {
-        idxCount = Util::convertByteSizeToCount<uint32_t>(idxsBufferSection.sizeBytes);
-        idxsGpuVa = idxsBufferSection.getGpuVirtualAddress();
+        return {
+            .gpuVa = geoWrapper->idxsBufferSection.getGpuVirtualAddress(),
+            .count = Util::convertByteSizeToCount<uint32_t>(geoWrapper->idxsBufferSection.sizeBytes),
+        };
     }
+    return {};
+}
+
+static void makeBlasBuildInputs(AcsBuildInfo* buildInfo,
+                                const GeometryWrapper* geoWrapper,
+                                const BlasBuildSource vertsSource,
+                                const BlasBuildSource idxsSource,
+                                bool allowUpdate,
+                                bool allowCompaction)
+{
+    const ManagedBufferSection ommIdxsBufferSection = geoWrapper->ommIdxsBufferSection;
+    const bool hasOmms = (ommIdxsBufferSection.sizeBytes > 0);
 
     buildInfo->trianglesDesc = {
         .Transform3x4 = 0,
-        .IndexFormat = idxCount > 0 ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_UNKNOWN,
+        .IndexFormat = idxsSource.count > 0 ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_UNKNOWN,
         .VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
-        .IndexCount = idxCount,
+        .IndexCount = idxsSource.count,
         .VertexCount = vertsSource.count,
-        .IndexBuffer = idxsGpuVa,
+        .IndexBuffer = idxsSource.gpuVa,
         .VertexBuffer = {
             .StartAddress = vertsSource.gpuVa,
             .StrideInBytes = sizeof(Vertex),
@@ -407,11 +415,12 @@ static void makeBlasBuildInputs(AcsBuildInfo* buildInfo,
 
 static void makeBlasBuildInfo(AcsBuildInfo* buildInfo,
                               GeometryWrapper* geoWrapper,
-                              const BlasVertsSource vertsSource,
+                              const BlasBuildSource vertsSource,
+                              const BlasBuildSource idxsSource,
                               bool allowUpdate,
                               bool allowCompaction)
 {
-    makeBlasBuildInputs(buildInfo, geoWrapper, vertsSource, allowUpdate, allowCompaction);
+    makeBlasBuildInputs(buildInfo, geoWrapper, vertsSource, idxsSource, allowUpdate, allowCompaction);
 
     Renderer::getDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&buildInfo->inputs, &buildInfo->prebuildInfo);
 
@@ -482,7 +491,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
         const ManagedBufferSection vertsUploadBufferSection =
             sharedVertsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_verts);
 
-        BlasVertsSource vertsSource;
+        BlasBuildSource vertsSource;
         if (inputs.host_packedTerrainVerts != nullptr)
         {
             ASSERT(!inputs.allowUpdate); // refits re-read the resident verts, which would not be fp32
@@ -511,9 +520,25 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
 
         ASSERT(!(inputs.hasQuadIdxs && inputs.host_idxs));
         inputs.outGeoWrapper->hasQuadIdxs = inputs.hasQuadIdxs;
-        if (inputs.host_idxs)
+        BlasBuildSource idxsSource;
+        if (inputs.idxsBuildOnly)
         {
-            inputs.outGeoWrapper->idxsBufferSection = uploadIdxsSection(*inputs.host_idxs);
+            ASSERT(inputs.host_idxs && !inputs.allowUpdate); // refits re-read the resident indices
+            const ManagedBufferSection idxsUploadBufferSection =
+                sharedIdxsUploadBuffer.copyFromHostVector(cmdList, toFreeList, *inputs.host_idxs);
+            toFreeList.pushManagedBufferSection(idxsUploadBufferSection);
+            idxsSource = {
+                .gpuVa = idxsUploadBufferSection.getGpuVirtualAddress(),
+                .count = static_cast<uint32_t>(inputs.host_idxs->size()),
+            };
+        }
+        else
+        {
+            if (inputs.host_idxs)
+            {
+                inputs.outGeoWrapper->idxsBufferSection = uploadIdxsSection(*inputs.host_idxs);
+            }
+            idxsSource = residentIdxsSource(inputs.outGeoWrapper, vertsSource);
         }
 
         if (inputs.host_ommIdxs)
@@ -527,7 +552,8 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
             : D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION;
 
         buildInfos.emplace_back();
-        makeBlasBuildInfo(&buildInfos.back(), inputs.outGeoWrapper, vertsSource, inputs.allowUpdate, inputs.allowCompaction);
+        makeBlasBuildInfo(&buildInfos.back(), inputs.outGeoWrapper, vertsSource, idxsSource, inputs.allowUpdate,
+                          inputs.allowCompaction);
         if (inputs.allowCompaction)
         {
             ++outQuery->numEntries;
@@ -611,7 +637,9 @@ void updateBlases(ID3D12GraphicsCommandList4* cmdList,
     for (GeometryWrapper* const geoWrapper : geoWrappers)
     {
         AcsBuildInfo buildInfo;
-        makeBlasBuildInputs(&buildInfo, geoWrapper, residentVertsSource(geoWrapper), true /*allowUpdate*/, false /*allowCompaction*/);
+        const BlasBuildSource vertsSource = residentVertsSource(geoWrapper);
+        makeBlasBuildInputs(&buildInfo, geoWrapper, vertsSource, residentIdxsSource(geoWrapper, vertsSource),
+                            true /*allowUpdate*/, false /*allowCompaction*/);
         // update flags must match the original build's flags aside from PERFORM_UPDATE, and
         // ALLOW_UPDATE must stay set or no further updates are allowed
         buildInfo.inputs.Flags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;

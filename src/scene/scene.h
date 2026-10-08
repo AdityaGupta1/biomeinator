@@ -86,10 +86,12 @@ private:
     uint32_t trisPerFaceLog2{ 0 };
     // VERTEX_FORMAT_* of HostGeometry::packedTerrainVerts, when there are any
     uint32_t packedVertexFormat{ VERTEX_FORMAT_PACKED_TERRAIN };
+    // See setHeightfieldCornersPerRow()
+    uint32_t heightfieldCornersPerRow{ 0 };
 
-    // Faces are quads whose indices are implicit (see getQuadFaceVertIdx()) rather than stored. Two-triangle
-    // faces with stored indices (LOD heightfields, which share verts between faces) are not.
+    // Faces are quads whose indices are implicit (see getQuadFaceVertIdx()) rather than stored
     bool hasQuadFaces() const;
+    bool hasHeightfieldFaces() const;
 
     Instance(::Scene* scene, uint32_t id);
 
@@ -143,6 +145,11 @@ public:
     void setTrisPerFaceLog2(uint32_t log2);
 
     void setPackedVertexFormat(uint32_t vertexFormat);
+
+    // Nonzero marks a LOD heightfield, whose faces each record where their verts are (see
+    // getHeightfieldFaceVertIdx()), so its indices only feed the BLAS build and are never kept resident.
+    // Must be set before finalizeGeometry().
+    void setHeightfieldCornersPerRow(uint32_t cornersPerRow);
 };
 
 class Scene

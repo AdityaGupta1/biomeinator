@@ -121,13 +121,6 @@ generations per chunk on a turning walk from 4.6 to 1.0 (cells kept a margin pas
 requests whose terrain holds blocks run first, compacted terrain under a byte budget).
 
 Left on the table:
-- LOD index buffers (seed 100, render distance 30, settled): heightfield tiles hold 402 MB of indices and
-  voxel tiles 124 MB, against 317 MB for chunks before #427 dropped theirs. Voxel tiles are all quads of
-  four fresh vertices and can use implicit indices as chunks do. Heightfields share vertices, so instead:
-  build each BLAS from the tile's indices in upload staging (the BLAS keeps no reference to them) and
-  rebuild a hit triangle's indices in the shader from a vertex base and pattern (grid quad with either
-  diagonal and the tile's row stride, 4 or 6 consecutive vertices) stored in the face's unused
-  `localAreaLightIdx`, since tiles are never emissive.
 - Display in the LOD update (0.3-0.35 ms per frame) sorts and diffs the ~4000 displayed chunks and tiles
   every frame. Keeping unchanged areas out of the sort and diff is the largest remaining main-thread cost.
 - Downsampling chunks the full-res pipeline already holds would skip surface-only generation near the

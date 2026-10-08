@@ -23,7 +23,7 @@ Material::Material()
 
 PerFaceData::PerFaceData()
     : packedFlagsAndSlice(0),
-      localAreaLightIdx(LIGHT_IDX_INVALID)
+      localAreaLightIdxOrHeightfieldVerts(LIGHT_IDX_INVALID)
 {}
 
 void PerFaceData::setFlags(const uint32_t flags)

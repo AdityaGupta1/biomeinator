@@ -183,6 +183,21 @@ void loadTriangleVerts(const InstanceData instanceData, const uint triIdx, const
     }
 }
 
+// Heightfields are opaque and never emissive, so only closest hits land on them. Their decode stays out of
+// getTriangleVertexIndices(), which the raygen inlines (see knowledge/terrain/terrain_lod.md).
+uint3 getClosestHitTriangleVertexIndices(const InstanceData instanceData, const uint triIdx)
+{
+    if (!instanceData.hasHeightfieldFaces())
+    {
+        return getTriangleVertexIndices(instanceData, triIdx);
+    }
+
+    const uint faceVerts = loadPerFaceData(instanceData, triIdx).localAreaLightIdxOrHeightfieldVerts;
+    return uint3(getHeightfieldFaceVertIdx(faceVerts, instanceData.heightfieldCornersPerRow, triIdx, 0),
+                 getHeightfieldFaceVertIdx(faceVerts, instanceData.heightfieldCornersPerRow, triIdx, 1),
+                 getHeightfieldFaceVertIdx(faceVerts, instanceData.heightfieldCornersPerRow, triIdx, 2));
+}
+
 void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
 {
     loadTriangleVerts(instanceData, triIdx, getTriangleVertexIndices(instanceData, triIdx), v0, v1, v2);
@@ -333,7 +348,7 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const InstanceData instanceData = instanceDatas[InstanceID()];
     const uint materialIdx = instanceData.materialIdx;
 
-    const uint3 vertexIndices = getTriangleVertexIndices(instanceData, PrimitiveIndex());
+    const uint3 vertexIndices = getClosestHitTriangleVertexIndices(instanceData, PrimitiveIndex());
     Vertex v0, v1, v2;
     loadTriangleVerts(instanceData, PrimitiveIndex(), vertexIndices, v0, v1, v2);
 

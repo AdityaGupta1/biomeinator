@@ -189,24 +189,19 @@ static std::mutex tilesWithNewGeometryMutex;
 
 } // namespace TerrainLod
 
-// Appends a vertex and returns its index
-static uint32_t addVertex(HostGeometry& geometry, vec3 pos, vec3 normal, uint32_t tint)
+static void addVertex(HostGeometry& geometry, vec3 pos, vec3 normal, uint32_t tint)
 {
     const DirectX::XMFLOAT3 normalDx{ normal.x, normal.y, normal.z };
     const PackedLodTerrainVertex packed = Util::packLodTerrainVertex({ pos.x, pos.y, pos.z }, normalDx, tint);
     geometry.packedTerrainVerts.push_back(std::bit_cast<PackedTerrainVertex>(packed));
     // Only the position feeds the BLAS, decoded so the traced and shaded surfaces agree
     geometry.verts.push_back({ Util::unpackLodTerrainPos(packed), Util::octEncode(normalDx), { 0.f, 0.f } });
-    return static_cast<uint32_t>(geometry.verts.size() - 1);
 }
 
-// Two triangles over four corners in winding order, split along corners 0 and 2, as one face
-static void addFace(HostGeometry& geometry, const std::array<uint32_t, 4>& corners, const PerFaceData& faceData)
+// Two triangles over the last four verts added, in winding order, split along corners 0 and 2, as one face
+// (see getQuadFaceVertIdx())
+static void addFace(HostGeometry& geometry, const PerFaceData& faceData)
 {
-    for (const uint32_t cornerIdx : { 0u, 1u, 2u, 0u, 2u, 3u })
-    {
-        geometry.idxs.push_back(corners[cornerIdx]);
-    }
     geometry.perFaceDatas.push_back(faceData);
 }
 
@@ -222,13 +217,12 @@ static void addBoxFace(HostGeometry& geometry,
     const uint32_t faceIdx = blockFaceIndex(face);
     const ivec3* boxCorners = cubeFaceVertPositions + 4 * faceIdx;
     const vec3 normal(blockFaceBases[faceIdx].normal);
-    std::array<uint32_t, 4> corners;
     for (uint32_t i = 0; i < 4; ++i)
     {
         const vec3 pos = boxMin + vec3(boxCorners[i]) * (boxMax - boxMin);
-        corners[i] = addVertex(geometry, pos, normal, cornerTint(vec2(pos.x, pos.z)));
+        addVertex(geometry, pos, normal, cornerTint(vec2(pos.x, pos.z)));
     }
-    addFace(geometry, corners, faceData);
+    addFace(geometry, faceData);
 }
 
 static PerFaceData blockFaceData(Block block, BlockFace face, uint32_t extraFlags = 0)
@@ -317,6 +311,13 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
     {
         return static_cast<uint32_t>(cornerPos.x + numCornersXZ * cornerPos.y);
     };
+    // A face of two triangles over the six verts added next, three each
+    const auto addTrianglesFace = [&](PerFaceData faceData)
+    {
+        faceData.localAreaLightIdxOrHeightfieldVerts =
+            packHeightfieldFaceVerts(HEIGHTFIELD_FACE_TRIANGLES, static_cast<uint32_t>(terrainGeometry.verts.size()));
+        terrainGeometry.perFaceDatas.push_back(faceData);
+    };
 
     // A cell holds water, or the ice slab over it, wherever any of its corners is underwater, so the surface
     // reaches the shore and covers the part of the cell's slope below the waterline. Terrain above the water
@@ -377,16 +378,11 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
     const auto addWall = [&](vec2 a, vec2 b, float yLow, float yHigh, vec2 normalXZ, const PerFaceData& faceData)
     {
         const vec3 normal(normalXZ.x, 0.f, normalXZ.y);
-        const std::array<vec3, 4> positions{
-            localPos(a, yHigh), localPos(b, yHigh), localPos(b, yLow), localPos(a, yLow)
-        };
-        std::array<uint32_t, 4> corners;
-        for (int i = 0; i < 4; ++i)
+        for (const vec3 pos : { localPos(a, yHigh), localPos(b, yHigh), localPos(b, yLow), localPos(a, yLow) })
         {
-            corners[i] =
-                addVertex(terrainGeometry, positions[i], normal, cornerTint(vec2(positions[i].x, positions[i].z)));
+            addVertex(terrainGeometry, pos, normal, cornerTint(vec2(pos.x, pos.z)));
         }
-        addFace(terrainGeometry, corners, faceData);
+        addFace(terrainGeometry, faceData);
     };
     const auto addCliffCell = [&](ivec2 cellPos, const PerFaceData& wallFaceData)
     {
@@ -445,6 +441,7 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
             }
             const float midHeight = 0.5f * (heightA + heightB);
             const vec2 mid = 0.5f * vec2(cornerA + cornerB);
+            addTrianglesFace(wallFaceData);
             for (const auto& [cornerPos, height] : { std::pair{ cornerA, heightA }, std::pair{ cornerB, heightB } })
             {
                 // Each sliver faces whichever side is lower there
@@ -452,11 +449,9 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
                 for (const vec3 pos :
                      { localPos(vec2(cornerPos), height), localPos(mid, height), localPos(mid, midHeight) })
                 {
-                    terrainGeometry.idxs.push_back(
-                        addVertex(terrainGeometry, pos, normal, cornerTint(vec2(pos.x, pos.z))));
+                    addVertex(terrainGeometry, pos, normal, cornerTint(vec2(pos.x, pos.z)));
                 }
             }
-            terrainGeometry.perFaceDatas.push_back(wallFaceData);
         }
     };
 
@@ -515,9 +510,11 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
             }
 
             // In winding order, split along the first and third corners: the diagonal with less height change,
-            // so ridges and valleys stay creased along their length rather than across it
+            // so ridges and valleys stay creased along their length rather than across it. The order must match
+            // getHeightfieldFaceVertIdx()'s.
+            const bool isFlipped = std::abs(h11 - h00) > std::abs(h10 - h01);
             std::array<ivec2, 4> corners{ cellPos + ivec2(1, 1), cellPos + ivec2(1, 0), cellPos, cellPos + ivec2(0, 1) };
-            if (std::abs(h11 - h00) > std::abs(h10 - h01))
+            if (isFlipped)
             {
                 std::rotate(corners.begin(), corners.begin() + 1, corners.end());
             }
@@ -529,16 +526,17 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
             }
             if (!isSteep)
             {
-                addFace(terrainGeometry,
-                        { cornerVertIdx(corners[0]), cornerVertIdx(corners[1]), cornerVertIdx(corners[2]),
-                          cornerVertIdx(corners[3]) },
-                        faceData);
+                PerFaceData gridFaceData = faceData;
+                gridFaceData.localAreaLightIdxOrHeightfieldVerts = packHeightfieldFaceVerts(
+                    isFlipped ? HEIGHTFIELD_FACE_GRID_FLIPPED : HEIGHTFIELD_FACE_GRID, cornerVertIdx(cellPos));
+                terrainGeometry.perFaceDatas.push_back(gridFaceData);
                 continue;
             }
 
             // Steep cells are faceted: on a cliff, a smooth normal averaged with the ground above and below
             // strays far from the long thin triangles' own, which streaks their shading and shadows
             const vec3 upward(-gradient.x, 1.f, -gradient.y);
+            addTrianglesFace(faceData);
             for (const std::array<int, 3>& triangle : { std::array<int, 3>{ 0, 1, 2 }, std::array<int, 3>{ 0, 2, 3 } })
             {
                 std::array<vec3, 3> positions;
@@ -554,11 +552,9 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
                 }
                 for (int i = 0; i < 3; ++i)
                 {
-                    terrainGeometry.idxs.push_back(addVertex(terrainGeometry, positions[i], normal,
-                                                             cornerTint(vec2(corners[triangle[i]]) * cellSizeF)));
+                    addVertex(terrainGeometry, positions[i], normal, cornerTint(vec2(corners[triangle[i]]) * cellSizeF));
                 }
             }
-            terrainGeometry.perFaceDatas.push_back(faceData);
         }
     }
 
@@ -579,8 +575,7 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
             {
                 const float y = std::max(heightAt(cornerPos) + yOffset, 0.f);
                 const vec3 pos(cornerPos.x * cellSizeF, y, cornerPos.y * cellSizeF);
-                return addVertex(terrainGeometry, pos, vec3(outward.x, 0.f, outward.y),
-                                 cornerTint(vec2(cornerPos) * cellSizeF));
+                addVertex(terrainGeometry, pos, vec3(outward.x, 0.f, outward.y), cornerTint(vec2(cornerPos) * cellSizeF));
             };
             const PerFaceData& faceData = cellFaceDatas[cellPos.x + numCells * cellPos.y];
             if (isCliffCell(cellPos))
@@ -594,10 +589,11 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
                 }
                 continue;
             }
-            addFace(terrainGeometry,
-                    { addSkirtVertex(cornerA, 0.f), addSkirtVertex(cornerB, 0.f), addSkirtVertex(cornerB, -skirtDepth),
-                      addSkirtVertex(cornerA, -skirtDepth) },
-                    faceData);
+            addSkirtVertex(cornerA, 0.f);
+            addSkirtVertex(cornerB, 0.f);
+            addSkirtVertex(cornerB, -skirtDepth);
+            addSkirtVertex(cornerA, -skirtDepth);
+            addFace(terrainGeometry, faceData);
         }
     }
 
@@ -666,6 +662,38 @@ bool LodTile::meshHeightfield(ThreadMemoryAllocator& threadMemoryAlloc)
             }
         }
     }
+
+    // Faces from addFace don't know where their verts are yet. Verts past the corner grid are added in face
+    // order, so each such face's four are the next ones not taken by the faces before it.
+    uint32_t nextFaceVert = static_cast<uint32_t>(numCornersXZ * numCornersXZ);
+    for (PerFaceData& faceData : terrainGeometry.perFaceDatas)
+    {
+        uint32_t& faceVerts = faceData.localAreaLightIdxOrHeightfieldVerts;
+        if (faceVerts == LIGHT_IDX_INVALID)
+        {
+            faceVerts = packHeightfieldFaceVerts(HEIGHTFIELD_FACE_QUAD, nextFaceVert);
+        }
+        const uint32_t pattern = getHeightfieldFacePattern(faceVerts);
+        if (pattern == HEIGHTFIELD_FACE_QUAD || pattern == HEIGHTFIELD_FACE_TRIANGLES)
+        {
+            ASSERT(getHeightfieldFaceVertBase(faceVerts) == nextFaceVert);
+            nextFaceVert += pattern == HEIGHTFIELD_FACE_QUAD ? 4 : 6;
+        }
+    }
+    ASSERT(nextFaceVert == terrainGeometry.verts.size());
+
+    // Only the BLAS build reads the indices, so they come from the faces and the two can't disagree
+    const auto numTris = static_cast<uint32_t>(terrainGeometry.perFaceDatas.size() * 2);
+    terrainGeometry.idxs.reserve(numTris * 3);
+    for (uint32_t triIdx = 0; triIdx < numTris; ++triIdx)
+    {
+        const uint32_t faceVerts = terrainGeometry.perFaceDatas[triIdx >> 1].localAreaLightIdxOrHeightfieldVerts;
+        for (uint32_t corner = 0; corner < 3; ++corner)
+        {
+            terrainGeometry.idxs.push_back(getHeightfieldFaceVertIdx(faceVerts, numCornersXZ, triIdx, corner));
+        }
+    }
+    this->terrainInstance->setHeightfieldCornersPerRow(numCornersXZ);
 
     // Every top and side block is opaque
     return false;
@@ -833,14 +861,12 @@ bool LodTile::meshVoxels()
             Block block = plants.block;
             for (float bottomY = static_cast<float>(plants.baseY); block != Block::AIR; bottomY += 1.f)
             {
-                std::array<uint32_t, 4> corners;
-                const std::array<vec3, 4> positions{ vec3(start.x, bottomY + 1.f, start.y), vec3(end.x, bottomY + 1.f, end.y),
-                                                     vec3(end.x, bottomY, end.y), vec3(start.x, bottomY, start.y) };
-                for (int i = 0; i < 4; ++i)
+                for (const vec3 pos : { vec3(start.x, bottomY + 1.f, start.y), vec3(end.x, bottomY + 1.f, end.y),
+                                        vec3(end.x, bottomY, end.y), vec3(start.x, bottomY, start.y) })
                 {
-                    corners[i] = addVertex(terrainGeometry, positions[i], normal, packedTint);
+                    addVertex(terrainGeometry, pos, normal, packedTint);
                 }
-                addFace(terrainGeometry, corners, blockFaceData(block, alongX ? BlockFace::Z_POS : BlockFace::X_POS));
+                addFace(terrainGeometry, blockFaceData(block, alongX ? BlockFace::Z_POS : BlockFace::X_POS));
                 block = Blocks::getBlockData(block).upperHalf;
             }
         }

@@ -1,4 +1,4 @@
-_Last edited: 2026-10-06_
+_Last edited: 2026-10-07_
 
 # Acceleration Structures
 
@@ -61,8 +61,10 @@ is only needed until the build has run. Instances with `hostGeometry.packedTerra
 the build reads fp32 positions straight from the section in `sharedVertsUploadBuffer` (an
 upload heap is permanently `GENERIC_READ`, which covers the required
 `NON_PIXEL_SHADER_RESOURCE` state, and the section lives on through the free list for the
-frames in flight), while only the packed copy is uploaded to the resident verts buffer. Refit
-BLASes cannot do this because `updateBlases` re-reads the resident vertices.
+frames in flight), while only the packed copy is uploaded to the resident verts buffer. Indices
+work the same way with `BlasBuildInputs::idxsBuildOnly`, for LOD heightfields whose shaders find
+their verts from per-face data instead. Refit BLASes cannot do either because `updateBlases`
+re-reads the resident inputs.
 
 ## BLAS Refit
 

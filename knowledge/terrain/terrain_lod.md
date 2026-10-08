@@ -1,4 +1,4 @@
-_Last edited: 2026-10-04_
+_Last edited: 2026-10-07_
 
 # Terrain LODs
 
@@ -205,6 +205,16 @@ geometry is freed, except within `keepGeometryMarginChunks` of the edge (see abo
   `FACE_FLAG_SIDE_PROJECTION` and always project horizontally: a cell picks its material from its average
   slope, and projecting by each triangle's slope instead laid side textures flat on cells near the
   threshold, turning the grass edge sideways.
+- No tile keeps indices resident. Voxel tiles and all LOD water are quads of four fresh verts, so they
+  use implicit quad indices like chunks. A heightfield face records its first vert and a pattern in
+  `PerFaceData`: a cell of the shared corner grid (either diagonal), four verts of its own, or six. The
+  indices the BLAS build reads are generated from those records, so the two can't disagree. Faces from
+  the shared `addFace`/`addBoxFace` helpers get their record afterwards, from a cursor over the verts
+  past the corner grid, which relies on each face's own verts being added in face order. The decode
+  lives only in the closest hit (`getClosestHitTriangleVertexIndices`), which is safe because
+  heightfields are opaque and never emissive: in `getTriangleVertexIndices`, which the raygen inlines
+  into its inline-anyhit shadow loop and light sampling, it cost about 8% of path tracing in a
+  LOD-heavy view even though those paths never decode a heightfield.
 - The biome tint map only covers the render distance, so tiles bake each corner's biome tint into its
   vertices. The closest-hit shader interpolates it into `HitInfo::packedVertexTint`, which overrides
   the map for tinted faces.

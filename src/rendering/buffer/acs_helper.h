@@ -58,6 +58,9 @@ struct BlasBuildInputs
     const std::vector<uint32_t>* host_idxs{ nullptr };
     // Indexes the verts as quads (see getQuadFaceVertIdx()) from one shared buffer instead of host_idxs
     bool hasQuadIdxs{ false };
+    // The build reads host_idxs from upload staging and they are not kept resident, for geometry whose
+    // shaders find their verts without them
+    bool idxsBuildOnly{ false };
     // Per-triangle OMM Array indices (or special indices); requires a built OMM Array
     const std::vector<uint16_t>* host_ommIdxs{ nullptr };
 
