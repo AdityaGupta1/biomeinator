@@ -14,6 +14,8 @@
 #include "util/math.h"
 #include "util/util.h"
 
+#include <algorithm>
+#include <bit>
 #include <cstring>
 
 namespace AcsHelper
@@ -81,6 +83,23 @@ static CommittedManagedBuffer sharedIdxsUploadBuffer{
     },
 };
 
+// The quad index pattern for the most quads any build has needed, appended to as builds need more.
+// Growth relocates the buffer, which is fine even for refits: per the DXR spec, an update may read
+// its inputs from different addresses as long as their contents are unchanged.
+static CommittedManagedBuffer sharedQuadIdxsBuffer{
+    &DEFAULT_HEAP,
+    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+    {
+        .isResizable = true,
+        .alignmentBytes = sizeof(uint32_t),
+    },
+};
+static std::vector<ManagedBufferSection> quadIdxsSections;
+static uint32_t numQuadIdxsQuads = 0;
+static constexpr uint32_t vertsPerQuad = 4;
+static constexpr uint32_t idxsPerQuad = 6;
+static constexpr size_t quadIdxsBytesPerQuad = idxsPerQuad * sizeof(uint32_t);
+
 void init()
 {
     sharedAcsBuffer.setName(L"sharedAcsBuffer");
@@ -90,10 +109,46 @@ void init()
     sharedVertsUploadBuffer.init(128ull << 20 /*bytes*/);
 
     sharedIdxsUploadBuffer.setName(L"sharedIdxsUploadBuffer");
-    sharedIdxsUploadBuffer.init(32ull << 20 /*bytes*/);
+    sharedIdxsUploadBuffer.init(8ull << 20 /*bytes*/);
+
+    sharedQuadIdxsBuffer.setName(L"sharedQuadIdxsBuffer");
+    sharedQuadIdxsBuffer.init(2ull << 20 /*bytes*/);
 
     sharedAcsScratchBuffer.setName(L"sharedAcsScratchBuffer");
     sharedAcsScratchBuffer.init(64ull << 20 /*bytes*/);
+}
+
+static void ensureQuadIdxsCapacity(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const uint32_t numQuads)
+{
+    if (numQuads <= numQuadIdxsQuads)
+    {
+        return;
+    }
+    // The buffer's capacity grows in powers of two, so the pattern fills all of it
+    const size_t newSizeBytes =
+        std::max(std::bit_ceil(numQuads * quadIdxsBytesPerQuad), sharedQuadIdxsBuffer.getSizeBytes());
+    const auto newNumQuads = static_cast<uint32_t>(newSizeBytes / quadIdxsBytesPerQuad);
+
+    std::vector<uint32_t> host_idxs;
+    host_idxs.reserve((newNumQuads - numQuadIdxsQuads) * idxsPerQuad);
+    for (uint32_t triIdx = numQuadIdxsQuads * 2; triIdx < newNumQuads * 2; ++triIdx)
+    {
+        for (uint32_t corner = 0; corner < 3; ++corner)
+        {
+            host_idxs.push_back(getQuadFaceVertIdx(triIdx, corner));
+        }
+    }
+
+    const ManagedBufferSection uploadBufferSection =
+        sharedIdxsUploadBuffer.copyFromHostVector(cmdList, toFreeList, host_idxs);
+    const ManagedBufferSection devBufferSection =
+        sharedQuadIdxsBuffer.copyFromManagedBuffer(cmdList, toFreeList, sharedIdxsUploadBuffer, uploadBufferSection);
+    toFreeList.pushManagedBufferSection(uploadBufferSection);
+
+    // Sections are never freed until reset, so each new one continues the pattern
+    ASSERT(devBufferSection.offsetBytes == numQuadIdxsQuads * quadIdxsBytesPerQuad);
+    quadIdxsSections.push_back(devBufferSection);
+    numQuadIdxsQuads = newNumQuads;
 }
 
 static void ensureCompactionQueryCapacity(ToFreeList& toFreeList, BlasCompactionQuery* query, uint32_t numEntries)
@@ -266,16 +321,29 @@ static void makeBlasBuildInputs(AcsBuildInfo* buildInfo,
 {
     const ManagedBufferSection idxsBufferSection = geoWrapper->idxsBufferSection;
     const ManagedBufferSection ommIdxsBufferSection = geoWrapper->ommIdxsBufferSection;
-    const bool hasIdxs = (idxsBufferSection.sizeBytes > 0);
     const bool hasOmms = (ommIdxsBufferSection.sizeBytes > 0);
+
+    uint32_t idxCount = 0;
+    D3D12_GPU_VIRTUAL_ADDRESS idxsGpuVa = 0;
+    if (geoWrapper->hasQuadIdxs)
+    {
+        ASSERT(vertsSource.count % vertsPerQuad == 0 && vertsSource.count / vertsPerQuad <= numQuadIdxsQuads);
+        idxCount = vertsSource.count / vertsPerQuad * idxsPerQuad;
+        idxsGpuVa = sharedQuadIdxsBuffer.getGpuVirtualAddress();
+    }
+    else if (idxsBufferSection.isValid())
+    {
+        idxCount = Util::convertByteSizeToCount<uint32_t>(idxsBufferSection.sizeBytes);
+        idxsGpuVa = idxsBufferSection.getGpuVirtualAddress();
+    }
 
     buildInfo->trianglesDesc = {
         .Transform3x4 = 0,
-        .IndexFormat = hasIdxs ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_UNKNOWN,
+        .IndexFormat = idxCount > 0 ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_UNKNOWN,
         .VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
-        .IndexCount = Util::convertByteSizeToCount<uint32_t>(idxsBufferSection.sizeBytes),
+        .IndexCount = idxCount,
         .VertexCount = vertsSource.count,
-        .IndexBuffer = hasIdxs ? idxsBufferSection.getBuffer()->getGpuVirtualAddress() + idxsBufferSection.offsetBytes : 0,
+        .IndexBuffer = idxsGpuVa,
         .VertexBuffer = {
             .StartAddress = vertsSource.gpuVa,
             .StrideInBytes = sizeof(Vertex),
@@ -383,6 +451,17 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
     }
 
     CpuProfiler::beginScope("upload");
+
+    uint32_t maxNumQuads = 0;
+    for (const auto& inputs : allInputs)
+    {
+        if (inputs.hasQuadIdxs)
+        {
+            maxNumQuads = std::max(maxNumQuads, static_cast<uint32_t>(inputs.host_verts->size() / vertsPerQuad));
+        }
+    }
+    ensureQuadIdxsCapacity(cmdList, toFreeList, maxNumQuads);
+
     dev_verts->beginBatchCopy(cmdList);
     dev_idxs->beginBatchCopy(cmdList);
 
@@ -430,6 +509,8 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
 
         toFreeList.pushManagedBufferSection(vertsUploadBufferSection);
 
+        ASSERT(!(inputs.hasQuadIdxs && inputs.host_idxs));
+        inputs.outGeoWrapper->hasQuadIdxs = inputs.hasQuadIdxs;
         if (inputs.host_idxs)
         {
             inputs.outGeoWrapper->idxsBufferSection = uploadIdxsSection(*inputs.host_idxs);
@@ -584,6 +665,14 @@ void makeTlas(ID3D12GraphicsCommandList4* cmdList, ToFreeList& toFreeList, const
 void reset()
 {
     ommArrayGpuVa = 0;
+
+    for (ManagedBufferSection& section : quadIdxsSections)
+    {
+        section.free();
+    }
+    quadIdxsSections.clear();
+    numQuadIdxsQuads = 0;
+    sharedQuadIdxsBuffer.reset();
 
     sharedVertsUploadBuffer.reset();
     sharedIdxsUploadBuffer.reset();

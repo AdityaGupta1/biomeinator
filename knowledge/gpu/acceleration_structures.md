@@ -1,4 +1,4 @@
-_Last edited: 2026-10-02_
+_Last edited: 2026-10-06_
 
 # Acceleration Structures
 
@@ -39,6 +39,20 @@ All acceleration structures (BLAS and TLAS) are sub-allocated from a single
 `ReservedManagedBuffer` (`sharedAcsBuffer`). Scratch space is sub-allocated from a separate
 `CommittedManagedBuffer` and freed to `ToFreeList` after each build. Upload staging for
 vertex and index data uses two more committed buffers.
+
+## Shared Quad Indices
+
+Terrain and water faces are quads of four consecutive vertices with a fixed split, so their
+indices are never stored per instance (`BlasBuildInputs::hasQuadIdxs`). DXR has no implicit
+index mode, and non-indexed triangles would need six vertices per quad, which costs as much as
+four vertices plus the stored indices. Every quad BLAS therefore points at one shared copy of the
+pattern, `sharedQuadIdxsBuffer`, sized for the most quads any single build has needed. Chunk size
+has no useful upper bound (custom models multiply the quads per block), so it grows on demand
+before a batch records its builds.
+
+Growth relocates the committed buffer, which water refits tolerate: the spec's update constraints
+only fix the *contents* of the inputs, and the prefix a refit reads never changes. For the same
+reason no `GeometryWrapper` stores the pattern's address; it is read at record time.
 
 ## Build Inputs Need Not Stay Resident
 

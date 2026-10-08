@@ -412,6 +412,7 @@ if(BUILD_TESTING)
         "${SRC_DIR}/settings_manager.cpp"
         "${SRC_DIR}/terrain/region_file.cpp"
         "${SRC_DIR}/terrain/structure/structure_gen.cpp"
+        "${SRC_DIR}/terrain/triangle_quads.cpp"
         "${SRC_DIR}/util/file_util.cpp"
         "${SRC_DIR}/util/halton.cpp"
     )
@@ -427,7 +428,7 @@ if(BUILD_TESTING)
         "${SRC_DIR}/rendering/buffer/dirty_range_set.cpp"
         "${SRC_DIR}/rendering/buffer/free_range_allocator.cpp"
     )
-    source_group("src\\terrain" FILES "${SRC_DIR}/terrain/region_file.cpp")
+    source_group("src\\terrain" FILES "${SRC_DIR}/terrain/region_file.cpp" "${SRC_DIR}/terrain/triangle_quads.cpp")
     source_group("src\\terrain\\structure" FILES "${SRC_DIR}/terrain/structure/structure_gen.cpp")
     source_group("src\\util" FILES "${SRC_DIR}/util/file_util.cpp" "${SRC_DIR}/util/halton.cpp")
 

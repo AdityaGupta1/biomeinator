@@ -1,12 +1,19 @@
-_Last edited: 2026-09-21_
+_Last edited: 2026-10-06_
 
 # Mesh Generation
 
-`Chunk::createInstances()` in `src/terrain/chunk.cpp` — converts block data into vertex/index buffers. Per-face emission with segment culling (not traditional greedy meshing despite the filename).
+`Chunk::createInstances()` in `src/terrain/chunk.cpp` — converts block data into vertex buffers. Per-face emission with segment culling (not traditional greedy meshing despite the filename).
 
 ## Two Instances Per Chunk
 
 Terrain and water are separate `Instance` objects with independent BLAS. Water gets `FACE_FLAG_IS_WATER` on all triangles so the path tracer can handle it differently. If no water faces are generated, the water instance is freed in `cleanUnusedInstances`.
+
+## Implicit Quad Indices
+
+Every face, including custom models (see [custom_models.md](custom_models.md)), is emitted as
+four vertices split into `(0, 1, 2)` and `(0, 2, 3)`, and no indices are stored: the BLAS build
+reads a shared pattern ([gpu → acceleration_structures.md](../gpu/acceleration_structures.md))
+and shaders compute them.
 
 ## Crack Prevention
 
