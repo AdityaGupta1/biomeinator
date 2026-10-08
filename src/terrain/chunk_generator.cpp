@@ -171,8 +171,32 @@ static FN::SmartNode<FN::Generator> fnSnowLayerPatch;
 // Drives the biomes' top-block patches (TopBlocks::patches), e.g. podzol through grass
 static FN::SmartNode<FN::Generator> fnGroundPatch;
 
+inline constexpr uint swampShoreSeedSalt = 190283475;
+inline constexpr uint snowLineSeedSalt = 748120365;
+inline constexpr uint groundPatchSeedSalt = 520938417;
+inline constexpr uint snowLayerPatchSeedSalt = 309184627;
+
 static uint worldSeed;
 static ivec2 noiseOffsetXZ;
+
+static int shapeNoiseSeed()
+{
+    return static_cast<int>(worldSeed ^ hash(391023545));
+}
+
+// Samples a 2D column noise on a grid of numSamplesXZ^2 points stepBlocks apart, x-innermost
+static void fillColumnNoise(float* data, const FN::SmartNode<FN::Generator>& fn, ivec2 originXZ_WS, uint numSamplesXZ,
+                            float stepBlocks, uint seedSalt)
+{
+    fn->GenUniformGrid2D(data,
+                         originXZ_WS.x + noiseOffsetXZ.x,
+                         originXZ_WS.y + noiseOffsetXZ.y /*z*/,
+                         numSamplesXZ,
+                         numSamplesXZ,
+                         stepBlocks,
+                         stepBlocks,
+                         static_cast<int>(worldSeed ^ hash(seedSalt)));
+}
 
 void init()
 {
@@ -391,7 +415,7 @@ static void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn
     if constexpr (downsampleXZ == 1 && downsampleY == 1)
     {
         fn->GenUniformGrid3D(data, yOffset, posXZ.x + noiseOffsetXZ.x, posXZ.y + noiseOffsetXZ.y,
-                             height, sizeXZ, sizeXZ, 1.f, 1.f, 1.f, worldSeed ^ hash(391023545));
+                             height, sizeXZ, sizeXZ, 1.f, 1.f, 1.f, shapeNoiseSeed());
         return;
     }
 
@@ -408,7 +432,7 @@ static void fillNoiseArray3D(float* data, const FN::SmartNode<FN::Generator>& fn
     float* coarse = threadMemoryAlloc.request<float>(size.x * size.y * size.z);
     fn->GenUniformGrid3D(coarse, origin.x, origin.y + noiseOffsetXZ.x, origin.z + noiseOffsetXZ.y,
                          size.x, size.y, size.z, step.x, step.y, step.z,
-                         worldSeed ^ hash(391023545));
+                         shapeNoiseSeed());
 
     constexpr float invDownsampleXZ = 1.f / downsampleXZ;
     constexpr float invDownsampleY = 1.f / downsampleY;
@@ -467,7 +491,7 @@ static inline void fillCaveBiomeNoiseArray(float* data, const FN::SmartNode<FN::
                          caveBiomeNoiseDownsample,
                          caveBiomeNoiseDownsample,
                          caveBiomeNoiseDownsample,
-                         worldSeed ^ hash(391023545));
+                         shapeNoiseSeed());
 }
 
 using CaveNoiseColumn = CaveBiomeFields::Column;
@@ -529,6 +553,118 @@ struct ColumnShape
     }
 };
 
+// Where terrain density (surface value minus noise) crosses zero between a column's top block and the
+// air above it, or the middle of the top block where it doesn't
+static float subBlockSurfaceHeight(int topBlockY, float densityTop, float densityAbove)
+{
+    if (densityTop > 0.f && densityAbove <= 0.f)
+    {
+        return static_cast<float>(topBlockY) + densityTop / (densityTop - densityAbove);
+    }
+    return static_cast<float>(topBlockY) + 0.5f;
+}
+
+// A voxel is terrain where the terrain noise is below this
+static float terrainSurfaceVal(float detailedHeight, float surfaceMultiplier, float y)
+{
+    float surfaceVal = (detailedHeight - y) * surfaceMultiplier;
+    if (y < detailedHeight)
+    {
+        surfaceVal *= terrainBelowHeightfieldSurfaceMultiplier; // flatten terrain under base height
+    }
+    return surfaceVal;
+}
+
+// The line comes from climate, not biome labels. Temperature lowers it in cold columns; aridity
+// raises it in dry ones, as dry climates' real snow lines sit far higher, which keeps Mesa and red
+// desert (both hot and dry) bare without naming them.
+static float climateLineY(float baseY, float temperatureRange, float aridityLift, float temperature, float humidity,
+                          float lineNoise)
+{
+    const float aridity = max(0.f, -humidity) *
+        smoothstep(snowLineAridityColdTemperature, snowLineAridityWarmTemperature, temperature);
+    return baseY + temperature * temperatureRange + max(temperature, 0.f) * snowLineWarmTemperatureLift +
+        aridity * aridityLift + lineNoise * snowLineNoiseAmplitude;
+}
+
+static float snowLineYAt(float temperature, float humidity, float lineNoise)
+{
+    return climateLineY(snowLineBaseY, snowLineTemperatureRange, snowLineAridityLift, temperature, humidity, lineNoise);
+}
+
+static float snowLayerLineYAt(float temperature, float humidity, float lineNoise)
+{
+    return climateLineY(snowLayerLineBaseY, snowLayerLineTemperatureRange, snowLayerLineAridityLift, temperature,
+                        humidity, lineNoise);
+}
+
+static float snowColdCover(float temperature)
+{
+    return 1.f - smoothstep(snowLayerColdCoverColdTemperature, snowLayerColdCoverWarmTemperature, temperature);
+}
+
+// The [0, 1] value a column's snow coverage must exceed, from the snow layer patch noise
+static float snowPatchFromNoise(float noise)
+{
+    return clamp(noise * 0.5f + 0.5f, 0.f, 1.f);
+}
+
+// A cold column's water surface freezes where its snow patch value is below this
+static float seaIceCover(float coldCover, float inland)
+{
+    return coldCover * smoothstep(seaIceInlandOpen, seaIceInlandFrozen, inland);
+}
+
+// The cold-climate cover left for snow on top of sea ice
+static float snowCoverOnSeaIce(float coldCover, float inland)
+{
+    return coldCover * smoothstep(seaIceSnowInlandBare, seaIceSnowInlandCovered, inland);
+}
+
+// 0 to 1: how much a Tianzi formation thins the topsoil
+static float formationSoilWeight(const BiomeNoiseFields::NaturalTerrain& naturalTerrain)
+{
+    return smoothstep(0.f, 0.25f, naturalTerrain.regimeWeights[TerrainRegime::TIANZI]) *
+           smoothstep(0.f, 6.f, naturalTerrain.formationHeight);
+}
+
+// Blocks of the topsoil stamp (top block, then mid blocks) below a column's top
+static uint topsoilDepth(float formationSoil)
+{
+    return static_cast<uint>(round(mix(5.f, 2.f, formationSoil)));
+}
+
+// Keeps a reference to shape.natural
+static SurfaceMaterials::Column makeSurfaceMaterials(const ColumnShape& shape, ivec2 blockPosXZ_WS)
+{
+    const float strataVariation = 2.5f * sin((blockPosXZ_WS.x + noiseOffsetXZ.x) * 0.012f) +
+                                 1.5f * sin((blockPosXZ_WS.y + noiseOffsetXZ.y) * 0.017f);
+    // Cover every potentially exposed Tianzi surface, including low recesses at its
+    // biome boundary. Deep cave rock keeps its underground palette.
+    const float tianziMaterialFloor = min(shape.natural.formationBaseHeight - 22.f, shape.lowestSurface() - 4.f);
+    return SurfaceMaterials::Column(shape.natural, vec2(blockPosXZ_WS), worldSeed, strataVariation, tianziMaterialFloor);
+}
+
+// What a grass top becomes under water, on the shore band, or in the ground patches
+static Block resolveGrassTop(const TopBlocks& topBlocks, bool underwater, bool onShore, float groundPatchNoise)
+{
+    if (underwater)
+    {
+        return (topBlocks.underwaterTop != Block::AIR) ? topBlocks.underwaterTop : Block::DIRT;
+    }
+    if (onShore)
+    {
+        return topBlocks.shoreTop;
+    }
+    return topBlocks.patchedTop(groundPatchNoise);
+}
+
+// Shore band whose height above water level undulates with low-frequency noise
+static bool isOnShore(const TopBlocks& topBlocks, int topBlockY, int waterLevel, float shoreNoise)
+{
+    return topBlocks.shoreTop != Block::AIR && static_cast<float>(topBlockY - waterLevel) <= 1.5f + shoreNoise;
+}
+
 // y of the lava surface (the low-y lava fill writes LAVA_TOP at y == 4); cave structures
 // whose anchor sits at or below this are rejected unless flagged to allow lava.
 inline constexpr int lavaSurfaceY = 4;
@@ -552,7 +688,7 @@ static void forEachExposedSurface(const std::vector<Block>& blocks, uint baseBlo
     }
 }
 
-void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
+uint32_t Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc)
 {
     const ivec2 chunkPosBlocksXZ_WS = this->chunkPos * static_cast<int>(chunkSizeXZ);
 
@@ -572,28 +708,21 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     float* swampShoreNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* snowLineNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
     float* groundPatchNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare);
-    const auto fillColumnNoise = [&](float* data, const FN::SmartNode<FN::Generator>& fn, uint seedSalt)
+    const auto fillChunkColumnNoise = [&](float* data, const FN::SmartNode<FN::Generator>& fn, uint seedSalt)
     {
-        fn->GenUniformGrid2D(data,
-                             chunkPosBlocksXZ_WS.x + noiseOffsetXZ.x,
-                             chunkPosBlocksXZ_WS.y + noiseOffsetXZ.y /*z*/,
-                             chunkSizeXZ,
-                             chunkSizeXZ,
-                             1.f,
-                             1.f,
-                             static_cast<int>(worldSeed ^ hash(seedSalt)));
+        fillColumnNoise(data, fn, chunkPosBlocksXZ_WS, chunkSizeXZ, 1.f, seedSalt);
     };
-    fillColumnNoise(swampWarpXNoise, fnSwampWarp, 651209371);
-    fillColumnNoise(swampWarpZNoise, fnSwampWarp, 287119023);
-    fillColumnNoise(swampWarpFineXNoise, fnSwampWarpFine, 907812341);
-    fillColumnNoise(swampWarpFineZNoise, fnSwampWarpFine, 412093871);
-    fillColumnNoise(swampShoreNoise, fnSwampShore, 190283475);
-    fillColumnNoise(snowLineNoise, fnSnowLine, 748120365);
-    fillColumnNoise(groundPatchNoise, fnGroundPatch, 520938417);
-    fillColumnNoise(this->snow.patch.data(), fnSnowLayerPatch, 309184627);
+    fillChunkColumnNoise(swampWarpXNoise, fnSwampWarp, 651209371);
+    fillChunkColumnNoise(swampWarpZNoise, fnSwampWarp, 287119023);
+    fillChunkColumnNoise(swampWarpFineXNoise, fnSwampWarpFine, 907812341);
+    fillChunkColumnNoise(swampWarpFineZNoise, fnSwampWarpFine, 412093871);
+    fillChunkColumnNoise(swampShoreNoise, fnSwampShore, swampShoreSeedSalt);
+    fillChunkColumnNoise(snowLineNoise, fnSnowLine, snowLineSeedSalt);
+    fillChunkColumnNoise(groundPatchNoise, fnGroundPatch, groundPatchSeedSalt);
+    fillChunkColumnNoise(this->snow.patch.data(), fnSnowLayerPatch, snowLayerPatchSeedSalt);
     for (float& patch : this->snow.patch)
     {
-        patch = clamp(patch * 0.5f + 0.5f, 0.f, 1.f);
+        patch = snowPatchFromNoise(patch);
     }
 
     int terrainNoiseMinY = chunkSizeY;
@@ -779,9 +908,6 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
     ASSERT(caveSimplexNoiseHeight > 0 && caveSimplexNoiseHeight <= static_cast<uint>(caveNoiseMaxY), "cave simplex noise height out of range");
 
     float* terrainNoise = threadMemoryAlloc.request<float>(chunkSizeXZSquare * terrainNoiseHeight);
-    float* caveNoiseWorley = threadMemoryAlloc.request<float>(caveNoiseSizeXZSquare * caveWorleyNoiseHeight);
-    float* caveNoiseSimplex = threadMemoryAlloc.request<float>(caveNoiseSizeXZSquare * caveSimplexNoiseHeight);
-    const ivec2 caveNoisePosXZ_WS = chunkPosBlocksXZ_WS - ivec2(caveNoiseMarginXZ);
     fillNoiseArray3D<terrainNoiseDownsample>(terrainNoise, fnTerrainBase, chunkPosBlocksXZ_WS, chunkSizeXZ,
                                              terrainNoiseHeight, threadMemoryAlloc, terrainNoiseMinY);
     float* terrainDetailNoise = nullptr;
@@ -791,34 +917,45 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
         fillNoiseArray3D<terrainDetailDownsampleXZ, terrainDetailDownsampleY>(terrainDetailNoise, fnTerrainDetail, chunkPosBlocksXZ_WS,
             chunkSizeXZ, terrainNoiseHeight, threadMemoryAlloc, terrainNoiseMinY);
     }
-    fillNoiseArray3D<caveShapeNoiseDownsample>(caveNoiseWorley, fnCavesWorley, caveNoisePosXZ_WS, caveNoiseSizeXZ,
-                                               caveWorleyNoiseHeight, threadMemoryAlloc);
-    fillNoiseArray3D<caveShapeNoiseDownsample>(caveNoiseSimplex, fnCavesSimplex, caveNoisePosXZ_WS, caveNoiseSizeXZ,
-                                               caveSimplexNoiseHeight, threadMemoryAlloc, caveSimplexNoiseMinY);
-
-    // +1 cell on each XZ axis is the far-edge interpolation margin; +2 in y leaves room for the
-    // top of the band to interpolate against the next coarse cell.
-    this->caveDecoration.allocateNoise(caveNoiseMaxY);
+    // Surface-only chunks have no caves, so they skip the cave shape and biome fields entirely
+    float* caveNoiseWorley = nullptr;
+    float* caveNoiseSimplex = nullptr;
     constexpr uint caveBiomeNoiseSizeXZ = CaveDecorationData::noiseSizeXZ;
-    const uint caveBiomeNoiseHeight = this->caveDecoration.noiseHeight;
-    const uint caveBiomeNoiseSize = this->caveDecoration.fieldSize();
-    const auto requestCaveBiomeField = [&](const FN::SmartNode<FN::Generator>& fn)
+    uint caveBiomeNoiseHeight = 0;
+    const float* caveSkinThicknessNoise = nullptr;
+    const float* caveSkinPatchNoise = nullptr;
+    const float* caveRockNoise = nullptr;
+    if (!this->isSurfaceOnly)
     {
-        float* data = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
-        fillCaveBiomeNoiseArray(data, fn, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
-        return static_cast<const float*>(data);
-    };
-    // Keep only the two biome axes until decoration. Generate directly into owned storage
-    // so deferred air classification needs neither fresh noise nor a copy of the fields.
-    float* caveTemperatureNoise = this->caveDecoration.temperatureNoise();
-    float* caveHumidityNoise = this->caveDecoration.humidityNoise();
-    fillCaveBiomeNoiseArray(caveTemperatureNoise, fnCaveTemperature, chunkPosBlocksXZ_WS,
-                           caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
-    fillCaveBiomeNoiseArray(caveHumidityNoise, fnCaveHumidity, chunkPosBlocksXZ_WS,
-                           caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
-    const float* caveSkinThicknessNoise = requestCaveBiomeField(fnCaveSkinThickness);
-    const float* caveSkinPatchNoise = requestCaveBiomeField(fnCaveSkinPatch);
-    const float* caveRockNoise = requestCaveBiomeField(fnCaveRock);
+        caveNoiseWorley = threadMemoryAlloc.request<float>(caveNoiseSizeXZSquare * caveWorleyNoiseHeight);
+        caveNoiseSimplex = threadMemoryAlloc.request<float>(caveNoiseSizeXZSquare * caveSimplexNoiseHeight);
+        const ivec2 caveNoisePosXZ_WS = chunkPosBlocksXZ_WS - ivec2(caveNoiseMarginXZ);
+        fillNoiseArray3D<caveShapeNoiseDownsample>(caveNoiseWorley, fnCavesWorley, caveNoisePosXZ_WS, caveNoiseSizeXZ,
+                                                   caveWorleyNoiseHeight, threadMemoryAlloc);
+        fillNoiseArray3D<caveShapeNoiseDownsample>(caveNoiseSimplex, fnCavesSimplex, caveNoisePosXZ_WS, caveNoiseSizeXZ,
+                                                   caveSimplexNoiseHeight, threadMemoryAlloc, caveSimplexNoiseMinY);
+
+        // +1 cell on each XZ axis is the far-edge interpolation margin; +2 in y leaves room for the
+        // top of the band to interpolate against the next coarse cell.
+        this->caveDecoration.allocateNoise(caveNoiseMaxY);
+        caveBiomeNoiseHeight = this->caveDecoration.noiseHeight;
+        const uint caveBiomeNoiseSize = this->caveDecoration.fieldSize();
+        const auto requestCaveBiomeField = [&](const FN::SmartNode<FN::Generator>& fn)
+        {
+            float* data = threadMemoryAlloc.request<float>(caveBiomeNoiseSize);
+            fillCaveBiomeNoiseArray(data, fn, chunkPosBlocksXZ_WS, caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
+            return static_cast<const float*>(data);
+        };
+        // Keep only the two biome axes until decoration. Generate directly into owned storage
+        // so deferred air classification needs neither fresh noise nor a copy of the fields.
+        fillCaveBiomeNoiseArray(this->caveDecoration.temperatureNoise(), fnCaveTemperature, chunkPosBlocksXZ_WS,
+                               caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
+        fillCaveBiomeNoiseArray(this->caveDecoration.humidityNoise(), fnCaveHumidity, chunkPosBlocksXZ_WS,
+                               caveBiomeNoiseSizeXZ, caveBiomeNoiseHeight);
+        caveSkinThicknessNoise = requestCaveBiomeField(fnCaveSkinThickness);
+        caveSkinPatchNoise = requestCaveBiomeField(fnCaveSkinPatch);
+        caveRockNoise = requestCaveBiomeField(fnCaveRock);
+    }
 
     const uint terrainNoiseSize = chunkSizeXZSquare * terrainNoiseHeight;
     const uint caveWorleyNoiseSize = caveNoiseSizeXZSquare * caveWorleyNoiseHeight;
@@ -923,13 +1060,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             const bool hasTianziFormation = tianziWeight > 0.f && naturalTerrain.formationHeight > 0.f;
             const float detailUpwardLimit = mix(shape.detailAmplitude, 3.f, tianziWeight);
             const float pillarRootSeal = hasTianziFormation ? smoothstep(0.f, 8.f, naturalTerrain.formationHeight) : 0.f;
-            const float strataVariation = 2.5f * sin((blockPosXZ_WS.x + noiseOffsetXZ.x) * 0.012f) +
-                                         1.5f * sin((blockPosXZ_WS.y + noiseOffsetXZ.y) * 0.017f);
-            // Cover every potentially exposed Tianzi surface, including low recesses at its
-            // biome boundary. Deep cave rock keeps its underground palette.
-            const float tianziMaterialFloor = min(naturalTerrain.formationBaseHeight - 22.f, shape.lowestSurface() - 4.f);
-            SurfaceMaterials::Column surfaceMaterials(naturalTerrain, vec2(blockPosXZ_WS), worldSeed,
-                strataVariation, tianziMaterialFloor);
+            SurfaceMaterials::Column surfaceMaterials = makeSurfaceMaterials(shape, blockPosXZ_WS);
 
             const float caveWorleyBound = terrainBaseHeight * caveWorleyBoundFraction;
             const float caveSimplexBound = terrainBaseHeight * caveSimplexBoundFraction;
@@ -975,9 +1106,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 return glm::mix(minVal, simplexVal, glm::smoothstep(0.0f, 1.0f, t));
             };
 
-            // A voxel is terrain where the terrain noise is below this. Only valid for y inside
-            // [terrainNoiseMinY, terrainNoiseMaxY). Shared by the fill test and the snow line's
-            // sub-block surface height, which must agree with it exactly.
+            // Only valid for y inside [terrainNoiseMinY, terrainNoiseMaxY). Shared by the fill test
+            // and the snow line's sub-block surface height, which must agree with it exactly.
             const auto terrainSurfaceValAt = [&](const uint y)
             {
                 const int terrainNoiseIdx = baseTerrainNoiseIdx + static_cast<int>(y);
@@ -988,13 +1118,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 // towers of rubble above the otherwise broad, planted summit.
                 const float detail = terrainDetailNoise ? min(shape.detailAmplitude *
                     clamp(terrainDetailNoise[terrainNoiseIdx], -1.f, 1.f), detailUpwardLimit) : 0.f;
-                const float detailedHeight = terrainBaseHeight + detail;
-                float surfaceVal = (detailedHeight - static_cast<float>(y)) * terrainSurfaceMultiplier;
-                if (y < detailedHeight)
-                {
-                    surfaceVal *= terrainBelowHeightfieldSurfaceMultiplier; // flatten terrain under base height
-                }
-                return surfaceVal;
+                return terrainSurfaceVal(terrainBaseHeight + detail, terrainSurfaceMultiplier, static_cast<float>(y));
             };
 
             // Carve threshold before the per-column swamp seal: surface fade plus altitude squash
@@ -1029,7 +1153,17 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
             bool wasSolid = true;
             // Fringe candidate from the voxel below, promoted once this voxel turns out to be air
             Block prevFringeBlock = Block::AIR;
-            for (uint y = 1; y <= maxFillY; ++y)
+            // Rock this far below the chunk's lowest possible surface can't show from afar, even
+            // where a neighbor's lower ground exposes a cliff
+            uint firstFillY = 1;
+            if (this->isSurfaceOnly)
+            {
+                constexpr int surfaceOnlyRockDepth = 16;
+                firstFillY = static_cast<uint>(std::clamp(terrainNoiseMinY - surfaceOnlyRockDepth, 1, static_cast<int>(maxFillY)));
+                std::fill(this->blocks.begin() + baseBlockIdx + 1, this->blocks.begin() + baseBlockIdx + firstFillY,
+                          Block::STONE);
+            }
+            for (uint y = firstFillY; y <= maxFillY; ++y)
             {
                 Block block = Block::AIR;
                 Block fringeBlock = Block::AIR;
@@ -1063,7 +1197,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 {
                     // Quartz belongs to the solid landform. Decide its material before
                     // carving so it cannot acquire cave air, cave skins or cave decorators.
-                    if (y < static_cast<uint>(caveNoiseMaxY) && !SurfaceMaterials::isQuartz(surfaceRock))
+                    if (!this->isSurfaceOnly && y < static_cast<uint>(caveNoiseMaxY) &&
+                        !SurfaceMaterials::isQuartz(surfaceRock))
                     {
                         const float caveNoiseVal = sampleCaveNoise(caveColumnIdx, y);
                         float caveSurfaceVal = caveSurfaceValAt(static_cast<float>(y));
@@ -1263,32 +1398,17 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
 
             // Snow lines depend only on climate and noise, so every column gets them, including ones
             // whose top is a cave opening and which the layer pass still visits.
-            //
-            // The line comes from climate, not biome labels. Temperature lowers it in cold
-            // columns; aridity raises it in dry ones, as dry climates' real snow lines sit far
-            // higher, which keeps Mesa and red desert (both hot and dry) bare without naming
-            // them.
             const float temperature = biomeNoiseGrids.temperature[columnIdx];
-            const float aridity = max(0.f, -biomeNoiseGrids.humidity[columnIdx]) *
-                smoothstep(snowLineAridityColdTemperature, snowLineAridityWarmTemperature, temperature);
-            const auto climateLineY = [&](float baseY, float temperatureRange, float aridityLift)
-            {
-                return baseY + temperature * temperatureRange +
-                    max(temperature, 0.f) * snowLineWarmTemperatureLift + aridity * aridityLift +
-                    snowLineNoise[columnIdx] * snowLineNoiseAmplitude;
-            };
-            const float snowLineY = climateLineY(snowLineBaseY, snowLineTemperatureRange, snowLineAridityLift);
-            this->snow.lineY[columnIdx] =
-                climateLineY(snowLayerLineBaseY, snowLayerLineTemperatureRange, snowLayerLineAridityLift);
-            this->snow.coldCover[columnIdx] = 1.f -
-                smoothstep(snowLayerColdCoverColdTemperature, snowLayerColdCoverWarmTemperature, temperature);
+            const float humidity = biomeNoiseGrids.humidity[columnIdx];
+            const float snowLineY = snowLineYAt(temperature, humidity, snowLineNoise[columnIdx]);
+            this->snow.lineY[columnIdx] = snowLayerLineYAt(temperature, humidity, snowLineNoise[columnIdx]);
+            this->snow.coldCover[columnIdx] = snowColdCover(temperature);
 
             if (topBlockY != 0)
             {
                 const float ledgeVegetation = hasTianziFormation ?
                     TerrainFormations::valueNoise(vec2(blockPosXZ_WS) / 19.f, worldSeed ^ 0x61EDu) : 0.f;
-                const float formationSoil = smoothstep(0.f, 0.25f, tianziWeight) *
-                                            smoothstep(0.f, 6.f, naturalTerrain.formationHeight);
+                const float formationSoil = formationSoilWeight(naturalTerrain);
                 const bool bareFormationCliff = hasTianziFormation &&
                     shape.slope > mix(5.f,
                         mix(2.f, 4.f, smoothstep(-0.3f, 0.5f, ledgeVegetation)), formationSoil);
@@ -1303,10 +1423,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                         terrainSurfaceValAt(topBlockY) - terrainNoise[baseTerrainNoiseIdx + topNoiseY];
                     const float densityAbove =
                         terrainSurfaceValAt(topBlockY + 1) - terrainNoise[baseTerrainNoiseIdx + topNoiseY + 1];
-                    if (densityTop > 0.f && densityAbove <= 0.f)
-                    {
-                        surfaceHeight = static_cast<float>(topBlockY) + densityTop / (densityTop - densityAbove);
-                    }
+                    surfaceHeight = subBlockSurfaceHeight(static_cast<int>(topBlockY), densityTop, densityAbove);
                 }
                 this->terrainSurfaceHeight[columnIdx] =
                     static_cast<uint16_t>(round(surfaceHeight * terrainSurfaceHeightScale));
@@ -1314,13 +1431,8 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 const bool topBlockUnderwater =
                     Blocks::getBlockData(this->blocks[baseBlockIdx + topBlockY + 1]).type == BlockType::WATER;
 
-                // Shore band whose height above water level undulates with low-frequency noise
-                bool topBlockOnShore = false;
-                if (!topBlockUnderwater && topBlocks.shoreTop != Block::AIR)
-                {
-                    const int heightAboveWater = static_cast<int>(topBlockY) - waterLevel;
-                    topBlockOnShore = static_cast<float>(heightAboveWater) <= 1.5f + swampShoreNoise[columnIdx];
-                }
+                const bool topBlockOnShore = !topBlockUnderwater &&
+                    isOnShore(topBlocks, static_cast<int>(topBlockY), waterLevel, swampShoreNoise[columnIdx]);
 
                 // Snow cap. Underwater tops are left alone: the ocean floor of a cold column can
                 // sit above the line, and snow under water reads as a bug rather than as ice.
@@ -1330,12 +1442,11 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     // The snow band lies inside the ice band, so snow never lands past the ice.
                     const float coldCover = this->snow.coldCover[columnIdx];
                     const float inland = biomeNoiseGrids.inland[columnIdx];
-                    if (this->snow.patch[columnIdx] < coldCover * smoothstep(seaIceInlandOpen, seaIceInlandFrozen, inland))
+                    if (this->snow.patch[columnIdx] < seaIceCover(coldCover, inland))
                     {
                         this->blocks[baseBlockIdx + waterLevel] = Block::ICE;
                     }
-                    this->snow.coldCover[columnIdx] =
-                        coldCover * smoothstep(seaIceSnowInlandBare, seaIceSnowInlandCovered, inland);
+                    this->snow.coldCover[columnIdx] = snowCoverOnSeaIce(coldCover, inland);
                 }
                 const bool topBlockAboveSnowLine =
                     !topBlockUnderwater && static_cast<float>(topBlockY) >= snowLineY;
@@ -1348,7 +1459,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 const Block landformRock = surfaceMaterials.rock(static_cast<int>(topBlockY));
                 this->snow.exposedRock[columnIdx] = (landformRock != Block::AIR) ? landformRock : Block::STONE;
 
-                const uint soilDepth = bareFormationCliff ? 0 : static_cast<uint>(round(mix(5.f, 2.f, formationSoil)));
+                const uint soilDepth = bareFormationCliff ? 0 : topsoilDepth(formationSoil);
                 for (uint y = topBlockY; y > topBlockY - soilDepth; --y)
                 {
                     const uint blockIdx = baseBlockIdx + y;
@@ -1365,18 +1476,7 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                     }
                     if (newBlock == Block::GRASS_BLOCK)
                     {
-                        if (topBlockUnderwater)
-                        {
-                            newBlock = (topBlocks.underwaterTop != Block::AIR) ? topBlocks.underwaterTop : Block::DIRT;
-                        }
-                        else if (topBlockOnShore)
-                        {
-                            newBlock = topBlocks.shoreTop;
-                        }
-                        else
-                        {
-                            newBlock = topBlocks.patchedTop(groundPatchNoise[columnIdx]);
-                        }
+                        newBlock = resolveGrassTop(topBlocks, topBlockUnderwater, topBlockOnShore, groundPatchNoise[columnIdx]);
                     }
                     // Outside the grass rules, not an arm of them: the cap has to replace stone
                     // and sand tops too, which never enter that branch.
@@ -1566,5 +1666,234 @@ void Chunk::fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMe
                 }
             }
         }
+    }
+    return maxFillY + 1;
+}
+
+void ChunkGenerator::sampleLodColumns(ivec2 originXZ_WS, int cellSize, uint numSamplesXZ, LodColumn* outColumns,
+                                      LodRockStrata& outRockStrata, ThreadMemoryAllocator& threadMemoryAlloc)
+{
+    const uint numSamples = numSamplesXZ * numSamplesXZ;
+    const float stepBlocks = static_cast<float>(cellSize);
+    const ivec2 lastSampleXZ_WS = originXZ_WS + static_cast<int>(numSamplesXZ - 1) * cellSize;
+    const auto samplePosXZ_WS = [&](uint sampleIdx)
+    {
+        return originXZ_WS + ivec2(sampleIdx % numSamplesXZ, sampleIdx / numSamplesXZ) * cellSize;
+    };
+
+    const BiomeNoiseFields::BiomeNoiseGrids biomeNoiseGrids = BiomeNoiseFields::BiomeNoiseGrids::fromBuffer(
+        threadMemoryAlloc.request<float>(BiomeNoiseFields::BiomeNoiseGrids::numFields * numSamples), numSamples);
+    BiomeNoiseFields::fillGrids(biomeNoiseGrids, vec2(originXZ_WS), uvec2(numSamplesXZ), stepBlocks);
+
+    float* swampShoreNoise = threadMemoryAlloc.request<float>(numSamples);
+    float* snowLineNoise = threadMemoryAlloc.request<float>(numSamples);
+    float* groundPatchNoise = threadMemoryAlloc.request<float>(numSamples);
+    float* snowLayerPatchNoise = threadMemoryAlloc.request<float>(numSamples);
+    fillColumnNoise(swampShoreNoise, fnSwampShore, originXZ_WS, numSamplesXZ, stepBlocks, swampShoreSeedSalt);
+    fillColumnNoise(snowLineNoise, fnSnowLine, originXZ_WS, numSamplesXZ, stepBlocks, snowLineSeedSalt);
+    fillColumnNoise(groundPatchNoise, fnGroundPatch, originXZ_WS, numSamplesXZ, stepBlocks, groundPatchSeedSalt);
+    fillColumnNoise(snowLayerPatchNoise, fnSnowLayerPatch, originXZ_WS, numSamplesXZ, stepBlocks, snowLayerPatchSeedSalt);
+
+    ColumnShape* columnShapes = threadMemoryAlloc.request<ColumnShape>(numSamples);
+    float lowestSurface = std::numeric_limits<float>::max();
+    float highestSurface = std::numeric_limits<float>::lowest();
+    for (uint sampleIdx = 0; sampleIdx < numSamples; ++sampleIdx)
+    {
+        const BiomeNoiseFields::NaturalTerrain naturalTerrain = BiomeNoiseFields::computeNaturalTerrain(
+            BiomeNoiseFields::noiseAt(biomeNoiseGrids, sampleIdx), vec2(samplePosXZ_WS(sampleIdx)));
+        const ColumnShape shape{
+            .natural = naturalTerrain,
+            .baseHeight = naturalTerrain.baseHeight,
+            .surfaceMultiplier = naturalTerrain.surfaceMultiplier,
+            .waterLevel = seaLevel,
+            .detailAmplitude = 0.f,
+            .slope = 0.f,
+        };
+        columnShapes[sampleIdx] = shape;
+        lowestSurface = std::min(lowestSurface, shape.lowestSurface());
+        highestSurface = std::max(highestSurface, shape.highestSurface());
+    }
+
+    // The broad terrain noise on the same world-aligned lattice chunks sample it on, reconstructed
+    // the same way, so a column's height matches its chunk's wherever the chunk has no detail noise
+    // or caves at the surface
+    const int latticeStepXZ = std::max(terrainNoiseDownsample, cellSize);
+    const ivec2 latticeOriginXZ_WS = glmUtil::floorDiv(originXZ_WS, ivec2(latticeStepXZ)) * latticeStepXZ;
+    const uvec2 latticeSizeXZ = uvec2((lastSampleXZ_WS - latticeOriginXZ_WS) / latticeStepXZ + 2);
+    const int noiseMinY = std::max(MathUtil::floorDiv(static_cast<int>(std::floor(lowestSurface)), terrainNoiseDownsample) *
+                                       terrainNoiseDownsample, 0);
+    const int noiseMaxY = std::clamp(static_cast<int>(std::ceil(highestSurface)), noiseMinY + 1, static_cast<int>(chunkSizeY));
+    const uint latticeSizeY = static_cast<uint>(noiseMaxY - noiseMinY) / terrainNoiseDownsample + 2;
+    float* terrainNoise = threadMemoryAlloc.request<float>(latticeSizeY * latticeSizeXZ.x * latticeSizeXZ.y);
+    fnTerrainBase->GenUniformGrid3D(terrainNoise, noiseMinY, latticeOriginXZ_WS.x + noiseOffsetXZ.x,
+                                    latticeOriginXZ_WS.y + noiseOffsetXZ.y, latticeSizeY, latticeSizeXZ.x, latticeSizeXZ.y,
+                                    terrainNoiseDownsample, latticeStepXZ, latticeStepXZ, shapeNoiseSeed());
+
+    int* topBlockYs = threadMemoryAlloc.request<int>(numSamples);
+    float* surfaceHeights = threadMemoryAlloc.request<float>(numSamples);
+    for (uint sampleIdx = 0; sampleIdx < numSamples; ++sampleIdx)
+    {
+        const ColumnShape& shape = columnShapes[sampleIdx];
+        const ivec2 latticePos = samplePosXZ_WS(sampleIdx) - latticeOriginXZ_WS;
+        const uvec2 gridXZ = uvec2(latticePos / latticeStepXZ);
+        const vec2 t = vec2(latticePos % latticeStepXZ) / static_cast<float>(latticeStepXZ);
+        const auto latticeColumn = [&](uint offsetX, uint offsetZ)
+        {
+            return terrainNoise + ((gridXZ.y + offsetZ) * latticeSizeXZ.x + gridXZ.x + offsetX) * latticeSizeY;
+        };
+        const float* c00 = latticeColumn(0, 0);
+        const float* c10 = latticeColumn(1, 0);
+        const float* c01 = latticeColumn(0, 1);
+        const float* c11 = latticeColumn(1, 1);
+        const auto samplePlane = [&](uint gridY)
+        {
+            return glm::mix(glm::mix(c00[gridY], c10[gridY], t.x), glm::mix(c01[gridY], c11[gridY], t.x), t.y);
+        };
+
+        // Below noiseMinY the column is terrain whatever the noise
+        int topBlockY = std::max(noiseMinY - 1, 0);
+        float surfaceHeight = static_cast<float>(topBlockY) + 0.5f;
+        bool hasDensityAbove = false;
+        float densityAbove = 0.f;
+        for (int y = std::min(static_cast<int>(std::ceil(shape.highestSurface())), noiseMaxY) - 1; y >= noiseMinY; --y)
+        {
+            const uint gridY = static_cast<uint>(y - noiseMinY) / terrainNoiseDownsample;
+            const float ty = static_cast<float>((y - noiseMinY) % terrainNoiseDownsample) / terrainNoiseDownsample;
+            const float noise = glm::mix(samplePlane(gridY), samplePlane(gridY + 1), ty);
+            const float density = terrainSurfaceVal(shape.baseHeight, shape.surfaceMultiplier, static_cast<float>(y)) - noise;
+            if (density > 0.f)
+            {
+                topBlockY = y;
+                if (hasDensityAbove)
+                {
+                    surfaceHeight = subBlockSurfaceHeight(y, density, densityAbove);
+                }
+                else
+                {
+                    surfaceHeight = static_cast<float>(y) + 0.5f;
+                }
+                break;
+            }
+            hasDensityAbove = true;
+            densityAbove = density;
+        }
+        topBlockYs[sampleIdx] = topBlockY;
+        surfaceHeights[sampleIdx] = surfaceHeight;
+    }
+
+    // Vertical steps as tall as the cells are wide, aligned in world y so neighboring tiles of a level agree
+    const auto [lowestTopY, highestTopY] = std::minmax_element(topBlockYs, topBlockYs + numSamples);
+    const int strataMinY = MathUtil::floorDiv(*lowestTopY, cellSize) * cellSize;
+    const uint numStrataLevels = static_cast<uint>((*highestTopY - strataMinY) / cellSize + 1);
+    Block* strataBlocks = threadMemoryAlloc.request<Block>(numSamples * numStrataLevels);
+    outRockStrata = {
+        .minY = strataMinY,
+        .stepBlocks = cellSize,
+        .numLevels = numStrataLevels,
+        .blocks = strataBlocks,
+    };
+
+    const vec2 jitterXZ(climateCellJitterBlocks);
+    const BiomeNoiseFields::ClimateCellContext climateCellContext(vec2(originXZ_WS) - jitterXZ,
+                                                                  vec2(lastSampleXZ_WS) + jitterXZ);
+    for (uint sampleIdx = 0; sampleIdx < numSamples; ++sampleIdx)
+    {
+        const ivec2 blockPosXZ_WS = samplePosXZ_WS(sampleIdx);
+        const ColumnShape& shape = columnShapes[sampleIdx];
+        const int topBlockY = topBlockYs[sampleIdx];
+        const Biome biome = BiomeNoiseFields::biomeFromNoise(BiomeNoiseFields::noiseAt(biomeNoiseGrids, sampleIdx),
+            &climateCellContext, climateCellLookupPos(blockPosXZ_WS, worldSeed));
+        const TopBlocks& topBlocks = Biomes::getBiomeData(biome).topBlocks;
+
+        SurfaceMaterials::Column surfaceMaterials = makeSurfaceMaterials(shape, blockPosXZ_WS);
+        const auto rockAt = [&](int y)
+        {
+            const Block landformRock = surfaceMaterials.rock(y);
+            return (landformRock != Block::AIR) ? landformRock : Block::STONE;
+        };
+        const Block exposedRock = rockAt(topBlockY);
+        for (uint level = 0; level < numStrataLevels; ++level)
+        {
+            // Each step takes the rock at its middle
+            strataBlocks[sampleIdx * numStrataLevels + level] =
+                rockAt(strataMinY + static_cast<int>(level) * cellSize + cellSize / 2);
+        }
+        const bool underwater = topBlockY < shape.waterLevel;
+        const float temperature = biomeNoiseGrids.temperature[sampleIdx];
+        const float humidity = biomeNoiseGrids.humidity[sampleIdx];
+
+        // Central differences over the neighboring samples, one-sided at the grid's edges
+        const ivec2 samplePos(sampleIdx % numSamplesXZ, sampleIdx / numSamplesXZ);
+        const auto gradientAlong = [&](ivec2 axis)
+        {
+            const ivec2 highPos = glm::min(samplePos + axis, ivec2(numSamplesXZ - 1));
+            const ivec2 lowPos = glm::max(samplePos - axis, ivec2(0));
+            const int distance = (highPos.x - lowPos.x + highPos.y - lowPos.y) * cellSize;
+            const int rise = topBlockYs[highPos.x + numSamplesXZ * highPos.y] -
+                             topBlockYs[lowPos.x + numSamplesXZ * lowPos.y];
+            return distance > 0 ? static_cast<float>(rise) / static_cast<float>(distance) : 0.f;
+        };
+        const vec2 gradient(gradientAlong(ivec2(1, 0)), gradientAlong(ivec2(0, 1)));
+        const float slopeSquared = dot(gradient, gradient);
+
+        LodColumn column{
+            .topBlockY = topBlockY,
+            .surfaceHeight = surfaceHeights[sampleIdx],
+            .waterLevel = shape.waterLevel,
+            .waterTopBlock = Block::WATER_TOP,
+            .biome = biome,
+            .topBlock = exposedRock,
+            .topSideBlock = exposedRock,
+            .soilDepth = 0,
+        };
+        if (topBlocks.top != Block::AIR && !SurfaceMaterials::isQuartz(exposedRock))
+        {
+            column.topBlock = topBlocks.top;
+            if (column.topBlock == Block::GRASS_BLOCK)
+            {
+                const bool onShore = !underwater &&
+                    isOnShore(topBlocks, topBlockY, shape.waterLevel, swampShoreNoise[sampleIdx]);
+                column.topBlock = resolveGrassTop(topBlocks, underwater, onShore, groundPatchNoise[sampleIdx]);
+            }
+            column.soilDepth = static_cast<int>(topsoilDepth(formationSoilWeight(shape.natural)));
+
+            if (!underwater && static_cast<float>(topBlockY) >= snowLineYAt(temperature, humidity, snowLineNoise[sampleIdx]))
+            {
+                const bool tooSteep = slopeSquared >= SnowData::capSteepGradient * SnowData::capSteepGradient;
+                column.topBlock = tooSteep ? exposedRock : Block::SNOW;
+            }
+            column.topSideBlock = column.topBlock;
+        }
+
+        const float snowPatch = snowPatchFromNoise(snowLayerPatchNoise[sampleIdx]);
+        float coldCover = snowColdCover(temperature);
+        bool frozen = false;
+        if (underwater)
+        {
+            const float inland = biomeNoiseGrids.inland[sampleIdx];
+            frozen = snowPatch < seaIceCover(coldCover, inland);
+            coldCover = snowCoverOnSeaIce(coldCover, inland);
+        }
+        if (frozen)
+        {
+            column.waterTopBlock = Block::ICE;
+        }
+
+        // As Chunk::placeSnowLayers, without the hollowness bias, which needs finer heights than coarse cells have
+        const bool holdsLayer = frozen || (!underwater && slopeSquared < SnowData::layerSteepGradient * SnowData::layerSteepGradient);
+        Block& surfaceBlock = frozen ? column.waterTopBlock : column.topBlock;
+        const int surfaceBlockY = frozen ? shape.waterLevel : topBlockY;
+        const float coverage = SnowData::coverage(snowLayerLineYAt(temperature, humidity, snowLineNoise[sampleIdx]),
+                                                  static_cast<float>(surfaceBlockY), coldCover);
+        if (holdsLayer && SnowData::acceptsLayer(Blocks::getBlockData(surfaceBlock)) && snowPatch < coverage)
+        {
+            surfaceBlock = Block::SNOW_LAYER;
+            if (column.topSideBlock == Block::GRASS_BLOCK && !frozen)
+            {
+                column.topSideBlock = Block::SNOWY_GRASS_BLOCK;
+            }
+        }
+
+        outColumns[sampleIdx] = column;
     }
 }

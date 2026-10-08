@@ -74,6 +74,7 @@ void Instance::reset(bool alsoFreeFromScene)
 
     this->releaseHostGeometry();
     this->trisPerFaceLog2 = 0;
+    this->heightfieldCornersPerRow = 0;
     this->isGeometryFinalized = false;
     this->isOpaque = false;
 
@@ -109,7 +110,7 @@ void Instance::finalizeGeometry()
 
     ASSERT(this->hostGeometry.packedTerrainVerts.empty() || this->hostGeometry.packedTerrainVerts.size() == this->hostGeometry.verts.size());
 
-    ASSERT(!this->hasQuadFaces() || (this->hostGeometry.idxs.empty() && this->hostGeometry.verts.size() % 4 == 0));
+    ASSERT(!this->hasQuadFaces() || this->hostGeometry.verts.size() % 4 == 0);
 
     const uint32_t triCount = this->getTriCount();
     const uint32_t trisPerFace = 1u << this->trisPerFaceLog2;
@@ -131,6 +132,7 @@ void Instance::finalizeGeometry()
 void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
 {
     ASSERT(this->isGeometryFinalized);
+    ASSERT(!this->hasHeightfieldFaces()); // their faces' light index holds their verts
 
     this->hostGeometry.areaLights.reserve(this->hostGeometry.areaLights.size() + triangleIdxs.size());
 
@@ -182,15 +184,15 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
         const uint32_t triIdxInFace = triangleIdx & ((1u << this->trisPerFaceLog2) - 1u);
         const uint32_t faceLightIdx = localAreaLightIdx - triIdxInFace;
         PerFaceData& faceData = this->hostGeometry.perFaceDatas[triangleIdx >> this->trisPerFaceLog2];
-        if (faceData.localAreaLightIdx == LIGHT_IDX_INVALID)
+        if (faceData.localAreaLightIdxOrHeightfieldVerts == LIGHT_IDX_INVALID)
         {
             ASSERT(triIdxInFace == 0);
         }
         else
         {
-            ASSERT(faceData.localAreaLightIdx == faceLightIdx);
+            ASSERT(faceData.localAreaLightIdxOrHeightfieldVerts == faceLightIdx);
         }
-        faceData.localAreaLightIdx = faceLightIdx;
+        faceData.localAreaLightIdxOrHeightfieldVerts = faceLightIdx;
     }
 }
 
@@ -210,12 +212,22 @@ uint32_t Instance::getTriCount() const
 
 bool Instance::hasQuadFaces() const
 {
-    return this->trisPerFaceLog2 == 1;
+    return this->trisPerFaceLog2 == 1 && this->hostGeometry.idxs.empty();
+}
+
+bool Instance::hasHeightfieldFaces() const
+{
+    return this->heightfieldCornersPerRow != 0;
 }
 
 bool Instance::getIsGeometryFinalized() const
 {
     return this->isGeometryFinalized;
+}
+
+bool Instance::getHasBlas() const
+{
+    return this->geoWrapper.blasBufferSection.isValid();
 }
 
 void Instance::setVisible(bool visible)
@@ -252,6 +264,17 @@ void Instance::setIsDeformable(bool deformable)
 void Instance::setIsOpaque(bool opaque)
 {
     this->isOpaque = opaque;
+}
+
+void Instance::setHeightfieldCornersPerRow(const uint32_t cornersPerRow)
+{
+    ASSERT(!this->isGeometryFinalized);
+    this->heightfieldCornersPerRow = cornersPerRow;
+}
+
+void Instance::setPackedVertexFormat(const uint32_t vertexFormat)
+{
+    this->packedVertexFormat = vertexFormat;
 }
 
 void Instance::setTrisPerFaceLog2(const uint32_t log2)
@@ -807,6 +830,7 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
             blasInputs.host_idxs = &instance->hostGeometry.idxs;
         }
         blasInputs.hasQuadIdxs = instance->hasQuadFaces();
+        blasInputs.idxsBuildOnly = instance->hasHeightfieldFaces();
 
         if (instance->hostGeometry.ommIdxs.size() > 0)
         {
@@ -848,7 +872,7 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
     {
         InstanceData instanceData{};
         const bool packedVerts = !instance->hostGeometry.packedTerrainVerts.empty();
-        instanceData.vertexFormat = packedVerts ? VERTEX_FORMAT_PACKED_TERRAIN : VERTEX_FORMAT_FULL;
+        instanceData.vertexFormat = packedVerts ? instance->packedVertexFormat : VERTEX_FORMAT_FULL;
         instanceData.vertsBufferOffset = packedVerts
             ? Util::convertByteSizeToCount<PackedTerrainVertex>(instance->geoWrapper.vertsBufferSection.offsetBytes)
             : Util::convertByteSizeToCount<Vertex>(instance->geoWrapper.vertsBufferSection.offsetBytes);
@@ -856,6 +880,7 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         instanceData.idxsBufferByteOffset = instance->geoWrapper.idxsBufferSection.offsetBytes;
         instanceData.materialIdx = instance->materialIdx;
         instanceData.trisPerFaceLog2 = instance->trisPerFaceLog2;
+        instanceData.heightfieldCornersPerRow = instance->heightfieldCornersPerRow;
         instanceData.tangentsBufferOffset = TANGENT_BUFFER_OFFSET_INVALID;
         if (!instance->hostGeometry.tangents.empty())
         {

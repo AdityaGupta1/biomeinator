@@ -1,4 +1,4 @@
-_Last edited: 2026-10-03_
+_Last edited: 2026-10-04_
 
 # Perf Runs
 
@@ -73,7 +73,7 @@ screenshot-and-exit path and to the two things a perf run deliberately keeps: fr
 generation with Reflex, and a visible window brought to the foreground (fullscreen presentation
 needs an unoccluded window, and the scenes run fullscreen at 1440p so the numbers are what
 the game shows). The automated-run defaults (`lockCamera`,
-`showGui`, `animTimePaused`, `useVsync`, `sharc`) live in `parseArgs` and are only applied when the
+`showGui`, `animTimePaused`, `useVsync`, `sharc`, `lodDistance`) live in `parseArgs` and are only applied when the
 flag was not passed explicitly, so a run can opt back into animation if it wants moving water
 in the measurement.
 

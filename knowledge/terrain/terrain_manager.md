@@ -1,4 +1,4 @@
-_Last edited: 2026-10-02_
+_Last edited: 2026-10-03_
 
 # Terrain Manager
 
@@ -23,9 +23,11 @@ The `+ structureMaxChunkRadius` term inside `fillStructuresDistance` (not the ob
 
 Two further distances, measured to whole regions, decide when regions are evicted; see [region_system.md](region_system.md#distances).
 
+With LODs enabled, chunks within render distance are not shown by the scan: [terrain_lod.md](terrain_lod.md) decides when each one replaces the LOD tile covering it.
+
 ## Destruction Uses Union of Old + New Bounds
 
-The scan iterates the union of the previous and current distance bounds. Chunks that were within `createBlasDistance` of the **previous** camera position but are now outside the **current** `createBlasDistance` get destroyed. This ensures a chunk visible last frame won't be missed even if the camera moved far in one frame.
+The scan iterates the union of the previous and current distance bounds. Chunks that were within `createBlasDistance` of the **previous** camera position but are now outside the **current** `createBlasDistance` get destroyed. This ensures a chunk visible last frame won't be missed even if the camera moved far in one frame. With LODs on, a chunk with geometry instead lingers until the LOD tiles covering it are shown (see [terrain_lod.md](terrain_lod.md)).
 
 ## Task Throttling
 

@@ -1,4 +1,4 @@
-_Last edited: 2026-10-02_
+_Last edited: 2026-10-03_
 
 # Terrain Knowledgebase
 
@@ -7,6 +7,7 @@ Procedural voxel world: chunk lifecycle, noise generation, biomes, structures, a
 | Entry | Description |
 |---|---|
 | [terrain_manager.md](terrain_manager.md) | Top-level Terrain class, render distance, chunk creation/destruction |
+| [terrain_lod.md](terrain_lod.md) | LOD quadtree: noise-sampled heightfield tiles, voxel tiles from the per-chunk surface-only cache, atomic tile/chunk swaps, progressive coarse-first load |
 | [region_system.md](region_system.md) | Region: 32×32 chunk spatial grouping, neighbor lookups, eviction and task pins |
 | [chunk_state_machine.md](chunk_state_machine.md) | Multi-stage ChunkState, transitions, parallelism constraints |
 | [chunk_segments.md](chunk_segments.md) | 4×8×4 ChunkSegment subdivision, AIR/SOLID_SURROUNDED/MIXED culling |

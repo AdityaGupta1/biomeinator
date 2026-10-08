@@ -10,6 +10,7 @@
 #include "chunk.h"
 #include "chunk_generator.h"
 #include "region_file.h"
+#include "terrain_lod.h"
 #include "terrain_materials.h"
 #include "terrain_omm.h"
 #include "multithreading/thread_memory_allocator.h"
@@ -57,6 +58,8 @@ static Scene* scene;
 static bool automatedRun{ false };
 static bool evictingRegions{ false };
 static bool validatingEviction{ false };
+// LOD tiles then own chunk visibility
+static bool lodsEnabled{ false };
 
 // Each task pins the regions within this many chunks of its own so none of them is removed while it
 // runs. That covers every chunk the task reads or writes and, for chunks whose readiness it
@@ -197,6 +200,7 @@ void init(Scene* scene)
     Terrain::automatedRun = SettingsManager::isAutomatedRun();
     Terrain::evictingRegions = SettingsManager::getAsBool("evictRegions");
     Terrain::validatingEviction = SettingsManager::getAsBool("validateEviction");
+    Terrain::lodsEnabled = SettingsManager::getAsInt("lodDistance") > 0;
 
     // Blocks::init() assigns the texture array slice indices that TerrainMaterials::init()
     // loads textures for
@@ -215,19 +219,13 @@ void init(Scene* scene)
     CaveStructures::init();
     ChunkGenerator::init();
 
+    TerrainLod::init(scene);
+
     threadPool.init();
     startRegionDeleter();
 }
 
-struct IVec2Hash
-{
-    size_t operator()(const glm::ivec2& v) const noexcept
-    {
-        return hash(v.x ^ hash(v.y));
-    }
-};
-
-static std::unordered_map<glm::ivec2, std::unique_ptr<Region>, IVec2Hash> regions;
+static std::unordered_map<glm::ivec2, std::unique_ptr<Region>, glmUtil::IVec2Hash> regions;
 
 static glm::ivec2 cameraChunkPosition(glm::ivec3 position)
 {
@@ -239,10 +237,16 @@ static glm::ivec2 chunkToRegionPos(glm::ivec2 chunkPos)
     return glmUtil::floorDiv(chunkPos, glm::ivec2(regionSideLength));
 }
 
-static Chunk* findChunk(glm::ivec2 chunkPos)
+static Region* findChunkRegion(glm::ivec2 chunkPos)
 {
     const auto regionIter = regions.find(chunkToRegionPos(chunkPos));
-    return regionIter == regions.end() ? nullptr : regionIter->second->getChunk(chunkPos);
+    return regionIter == regions.end() ? nullptr : regionIter->second.get();
+}
+
+static Chunk* findChunk(glm::ivec2 chunkPos)
+{
+    Region* const region = findChunkRegion(chunkPos);
+    return region == nullptr ? nullptr : region->getChunk(chunkPos);
 }
 
 static Region* getOrCreateRegion(glm::ivec2 regionPos)
@@ -280,6 +284,10 @@ static std::vector<Chunk*> chunksWithNewGeometry;
 static std::mutex chunksWithNewGeometryMutex;
 // Main thread only
 static std::vector<Chunk*> chunksToDestroy;
+// With LODs, chunks past the BLAS distance keep their instances while LOD shows them, until the tiles
+// covering them are ready; otherwise the nearest ready ancestor tile, which can reach the camera,
+// would stand in for them.
+static std::unordered_set<Chunk*> lingeringChunks;
 static std::vector<Chunk*> chunksToRevisit;
 static std::mutex chunksToRevisitMutex;
 
@@ -302,7 +310,7 @@ static std::atomic<uint32_t> expectedImportedChunks{ 0 };
 static std::atomic<uint32_t> importedChunksEnqueuedForBlas{ 0 };
 static std::atomic<bool> worldImportActive{ false };
 // Protected by chunksWithNewGeometryMutex; each initial-import coordinate counts once.
-static std::unordered_set<glm::ivec2, IVec2Hash> pendingImportedChunks;
+static std::unordered_set<glm::ivec2, glmUtil::IVec2Hash> pendingImportedChunks;
 
 void addChunkWithNewGeometry(Chunk* chunk)
 {
@@ -400,7 +408,7 @@ static void updateRegionStaging(glm::ivec2 cameraChunkPos, const ChunkScanDistan
 }
 
 // Final block hashes of generated chunks in evicted regions, until they are regenerated
-static std::unordered_map<glm::ivec2, uint64_t, IVec2Hash> evictedChunkHashes;
+static std::unordered_map<glm::ivec2, uint64_t, glmUtil::IVec2Hash> evictedChunkHashes;
 static std::mutex evictedChunkHashesMutex;
 
 static void recordEvictedChunkHash(const Chunk* chunk)
@@ -559,7 +567,10 @@ static void scheduleChunkWork(Chunk* chunk,
     if (inCurrentCreateBlasDistance)
     {
         chunk->setIsMarkedForDestruction(false);
-        chunk->setInstancesVisible(inCurrentRenderDistance);
+        if (!lodsEnabled)
+        {
+            chunk->setInstancesVisible(inCurrentRenderDistance);
+        }
 
         if (chunkState == ChunkState::NEEDS_GEOMETRY)
         {
@@ -569,7 +580,10 @@ static void scheduleChunkWork(Chunk* chunk,
     }
     else if (inLastCreateBlasDistance)
     {
-        chunk->setInstancesVisible(false);
+        if (!lodsEnabled)
+        {
+            chunk->setInstancesVisible(false);
+        }
 
         if (chunkState == ChunkState::GENERATING_GEOMETRY)
         {
@@ -578,8 +592,15 @@ static void scheduleChunkWork(Chunk* chunk,
         }
         else if (chunkState == ChunkState::HAS_GEOMETRY)
         {
-            // Destroy this chunk's instances at the end of this update
-            chunksToDestroy.push_back(chunk);
+            if (lodsEnabled)
+            {
+                lingeringChunks.insert(chunk);
+            }
+            else
+            {
+                // Destroy this chunk's instances at the end of this update
+                chunksToDestroy.push_back(chunk);
+            }
         }
     }
 }
@@ -591,8 +612,14 @@ void update(ToFreeList& toFreeList)
     const Camera& camera = Renderer::getCamera();
     const glm::ivec3 cameraPosInt_WS = camera.getPosInt_WS();
     const glm::ivec2 currentChunkPos = cameraChunkPosition(cameraPosInt_WS);
-    const glm::ivec2 minRenderChunkPos = currentChunkPos - distances.renderDistance;
-    const glm::ivec2 maxRenderChunkPos = currentChunkPos + distances.renderDistance;
+    glm::ivec2 minRenderChunkPos = currentChunkPos - distances.renderDistance;
+    glm::ivec2 maxRenderChunkPos = currentChunkPos + distances.renderDistance;
+    if (lodsEnabled)
+    {
+        // Rays that leave the terrain through LOD tiles are still within the world's volumes
+        TerrainLod::getCoveredChunkBounds(currentChunkPos, SettingsManager::getAsInt("lodDistance"),
+                                          minRenderChunkPos, maxRenderChunkPos);
+    }
 
     voxelRenderBoundsMin_WS = {
         minRenderChunkPos.x * static_cast<int>(chunkSizeXZ),
@@ -876,6 +903,31 @@ void update(ToFreeList& toFreeList)
     }
     chunksToDestroy.clear();
 
+    if (lodsEnabled)
+    {
+        std::vector<Task> lodTasks;
+        const int voxelDistance = static_cast<int>(
+            std::round(SettingsManager::getAsFloat("lodVoxelDistanceScale") * static_cast<float>(distances.renderDistance)));
+        TerrainLod::update(currentChunkPos, distances.createBlasDistance, voxelDistance,
+                           SettingsManager::getAsInt("lodDistance"), findChunkRegion, toFreeList, lodTasks);
+        // Ahead of the chunk backlog: LOD tiles are few and cheap, and the coarse ones are what covers
+        // the world while it loads
+        tasksToEnqueue.insert(tasksToEnqueue.begin(), lodTasks.begin(), lodTasks.end());
+
+        std::erase_if(lingeringChunks, [&](Chunk* chunk) {
+            if (glmUtil::chebyshevDistance(chunk->getChunkPos(), currentChunkPos) <= distances.createBlasDistance)
+            {
+                return true;
+            }
+            if (chunk->getAreInstancesVisible())
+            {
+                return false;
+            }
+            chunk->destroyInstances(toFreeList);
+            return true;
+        });
+    }
+
     if (!regionsToRemove.empty())
     {
         CPU_PROFILE_SCOPE("region eviction");
@@ -886,6 +938,26 @@ void update(ToFreeList& toFreeList)
                        regionsToRemove.end();
             });
         }
+        // Removing a region resets its neighbors' geometry, so lingering chunks beside it go first
+        const auto isRemoved = [&](const Chunk* chunk) {
+            return chunk != nullptr &&
+                   std::find(regionsToRemove.begin(), regionsToRemove.end(), chunk->getRegion()) != regionsToRemove.end();
+        };
+        std::erase_if(lingeringChunks, [&](Chunk* chunk) {
+            if (isRemoved(chunk))
+            {
+                return true;
+            }
+            for (int dirIdx = 0; dirIdx < 4; ++dirIdx)
+            {
+                if (isRemoved(chunk->getNeighbor(static_cast<NeighborDirection>(dirIdx))))
+                {
+                    chunk->destroyInstances(toFreeList);
+                    return true;
+                }
+            }
+            return false;
+        });
         for (Region* region : regionsToRemove)
         {
             removeRegion(region, toFreeList);
@@ -1128,7 +1200,7 @@ static std::vector<Block> buildBlockRemapTable(const nlohmann::json& paletteJson
 struct ImportedWorld
 {
     decltype(Terrain::regions) regions;
-    std::unordered_set<glm::ivec2, IVec2Hash> pendingChunks;
+    std::unordered_set<glm::ivec2, glmUtil::IVec2Hash> pendingChunks;
     uint32_t seed{ 0 };
     uint32_t numChunks{ 0 };
     int renderDistance{ 0 };
@@ -1251,6 +1323,7 @@ static void resetTerrainState()
     scene->invalidateRadianceHistory();
 
     ToFreeList scratchToFree;
+    TerrainLod::reset(scratchToFree);
     for (const auto& [regionPos, regionPtr] : regions)
     {
         if (!regionPtr)
@@ -1278,6 +1351,7 @@ static void resetTerrainState()
         pendingImportedChunks.clear();
     }
     chunksToDestroy.clear();
+    lingeringChunks.clear();
     {
         std::scoped_lock<std::mutex> lock(chunksToRevisitMutex);
         chunksToRevisit.clear();
@@ -1340,7 +1414,7 @@ bool pollAutomatedRunTerrain()
                 }
             }
         }
-        return true;
+        return !lodsEnabled || TerrainLod::isSettled();
     }
     const uint32_t enqueued = importedChunksEnqueuedForBlas.load(std::memory_order_relaxed);
     const uint32_t expected = expectedImportedChunks.load(std::memory_order_relaxed);

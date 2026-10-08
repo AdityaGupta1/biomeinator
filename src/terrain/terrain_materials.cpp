@@ -119,4 +119,34 @@ bool sliceHasNormalMap(uint32_t sliceIdx)
     return sliceIdx < sliceNormalMap.size() && sliceNormalMap[sliceIdx];
 }
 
+PerFaceData makeBlockFaceData(const BlockData& block, uint32_t slice, uint32_t extraFlags)
+{
+    uint32_t flags = extraFlags;
+    if (sliceHasBiomeTint(slice))
+    {
+        flags |= FACE_FLAG_BIOME_TINT;
+    }
+    if (sliceHasNormalMap(slice))
+    {
+        flags |= FACE_FLAG_NORMAL_MAP;
+    }
+    if (block.translucent)
+    {
+        flags |= FACE_FLAG_DIFFUSE_TRANSMISSION;
+    }
+    if (block.proceduralColor)
+    {
+        flags |= FACE_FLAG_PROCEDURAL_COLOR;
+    }
+    if (block.type == BlockType::GLASS)
+    {
+        flags |= FACE_FLAG_IS_GLASS;
+    }
+
+    PerFaceData data{};
+    data.setFlags(flags);
+    data.setTexArraySliceIdx(slice);
+    return data;
+}
+
 } // namespace TerrainMaterials

@@ -17,6 +17,7 @@
 
 #include <array>
 #include <atomic>
+#include <bitset>
 #include <glm/glm.hpp>
 #include <unordered_map>
 
@@ -166,6 +167,20 @@ struct SnowData
     static constexpr float hollowScale = 4.f;
     static constexpr float hollowBias = 0.4f;
 
+    // Coverage of a top block at topY before the hollowness bias: the altitude line's fade or the
+    // cold-climate cover, whichever is more
+    static float coverage(float lineY, float topY, float coldCover)
+    {
+        return glm::max(glm::smoothstep(lineY, lineY + fadeDepth, topY), coldCover);
+    }
+
+    // Layers rest only on full cubes
+    static bool acceptsLayer(const BlockData& block)
+    {
+        return block.shape == BlockShape::CUBE &&
+               (block.type == BlockType::SOLID || block.type == BlockType::TRANSPARENT_CUTOUT);
+    }
+
     std::vector<float> lineY{};
     // Coverage that applies at any height, from cold climate alone
     std::vector<float> coldCover{};
@@ -192,9 +207,18 @@ struct SnowData
 
 class Chunk
 {
+public:
+    static constexpr uint32_t structureNeighborSideLength = 2 * structureMaxChunkRadius + 1;
+    static constexpr uint32_t numStructureNeighbors = structureNeighborSideLength * structureNeighborSideLength;
+    // Row by row from the -X, -Z corner
+    using ConstStructureNeighborhood = std::array<const Chunk*, numStructureNeighbors>;
+
 private:
     const glm::ivec2 chunkPos;
+    // Null for surface-only chunks, which are generated outside the region pipeline
     Region* const region;
+    // Only seen from afar, so generated without caves, decorators or rock deep below the surface
+    const bool isSurfaceOnly;
 
     std::vector<Block> blocks{};
     // One bit per block, set where the terrain pass left AIR. Captured before HAS_TERRAIN and never
@@ -204,6 +228,22 @@ private:
     // One immutable bit per block identifying terrain full cubes. This permits race-free
     // support checks while neighboring chunks concurrently fill structures into air/water.
     std::vector<uint64_t> terrainSolidCubeMask{};
+    // Surface-only chunks wait in SurfaceChunkCache long after their terrain pass, mostly needed only by
+    // neighbors, so they keep their terrain compacted there (see compactSurfaceOnlyTerrain): a column is a
+    // few runs of blocks, and its masks change within a word or two
+    struct BlockRun
+    {
+        Block block;
+        uint16_t length;
+    };
+    // Column by column from blockRunColumnStarts; held from the terrain pass until the structure pass
+    std::vector<BlockRun> blockRuns{};
+    std::vector<uint32_t> blockRunColumnStarts{};
+    // Per column, two bits per mask word (CompactMaskWord). Stored words are pairs of the air and the solid
+    // cube word in compactMaskWords, a column's first pair at compactMaskColumnStarts.
+    std::vector<uint16_t> compactMaskWordKinds{};
+    std::vector<uint64_t> compactMaskWords{};
+    std::vector<uint16_t> compactMaskColumnStarts{};
     CaveDecorationData caveDecoration{};
     SnowData snow{};
     // TODO: Consider replacing this unordered_map with a more cache-friendly sparse state store
@@ -247,8 +287,6 @@ private:
     Instance* terrainInstance{ nullptr };
     Instance* waterInstance{ nullptr };
 
-    static constexpr uint32_t structureNeighborSideLength = 2 * structureMaxChunkRadius + 1;
-    static constexpr uint32_t numStructureNeighbors = structureNeighborSideLength * structureNeighborSideLength;
     static_assert(numStructureNeighbors < 32, "readyStructureNeighborsMask needs a bit per structure neighbor");
     static constexpr uint32_t allStructureNeighborsMask = (1u << numStructureNeighbors) - 1;
     static constexpr uint32_t allNeighborsMask = (1u << 4) - 1;
@@ -258,11 +296,18 @@ private:
     void markStructureNeighborsReady(uint32_t neighborBits);
     void markNeighborsWithBlocks(uint32_t neighborBits);
 
-    void fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
-    void buildTerrainAirMask();
+    // Returns the height from which every block it left is air
+    uint32_t fillTerrainBlocksAndCreateStructures(ThreadMemoryAllocator& threadMemoryAlloc);
+    void generateTerrainBlocks(ThreadMemoryAllocator& threadMemoryAlloc);
+    // Every block from airFromY up must be air
+    void buildTerrainAirMask(uint32_t airFromY = chunkSizeY);
     // The structure neighbor containing a world XZ position, and that position within it
     const Chunk* structureNeighborAt_WS(glm::ivec2 posXZ_WS, glm::ivec2& outPosXZ_CS) const;
-    bool getTerrainMaskBit_WS(glm::ivec3 pos_WS, const std::vector<uint64_t> Chunk::* mask) const;
+    bool getTerrainMaskBit_WS(glm::ivec3 pos_WS, bool isSolidCubeMask) const;
+    bool getTerrainMaskBit(uint32_t blockIdx, bool isSolidCubeMask) const;
+    void compactSurfaceOnlyTerrain();
+    void expandSurfaceOnlyBlocks();
+    void releaseMasks();
     void fillStructureBlocks(const Structure* structures, uint32_t numStructures);
     void placeSurfaceStructures();
     // Mean terrain height on rings around a column minus its own: positive in hollows, negative on
@@ -276,6 +321,11 @@ private:
     bool tryPlaceDecorator(uint32_t baseBlockIdx, uint32_t blockY, Block block);
     void fillCaveStructureBlocks(const CaveStructure* caveStructures, uint32_t numCaveStructures, CaveStructureType type);
     void runStructuresAndDecoratorPass();
+    // Surface-only chunks have no cave air, so where a cave opens at the surface their plants differ from
+    // the full chunk's
+    void placeFloorDecorators();
+    void placeCaveDecorators();
+    void fillBlocksFromStructureNeighbors();
 
     bool shouldGenerateFace(glm::ivec3 thisPos_CS, BlockType thisBlockType, BlockShape thisBlockShape, glm::ivec3 neighborPos_CS, int faceIdx);
 
@@ -288,8 +338,16 @@ private:
     void setNeighbor(NeighborDirection dir, Chunk* neighborChunk);
 
 public:
-    Chunk(glm::ivec2 chunkPos, Region* region);
+    Chunk(glm::ivec2 chunkPos, Region* region, bool isSurfaceOnly = false);
     ~Chunk();
+
+    // Surface-only chunks are generated outside the region pipeline, which tracks their readiness itself
+    void generateSurfaceOnlyTerrain(ThreadMemoryAllocator& threadMemoryAlloc);
+    // Every chunk in the neighborhood must have its terrain
+    void fillSurfaceOnlyStructures(const ConstStructureNeighborhood& neighborhood);
+    // Neighbors' structure passes read only a chunk's masks, heights and structures, so a surface-only
+    // chunk downsampled already can give its blocks back while it stays a neighbor
+    void releaseBlocks();
 
     void setNeighbors(bool createNeighbors);
 
@@ -319,6 +377,9 @@ public:
     void setIsMarkedForDestruction(bool marked = true);
 
     void setInstancesVisible(bool visible);
+    bool getAreInstancesVisible() const;
+    // Has geometry with BLASes that it isn't about to lose, so it can be shown
+    bool isGeometryReady() const;
 
     glm::ivec2 getChunkPos() const;
     Region* getRegion() const;
@@ -328,6 +389,10 @@ public:
     bool getHasSerializedData() const;
 
     bool tryGetBlock(glm::uvec3 chunkBlockPos, Block& outBlock) const;
+    // Whatever generation has written so far
+    Block getGeneratedBlock(glm::uvec3 chunkBlockPos) const;
+    // The column's generated blocks, bottom up
+    const Block* getGeneratedColumn(glm::uvec2 chunkBlockPosXZ) const;
 
     const std::vector<Biome>& getBiomes() const;
     // Only valid once the chunk has all its blocks
@@ -381,6 +446,10 @@ private:
     bool isImported{ false };
     // Queued or running tasks that may touch this region's chunks; it is only removed at zero
     std::atomic<uint32_t> numPins{ 0 };
+    // Chunks found to have ready geometry, so that checking them again reads no chunk. BLAS builds don't
+    // notify chunks, so bits are set when a check finds a chunk ready; a chunk only stops being ready
+    // through destroyInstances or being marked for destruction, which clear its bit. Main thread only.
+    std::bitset<regionSideLength * regionSideLength> readyGeometryChunks{};
 
 public:
     const glm::ivec2 regionPos;
@@ -401,6 +470,9 @@ public:
     uint32_t getNumNeighborsSet() const;
 
     bool containsChunk(glm::ivec2 chunkPos) const;
+
+    bool isChunkGeometryReady(glm::ivec2 chunkPos);
+    void clearChunkGeometryReady(glm::ivec2 chunkPos);
 
     void pin();
     void unpin();

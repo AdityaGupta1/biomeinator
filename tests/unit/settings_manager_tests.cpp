@@ -134,6 +134,7 @@ TEST_CASE("SettingsManager applies and permits overriding automated-run defaults
         CHECK_FALSE(SettingsManager::getAsBool("showGui"));
         CHECK(SettingsManager::getAsBool("animTimePaused"));
         CHECK_FALSE(SettingsManager::getAsBool("useVsync"));
+        CHECK(SettingsManager::getAsInt("lodDistance") == 0);
     }
 
     SECTION("explicit values win over automated-run defaults")
@@ -144,7 +145,8 @@ TEST_CASE("SettingsManager applies and permits overriding automated-run defaults
                          "--lockCamera=false",
                          "--showGui=true",
                          "--animTimePaused=false",
-                         "--useVsync=true" });
+                         "--useVsync=true",
+                         "--lodDistance=256" });
         CHECK_FALSE(SettingsManager::isRenderToFileMode());
         CHECK(SettingsManager::isPerfMode());
         CHECK(SettingsManager::isAutomatedRun());
@@ -153,6 +155,7 @@ TEST_CASE("SettingsManager applies and permits overriding automated-run defaults
         CHECK(SettingsManager::getAsBool("showGui"));
         CHECK_FALSE(SettingsManager::getAsBool("animTimePaused"));
         CHECK(SettingsManager::getAsBool("useVsync"));
+        CHECK(SettingsManager::getAsInt("lodDistance") == 256);
     }
 }
 

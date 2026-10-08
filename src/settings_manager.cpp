@@ -80,6 +80,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
     ADD_OPTION("cameraZ", "Generated voxel-world camera Z", float, "0");
     ADD_OPTION("cameraYaw", "Generated voxel-world camera yaw in degrees (0=+Z)", float, "180");
     ADD_OPTION("cameraPitch", "Generated voxel-world camera pitch in degrees (positive=up)", float, "0");
+    ADD_OPTION("fovY", "Vertical field of view in degrees (zoom narrows it to 0.3 times)", float, "35");
     ADD_OPTION("movementSpeed", "Movement speed", float, "12");
     ADD_OPTION("animTimePaused", "Pause world animation (e.g. water waves, sun position)", bool, "false");
     ADD_OPTION("animTime", "Initial world animation time in seconds (0 = sunrise)", float, "150");
@@ -91,14 +92,23 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
                bool,
                "true");
     ADD_OPTION("fogScatteringMultiplier",
-               "Fog scattering multiplier on the time-of-day fog strength (0 disables fog; voxel mode only)",
+               "Fog scattering multiplier (0 disables fog; voxel mode only)",
                float,
                "1");
-    ADD_OPTION("fogScaleHeight", "Fog density falloff scale height in blocks above sea level", float, "40");
-    ADD_OPTION("fogG", "Fog Henyey-Greenstein anisotropy", float, "0.5");
+    ADD_OPTION("fogScaleHeight", "Fog density falloff scale height in blocks above sea level", float, "30");
+    ADD_OPTION("fogG", "Fog Henyey-Greenstein anisotropy", float, "0.4");
     ADD_OPTION("fogMarchSteps", "Fog in-scattering march steps on the primary segment", uint32_t, "8");
-    ADD_OPTION("fogAmbientStrength", "Strength of the fog ambient sky in-scattering term", float, "0.3");
+    ADD_OPTION("fogAmbientStrength", "Strength of the fog ambient sky in-scattering term", float, "0.7");
     ADD_OPTION("skyStrength", "Multiplier on sky radiance, excluding the sun disk", float, "1.3");
+    ADD_OPTION("hazeHalfDistance",
+               "Distance in blocks of air past the haze start over which aerial haze halves what is behind it "
+               "(0 disables it; voxel mode only)",
+               float,
+               "3000");
+    ADD_OPTION("hazeStartDistance", "Distance in blocks of air before aerial haze begins", float, "400");
+    ADD_OPTION("hazeWhiteness", "How far aerial haze desaturates the sky color it takes, from 0 to 1", float, "0.5");
+    ADD_OPTION("hazeBrightness", "Multiplier on the aerial haze color", float, "2");
+    ADD_OPTION("hazeSkyBand", "Sine of the elevation above which the sky gets no aerial haze", float, "0.05");
     ADD_OPTION("clouds", "Enable clouds", bool, "true");
     ADD_OPTION("cloudCoverage", "Cloud coverage threshold", float, "0.3");
     ADD_OPTION("cloudExtinction", "Cloud extinction coefficient per block", float, "0.002");
@@ -116,6 +126,16 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
     ADD_OPTION("cloudWindX", "Cloud wind X in blocks/s", float, "10");
     ADD_OPTION("cloudWindZ", "Cloud wind Z in blocks/s", float, "50");
     ADD_OPTION("renderDistance", "Render distance in chunks (must be positive)", int, "30");
+    ADD_OPTION("lodDistance",
+               "Distance in chunks out to which distant terrain is shown as LODs "
+               "(0 disables them; 0 by default in automated runs)",
+               int,
+               "512");
+    ADD_OPTION("lodVoxelDistanceScale",
+               "Multiple of the render distance out to which LODs show downsampled blocks with structures rather "
+               "than heightfields (0 for none)",
+               float,
+               "2");
     ADD_OPTION("world", "World to import", std::string, "");
     ADD_OPTION("evictRegions",
                "Free regions far from the camera, regenerating them if the camera returns",
@@ -226,6 +246,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         COPY_SETTING("cameraZ", float);
         COPY_SETTING("cameraYaw", float);
         COPY_SETTING("cameraPitch", float);
+        COPY_SETTING("fovY", float);
         COPY_SETTING("movementSpeed", float);
         COPY_SETTING("animTimePaused", bool);
         COPY_SETTING("animTime", float);
@@ -239,6 +260,11 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         COPY_SETTING("fogMarchSteps", uint32_t);
         COPY_SETTING("fogAmbientStrength", float);
         COPY_SETTING("skyStrength", float);
+        COPY_SETTING("hazeHalfDistance", float);
+        COPY_SETTING("hazeStartDistance", float);
+        COPY_SETTING("hazeWhiteness", float);
+        COPY_SETTING("hazeBrightness", float);
+        COPY_SETTING("hazeSkyBand", float);
         COPY_SETTING("clouds", bool);
         COPY_SETTING("cloudCoverage", float);
         COPY_SETTING("cloudExtinction", float);
@@ -256,6 +282,8 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         COPY_SETTING("cloudWindX", float);
         COPY_SETTING("cloudWindZ", float);
         COPY_SETTING("renderDistance", int);
+        COPY_SETTING("lodDistance", int);
+        COPY_SETTING("lodVoxelDistanceScale", float);
         COPY_SETTING("world", std::string);
         COPY_SETTING("evictRegions", bool);
         COPY_SETTING("validateEviction", bool);
@@ -339,7 +367,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
     const bool isParsedAutomatedRun = !getString("renderToFile").empty() || !getString("perfOutput").empty();
     if (isParsedAutomatedRun)
     {
-        const auto defaultTo = [&parseResult, &parsedSettings](const char* name, const bool value)
+        const auto defaultTo = [&parseResult, &parsedSettings](const char* name, const SettingValue& value)
         {
             if (parseResult.count(name) == 0)
             {
@@ -351,6 +379,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         defaultTo("showGui", false);
         defaultTo("animTimePaused", true);
         defaultTo("useVsync", false);
+        defaultTo("lodDistance", 0); // Goldens and perf baselines are without LODs.
     }
 
     worldSeed = getUint("worldSeed");

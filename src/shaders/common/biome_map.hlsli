@@ -8,6 +8,7 @@
 #include "../rendering/common/common_structs.h"
 
 #include "common/global_params.hlsli"
+#include "util/color.hlsli"
 
 SamplerState biomeMapSampler : REGISTER_S(RT, BIOME_MAP_SAMPLER);
 
@@ -40,10 +41,20 @@ float3 sampleBiomeMapBicubic(const float2 uv)
 }
 
 // Returns float4(tint, 1) for biome-tinted triangles and float4(1, 1, 1, 0) otherwise; the
-// alpha gates the luminance-replace tint in getMaterialBaseColor.
-float4 getBiomeTint(const uint triangleFlags, const float2 posXZ_WS)
+// alpha gates the luminance-replace tint in getMaterialBaseColor. A tint baked into the hit's
+// vertices (HitInfo::packedVertexTint) takes precedence over the map.
+float4 getBiomeTint(const uint triangleFlags, const float2 posXZ_WS, const uint packedVertexTint)
 {
-    if (!bool(triangleFlags & FACE_FLAG_BIOME_TINT) || sceneParams.biomeMapTexelsPerSide == 0)
+    if (!bool(triangleFlags & FACE_FLAG_BIOME_TINT))
+    {
+        return float4(1.f, 1.f, 1.f, 0.f);
+    }
+    if ((packedVertexTint >> 24) != 0)
+    {
+        const uint3 srgb8 = uint3(packedVertexTint, packedVertexTint >> 8, packedVertexTint >> 16) & 0xFF;
+        return float4(srgbToLinear(srgb8 / 255.f), 1.f);
+    }
+    if (sceneParams.biomeMapTexelsPerSide == 0)
     {
         return float4(1.f, 1.f, 1.f, 0.f);
     }

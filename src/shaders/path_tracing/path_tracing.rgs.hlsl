@@ -13,6 +13,7 @@
 #include "common/payload.hlsli"
 #include "light/dome_light.hlsli"
 #include "light/fog.hlsli"
+#include "light/haze.hlsli"
 #include "light/light_sampling.hlsli"
 #include "materials/materials.hlsli"
 #include "util/color.hlsli"
@@ -150,8 +151,14 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         return;
     }
 
+    // As with the fog, only split 0 adds what the primary segment scatters in
+    HazeState haze = makeHazeState(!SHARC_UPDATE && sceneParams.voxelMode == 1);
+    accumulateHazeDistance(haze, payload, cameraParams.pos_WS, ray.Direction);
+    const float3 primaryHazeInScatterWeight = (pathSplitIdx == 0) ? payload.pathWeight : 0.f;
+
     if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
     {
+        applyHaze(haze, payload.pathWeight, primaryHazeInScatterWeight, pathColor, getSkyHazeStrength(ray.Direction));
         const float3 domeLightColor = (pathSplitIdx == 0) ? getDomeLightColor(ray.Direction) : 0.f;
         pathColor += payload.pathWeight * domeLightColor;
         if (sceneParams.voxelMode == 1 && pathSplitIdx == 0)
@@ -202,6 +209,10 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
     }
 
     Material surfMaterial = getHitMaterial(payload, payload.rayCone.width);
+    if (!surfMaterial.isDelta())
+    {
+        applyHaze(haze, payload.pathWeight, primaryHazeInScatterWeight, pathColor);
+    }
     const uint effectiveMaxPathDepth = renderParams.maxPathDepth;
     for (uint pathDepth = 0; pathDepth < effectiveMaxPathDepth; ++pathDepth)
     {
@@ -220,7 +231,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
         const PerFaceData perFaceData = loadPerFaceData(instanceData, payload.hitInfo.triangleIdx);
         const bool hitWasWater = perFaceData.hasFlag(FACE_FLAG_IS_WATER);
         const TexSampleCtx surfTexCtx =
-            makeTintedTexSampleCtx(perFaceData, payload.rayCone.width, payload.hitInfo.hitPos_WS);
+            makeTintedTexSampleCtx(perFaceData, payload.rayCone.width, payload.hitInfo);
 
         // On the first bounce, emission is handled only by pathSplitIdx 0 to prevent having to handle it twice and
         // multiply by Fresnel reflectance
@@ -279,6 +290,9 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                 isPureEmitter = !any(baseColor > 0.f);
             }
         }
+
+        // The haze in front of a surface the path enters water through isn't seen through the surface's tint
+        const float3 hazeInScatterWeight = payload.pathWeight;
 
         const bool isLastBounce = (pathDepth == effectiveMaxPathDepth - 1);
         if (!surfMaterial.canScatter() || isLastBounce || isPureEmitter)
@@ -343,6 +357,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             if (hitWasWater)
             {
                 setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
+                applyHazeIfUnderwater(haze, payload, hazeInScatterWeight, pathColor);
             }
             setRayOriginAndDirection(ray, payload.hitInfo.hitPos_WS, surfGeoNor_WS, ray.Direction, true /*faceforwardNormal*/);
             // bounceBsdfPdf, bounceWasSpecular, etc. are intentionally preserved from the last real BSDF sample
@@ -504,6 +519,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
             if (hitWasWater && dot(surfBsdfSample.wi_WS, surfShadingNor_WS) < 0.f) // apply only for rays that will transmit through the water
             {
                 setUnderwaterFromHit(payload, bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
+                applyHazeIfUnderwater(haze, payload, hazeInScatterWeight, pathColor);
             }
 
             if (pathDepth == 0 && !useAnalyticAlbedoGuides && !useDiffuseMaterialAlbedo)
@@ -555,6 +571,16 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
 
         payload.pathWeight *= segmentAbsorption;
 
+        accumulateHazeDistance(haze, payload, ray.Origin, ray.Direction);
+        if (!bool(payload.flags & PAYLOAD_FLAG_DID_HIT))
+        {
+            applyHaze(haze, payload.pathWeight, payload.pathWeight, pathColor, getSkyHazeStrength(ray.Direction));
+        }
+        else if (payload.materialIdx == MATERIAL_IDX_INVALID || !surfMaterial.isDelta())
+        {
+            applyHaze(haze, payload.pathWeight, payload.pathWeight, pathColor);
+        }
+
         if (isOrphanWaterBackfaceHit(payload))
         {
 #if SHARC_UPDATE
@@ -584,7 +610,7 @@ void pathTraceRay(inout Payload payload, const uint2 pixelIdx, const uint pathSp
                         const PerFaceData secondHitPerFaceData =
                             loadPerFaceData(instanceDatas[payload.hitInfo.instanceId], payload.hitInfo.triangleIdx);
                         const TexSampleCtx secondHitTexCtx = makeTintedTexSampleCtx(
-                            secondHitPerFaceData, payload.rayCone.width, payload.hitInfo.hitPos_WS);
+                            secondHitPerFaceData, payload.rayCone.width, payload.hitInfo);
                         if (surfMaterial.hasDiffuse())
                         {
                             secondHitDiffuseAlbedo += getMaterialBaseColor(surfMaterial, payload.hitInfo.uv, secondHitTexCtx).rgb;
@@ -739,7 +765,7 @@ void RayGeneration()
         {
             const Material material = getHitMaterial(payload, payload.rayCone.width);
             const PerFaceData tri = loadPerFaceData(instanceDatas[payload.hitInfo.instanceId], payload.hitInfo.triangleIdx);
-            const TexSampleCtx tex = makeTintedTexSampleCtx(tri, payload.rayCone.width, payload.hitInfo.hitPos_WS);
+            const TexSampleCtx tex = makeTintedTexSampleCtx(tri, payload.rayCone.width, payload.hitInfo);
             SharcHitData hit = makeSharcHit(payload.hitInfo.hitPos_WS, payload.hitInfo.hitShadingNor_WS,
                 getMaterialBaseColor(material, payload.hitInfo.uv, tex).rgb);
             float3 cachedRadiance;
