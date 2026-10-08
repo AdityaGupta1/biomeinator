@@ -6,8 +6,7 @@
 #include <cstdint>
 #include <vector>
 
-// Triangles regrouped into the quad topology of terrain faces, whose two triangles are
-// (0, 1, 2) and (0, 2, 3) of four vertices
+// Triangles regrouped into the implicit quad topology of terrain faces (see getQuadFaceVertIdx())
 struct TriangleQuads
 {
     // Four vertex indices per quad. Pairs come first; each remaining lone triangle repeats its last

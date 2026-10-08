@@ -1,4 +1,4 @@
-_Last edited: 2026-10-06_
+_Last edited: 2026-10-07_
 
 # Instance
 
@@ -7,8 +7,9 @@ _Last edited: 2026-10-06_
 ## Lifecycle
 
 1. `Scene::requestNewInstance()` allocates on main thread, taking pooled CPU geometry vectors if any.
-2. Worker thread fills `hostGeometry.verts`, `.idxs`, `.perFaceDatas` directly (public vectors),
-   and sets `trisPerFaceLog2` if a `PerFaceData` entry covers more than one triangle. Terrain
+2. Worker thread fills `hostGeometry.verts` and `.perFaceDatas` directly (public vectors), plus
+   `.idxs` for indexed glTF meshes, and sets `trisPerFaceLog2` if a `PerFaceData` entry covers
+   more than one triangle. Terrain
    also fills `hostGeometry.packedTerrainVerts` and decodes `.verts` back from it, so the BLAS
    build (from the staging upload) and the area lights use the same rounded geometry the shaders
    read; only the packed form goes resident. See

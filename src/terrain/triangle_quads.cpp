@@ -83,6 +83,7 @@ TriangleQuads pairTrianglesIntoQuads(const std::vector<uint32_t>& triangleIdxs)
             if (vertIdx(partner, corner) == v0 && vertIdx(partner, corner + 1) == v2)
             {
                 v3 = vertIdx(partner, corner + 2);
+                break;
             }
         }
         ASSERT(v3 != UINT32_MAX);

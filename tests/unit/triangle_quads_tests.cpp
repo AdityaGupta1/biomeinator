@@ -58,11 +58,27 @@ void checkCoversInput(const std::vector<uint32_t>& triangleIdxs, const TriangleQ
 
 TEST_CASE("pairTrianglesIntoQuads pairs a split quad in any rotation", "[triangle_quads]")
 {
-    const std::vector<uint32_t> idxs = { 2, 3, 0, 1, 2, 0 };
-    const TriangleQuads quads = pairTrianglesIntoQuads(idxs);
-    CHECK(quads.numPairedQuads == 1);
-    CHECK(quads.quadIdxs.size() == 4);
-    checkCoversInput(idxs, quads);
+    const Triangle first = { 0, 1, 2 };
+    const Triangle second = { 0, 2, 3 };
+    for (uint32_t firstRotation = 0; firstRotation < 3; ++firstRotation)
+    {
+        for (uint32_t secondRotation = 0; secondRotation < 3; ++secondRotation)
+        {
+            std::vector<uint32_t> idxs;
+            for (uint32_t corner = 0; corner < 3; ++corner)
+            {
+                idxs.push_back(first[(corner + firstRotation) % 3]);
+            }
+            for (uint32_t corner = 0; corner < 3; ++corner)
+            {
+                idxs.push_back(second[(corner + secondRotation) % 3]);
+            }
+            const TriangleQuads quads = pairTrianglesIntoQuads(idxs);
+            CHECK(quads.numPairedQuads == 1);
+            CHECK(quads.quadIdxs.size() == 4);
+            checkCoversInput(idxs, quads);
+        }
+    }
 }
 
 TEST_CASE("pairTrianglesIntoQuads makes lone triangles degenerate quads after the pairs", "[triangle_quads]")
@@ -73,6 +89,18 @@ TEST_CASE("pairTrianglesIntoQuads makes lone triangles degenerate quads after th
     CHECK(quads.numPairedQuads == 1);
     CHECK(quads.quadIdxs.size() == 12);
     checkCoversInput(idxs, quads);
+}
+
+TEST_CASE("pairTrianglesIntoQuads pairs each triangle with its lowest-index neighbor", "[triangle_quads]")
+{
+    // The fan's middle triangle comes first and borders both others
+    const std::vector<uint32_t> idxs = { 0, 2, 3, 0, 3, 4, 0, 1, 2 };
+    const TriangleQuads quads = pairTrianglesIntoQuads(idxs);
+    REQUIRE(quads.numPairedQuads == 1);
+    const std::vector<uint32_t> pairedIdxs(quads.quadIdxs.begin(), quads.quadIdxs.begin() + 4);
+    const std::vector<uint32_t> pairedTriangles = { pairedIdxs[0], pairedIdxs[1], pairedIdxs[2],
+                                                    pairedIdxs[0], pairedIdxs[2], pairedIdxs[3] };
+    CHECK(canonicalTriangles(pairedTriangles) == canonicalTriangles({ 0, 2, 3, 0, 3, 4 }));
 }
 
 TEST_CASE("pairTrianglesIntoQuads does not pair triangles with inconsistent winding", "[triangle_quads]")

@@ -73,12 +73,11 @@ uint3 getTriangleVertexIndices(const InstanceData instanceData, const uint triId
         i1 = idxs.Load(idxsBufferByteOffset + 4);
         i2 = idxs.Load(idxsBufferByteOffset + 8);
     }
-    else if (instanceData.trisPerFaceLog2 == 1)
+    else if (instanceData.hasQuadFaces())
     {
-        // Quad faces are four consecutive verts split into (0, 1, 2) and (0, 2, 3)
-        i0 = (triIdx >> 1) * 4;
-        i1 = i0 + 1 + (triIdx & 1);
-        i2 = i1 + 1;
+        i0 = getQuadFaceVertIdx(triIdx, 0);
+        i1 = getQuadFaceVertIdx(triIdx, 1);
+        i2 = getQuadFaceVertIdx(triIdx, 2);
     }
     else
     {

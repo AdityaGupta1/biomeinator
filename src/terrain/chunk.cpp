@@ -1238,25 +1238,25 @@ void Chunk::createInstances()
                             pos.y += offset.y;
                             pos.z += offset.z;
                         }
-                        const uint32_t numFaces = model.getNumFaces();
+                        const uint32_t numQuads = model.getNumQuads();
                         if (blockData.markAsEmitter)
                         {
-                            for (uint32_t face = 0; face < numFaces; ++face)
+                            for (uint32_t quad = 0; quad < numQuads; ++quad)
                             {
-                                terrainEmissiveTriangleIdxs.push_back(baseTriangle + face * 2);
-                                // A lone triangle's degenerate second triangle is never hit
-                                if (face < model.numPairedFaces)
+                                terrainEmissiveTriangleIdxs.push_back(baseTriangle + quad * 2);
+                                // A lone triangle's degenerate second triangle has no area to emit from
+                                if (quad < model.numPairedQuads)
                                 {
-                                    terrainEmissiveTriangleIdxs.push_back(baseTriangle + face * 2 + 1);
+                                    terrainEmissiveTriangleIdxs.push_back(baseTriangle + quad * 2 + 1);
                                 }
                             }
                         }
-                        terrainPerFaceDatas.insert(terrainPerFaceDatas.end(), numFaces,
+                        terrainPerFaceDatas.insert(terrainPerFaceDatas.end(), numQuads,
                                                    makeBlockFaceData(blockData, blockData.texSlices[0]));
                         // Custom UVs cannot use the full-quad cutout OMM pair. Startup validates opacity.
                         if (useOmms)
                         {
-                            terrainOmmIdxs.insert(terrainOmmIdxs.end(), numFaces * 2, TerrainOmm::OMM_IDX_FULLY_OPAQUE);
+                            terrainOmmIdxs.insert(terrainOmmIdxs.end(), numQuads * 2, TerrainOmm::OMM_IDX_FULLY_OPAQUE);
                         }
                     }
                     else if (blockData.shape == BlockShape::X_SHAPED)

@@ -1,4 +1,4 @@
-_Last edited: 2026-10-02_
+_Last edited: 2026-10-07_
 
 # Chunk Generation Pipeline
 
@@ -10,7 +10,7 @@ The terrain system uses five task types, all dispatched through the same thread 
 2. **checkStructureNeighbors** — marks this chunk ready in its 3×3 structure neighbors' masks and pulls theirs. Lightweight. Enqueued immediately when a chunk reaches `HAS_TERRAIN` within fill distance.
 3. **fillStructuresAndDecorators** — reads neighbors' structure lists, writes structure blocks + decorators. Medium weight. Only runs once all structure neighbors are ready.
 4. **generateSegments** — classifies 4×8×4 segments as AIR/SOLID_SURROUNDED/MIXED. Requires neighbor block data. Uses scratch memory from the allocator.
-5. **createInstances** — per-face mesh generation into Instance vertex/index buffers. Requires pre-allocated Instances from the main thread.
+5. **createInstances** — per-face mesh generation into Instance vertex and per-face buffers. Requires pre-allocated Instances from the main thread.
 
 ## Ordering Enforcement
 

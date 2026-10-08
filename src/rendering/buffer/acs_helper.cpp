@@ -15,6 +15,7 @@
 #include "util/util.h"
 
 #include <algorithm>
+#include <bit>
 #include <cstring>
 
 namespace AcsHelper
@@ -95,7 +96,9 @@ static CommittedManagedBuffer sharedQuadIdxsBuffer{
 };
 static std::vector<ManagedBufferSection> quadIdxsSections;
 static uint32_t numQuadIdxsQuads = 0;
-static constexpr uint32_t minQuadIdxsGrowthQuads = 1 << 16;
+static constexpr uint32_t vertsPerQuad = 4;
+static constexpr uint32_t idxsPerQuad = 6;
+static constexpr size_t quadIdxsBytesPerQuad = idxsPerQuad * sizeof(uint32_t);
 
 void init()
 {
@@ -106,10 +109,10 @@ void init()
     sharedVertsUploadBuffer.init(128ull << 20 /*bytes*/);
 
     sharedIdxsUploadBuffer.setName(L"sharedIdxsUploadBuffer");
-    sharedIdxsUploadBuffer.init(32ull << 20 /*bytes*/);
+    sharedIdxsUploadBuffer.init(8ull << 20 /*bytes*/);
 
     sharedQuadIdxsBuffer.setName(L"sharedQuadIdxsBuffer");
-    sharedQuadIdxsBuffer.init(minQuadIdxsGrowthQuads * 6 * sizeof(uint32_t));
+    sharedQuadIdxsBuffer.init(2ull << 20 /*bytes*/);
 
     sharedAcsScratchBuffer.setName(L"sharedAcsScratchBuffer");
     sharedAcsScratchBuffer.init(64ull << 20 /*bytes*/);
@@ -121,15 +124,19 @@ static void ensureQuadIdxsCapacity(ID3D12GraphicsCommandList4* cmdList, ToFreeLi
     {
         return;
     }
-    const uint32_t newNumQuads = std::max({ numQuads, numQuadIdxsQuads * 2, minQuadIdxsGrowthQuads });
+    // The buffer's capacity grows in powers of two, so the pattern fills all of it
+    const size_t newSizeBytes =
+        std::max(std::bit_ceil(numQuads * quadIdxsBytesPerQuad), sharedQuadIdxsBuffer.getSizeBytes());
+    const auto newNumQuads = static_cast<uint32_t>(newSizeBytes / quadIdxsBytesPerQuad);
 
     std::vector<uint32_t> host_idxs;
-    host_idxs.reserve((newNumQuads - numQuadIdxsQuads) * 6);
-    for (uint32_t quad = numQuadIdxsQuads; quad < newNumQuads; ++quad)
+    host_idxs.reserve((newNumQuads - numQuadIdxsQuads) * idxsPerQuad);
+    for (uint32_t triIdx = numQuadIdxsQuads * 2; triIdx < newNumQuads * 2; ++triIdx)
     {
-        const uint32_t baseVertIdx = quad * 4;
-        host_idxs.insert(host_idxs.end(), { baseVertIdx + 0, baseVertIdx + 1, baseVertIdx + 2,
-                                            baseVertIdx + 0, baseVertIdx + 2, baseVertIdx + 3 });
+        for (uint32_t corner = 0; corner < 3; ++corner)
+        {
+            host_idxs.push_back(getQuadFaceVertIdx(triIdx, corner));
+        }
     }
 
     const ManagedBufferSection uploadBufferSection =
@@ -139,7 +146,7 @@ static void ensureQuadIdxsCapacity(ID3D12GraphicsCommandList4* cmdList, ToFreeLi
     toFreeList.pushManagedBufferSection(uploadBufferSection);
 
     // Sections are never freed until reset, so each new one continues the pattern
-    ASSERT(devBufferSection.offsetBytes == numQuadIdxsQuads * 6 * sizeof(uint32_t));
+    ASSERT(devBufferSection.offsetBytes == numQuadIdxsQuads * quadIdxsBytesPerQuad);
     quadIdxsSections.push_back(devBufferSection);
     numQuadIdxsQuads = newNumQuads;
 }
@@ -316,14 +323,18 @@ static void makeBlasBuildInputs(AcsBuildInfo* buildInfo,
     const ManagedBufferSection ommIdxsBufferSection = geoWrapper->ommIdxsBufferSection;
     const bool hasOmms = (ommIdxsBufferSection.sizeBytes > 0);
 
-    uint32_t idxCount = Util::convertByteSizeToCount<uint32_t>(idxsBufferSection.sizeBytes);
-    D3D12_GPU_VIRTUAL_ADDRESS idxsGpuVa = idxCount > 0 ? idxsBufferSection.getGpuVirtualAddress() : 0;
+    uint32_t idxCount = 0;
+    D3D12_GPU_VIRTUAL_ADDRESS idxsGpuVa = 0;
     if (geoWrapper->hasQuadIdxs)
     {
-        ASSERT(idxCount == 0);
-        ASSERT(vertsSource.count % 4 == 0 && vertsSource.count / 4 <= numQuadIdxsQuads);
-        idxCount = vertsSource.count / 4 * 6;
+        ASSERT(vertsSource.count % vertsPerQuad == 0 && vertsSource.count / vertsPerQuad <= numQuadIdxsQuads);
+        idxCount = vertsSource.count / vertsPerQuad * idxsPerQuad;
         idxsGpuVa = sharedQuadIdxsBuffer.getGpuVirtualAddress();
+    }
+    else if (idxsBufferSection.isValid())
+    {
+        idxCount = Util::convertByteSizeToCount<uint32_t>(idxsBufferSection.sizeBytes);
+        idxsGpuVa = idxsBufferSection.getGpuVirtualAddress();
     }
 
     buildInfo->trianglesDesc = {
@@ -446,7 +457,7 @@ void makeBlases(ID3D12GraphicsCommandList4* cmdList,
     {
         if (inputs.hasQuadIdxs)
         {
-            maxNumQuads = std::max(maxNumQuads, static_cast<uint32_t>(inputs.host_verts->size() / 4));
+            maxNumQuads = std::max(maxNumQuads, static_cast<uint32_t>(inputs.host_verts->size() / vertsPerQuad));
         }
     }
     ensureQuadIdxsCapacity(cmdList, toFreeList, maxNumQuads);

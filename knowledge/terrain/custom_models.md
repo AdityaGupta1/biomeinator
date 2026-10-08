@@ -1,22 +1,25 @@
-_Last edited: 2026-10-06_
+_Last edited: 2026-10-07_
 
 # Custom decorator models
 
 `block_model.h/cpp` loads geometry once and caches four floor rotations for ordinary
 custom decorators, or six attachment directions with four quarter-turn vertex arrays
 each for `surface_mount` blocks. `Chunk::createInstances` chooses a variant, translates
-its vertices, and appends face metadata to the ordinary terrain instance. Chunk BLAS/upload ownership remains unchanged. The immutable CPU
-cache can be read concurrently without locks and survives chunk unload/reimport.
-Only block-system initialization resets it, before workers start.
+its vertices, and appends face metadata to the ordinary terrain instance. Chunk
+BLAS/upload ownership remains unchanged. The immutable CPU cache can be read
+concurrently without locks and survives chunk unload/reimport. Only block-system
+initialization resets it, before workers start.
 
 Terrain faces have implicit quad indices ([greedy_meshing.md](greedy_meshing.md)), so
 loading regroups the model's triangles into quads (`triangle_quads.h`): two triangles
 sharing an edge with opposite winding become one face, and each leftover triangle becomes
-a face whose second triangle is degenerate. Paired faces come first, so `numPairedFaces`
+a face whose second triangle is degenerate. Paired quads come first, so `numPairedQuads`
 alone tells meshing which faces have an emissive second triangle; the degenerate one is
 never hit and never listed as a light. Pairing prefers the lowest-index partner because
-exporters emit a split quad's halves consecutively. The load log reports both counts per
-model; genuinely triangular geometry, as in the glowshroom, is expected to stay lone.
+exporters emit a split quad's halves consecutively. It matches shared vertex indices, so
+vertices with bit-identical attributes are merged first: non-indexed primitives would
+otherwise never pair. The load log reports both counts per model; genuinely triangular
+geometry, as in the glowshroom, is expected to stay lone.
 
 GLB is the authoring interchange format, not a new scene-loading path. The importer
 flattens hierarchy transforms, inverse-transforms normals, reverses winding under

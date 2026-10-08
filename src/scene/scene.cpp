@@ -67,6 +67,7 @@ void Instance::reset(bool alsoFreeFromScene)
     this->geoWrapper.vertsBufferSection.free();
     this->geoWrapper.idxsBufferSection.free();
     this->geoWrapper.ommIdxsBufferSection.free();
+    this->geoWrapper.hasQuadIdxs = false;
     this->perFaceDatasBufferSection.free();
     this->tangentsBufferSection.free();
     this->areaLightsBufferSection.free();
@@ -148,10 +149,9 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
         }
         else if (this->hasQuadFaces())
         {
-            // Mirrors getTriangleVertexIndices() in path_tracing_common.hlsli
-            i0 = (triangleIdx >> 1) * 4;
-            i1 = i0 + 1 + (triangleIdx & 1);
-            i2 = i1 + 1;
+            i0 = getQuadFaceVertIdx(triangleIdx, 0);
+            i1 = getQuadFaceVertIdx(triangleIdx, 1);
+            i2 = getQuadFaceVertIdx(triangleIdx, 2);
         }
 
         const uint32_t localAreaLightIdx = static_cast<uint32_t>(this->hostGeometry.areaLights.size());

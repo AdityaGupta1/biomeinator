@@ -85,8 +85,7 @@ private:
     // See HostGeometry::perFaceDatas
     uint32_t trisPerFaceLog2{ 0 };
 
-    // Quad faces are four consecutive verts split into (0, 1, 2) and (0, 2, 3), so their indices
-    // are implicit rather than stored
+    // Faces are quads whose indices are implicit (see getQuadFaceVertIdx()) rather than stored
     bool hasQuadFaces() const;
 
     Instance(::Scene* scene, uint32_t id);
