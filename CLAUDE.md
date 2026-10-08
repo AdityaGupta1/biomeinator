@@ -40,6 +40,17 @@ the user cannot disturb the run by clicking or typing into it. Its defaults
 rendering tests, it must run outside the agent sandbox (see
 [tests → rendering_tests.md](knowledge/tests/rendering_tests.md)).
 
+## Exclusive runs
+
+Every `Biomeinator.exe` takes a machine-wide instance lock at startup. Pass
+`--exclusiveMode` when the run needs the machine to itself: perf runs (which
+default to it) and interactive sessions you launch for the user. An exclusive
+instance waits until every other instance has exited and keeps new ones waiting
+until it exits. Leave it off for render-to-file runs and rendering tests, which
+may overlap each other but still wait for an exclusive instance. A launch that
+seems to hang may just be waiting its turn; it logs when it is. Details are in
+[settings → settings_manager.md](knowledge/settings/settings_manager.md).
+
 ## Copyright headers
 
 New source files get `Copyright (c) <current year>`, and editing a file whose

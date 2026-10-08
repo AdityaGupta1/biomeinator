@@ -134,6 +134,13 @@ TEST_CASE("SettingsManager applies and permits overriding automated-run defaults
         CHECK_FALSE(SettingsManager::getAsBool("showGui"));
         CHECK(SettingsManager::getAsBool("animTimePaused"));
         CHECK_FALSE(SettingsManager::getAsBool("useVsync"));
+        CHECK_FALSE(SettingsManager::getAsBool("exclusiveMode"));
+    }
+
+    SECTION("perf runs default to exclusive mode")
+    {
+        requireSuccess({ "Biomeinator", "--perfOutput=result.json" });
+        CHECK(SettingsManager::getAsBool("exclusiveMode"));
     }
 
     SECTION("explicit values win over automated-run defaults")
@@ -144,7 +151,8 @@ TEST_CASE("SettingsManager applies and permits overriding automated-run defaults
                          "--lockCamera=false",
                          "--showGui=true",
                          "--animTimePaused=false",
-                         "--useVsync=true" });
+                         "--useVsync=true",
+                         "--exclusiveMode=false" });
         CHECK_FALSE(SettingsManager::isRenderToFileMode());
         CHECK(SettingsManager::isPerfMode());
         CHECK(SettingsManager::isAutomatedRun());
@@ -153,6 +161,7 @@ TEST_CASE("SettingsManager applies and permits overriding automated-run defaults
         CHECK(SettingsManager::getAsBool("showGui"));
         CHECK_FALSE(SettingsManager::getAsBool("animTimePaused"));
         CHECK(SettingsManager::getAsBool("useVsync"));
+        CHECK_FALSE(SettingsManager::getAsBool("exclusiveMode"));
     }
 }
 
