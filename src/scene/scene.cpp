@@ -67,6 +67,7 @@ void Instance::reset(bool alsoFreeFromScene)
     this->geoWrapper.vertsBufferSection.free();
     this->geoWrapper.idxsBufferSection.free();
     this->geoWrapper.ommIdxsBufferSection.free();
+    this->geoWrapper.hasQuadIdxs = false;
     this->perFaceDatasBufferSection.free();
     this->tangentsBufferSection.free();
     this->areaLightsBufferSection.free();
@@ -108,6 +109,8 @@ void Instance::finalizeGeometry()
 
     ASSERT(this->hostGeometry.packedTerrainVerts.empty() || this->hostGeometry.packedTerrainVerts.size() == this->hostGeometry.verts.size());
 
+    ASSERT(!this->hasQuadFaces() || this->hostGeometry.verts.size() % 4 == 0);
+
     const uint32_t triCount = this->getTriCount();
     const uint32_t trisPerFace = 1u << this->trisPerFaceLog2;
     ASSERT(triCount % trisPerFace == 0);
@@ -144,6 +147,12 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
             i1 = this->hostGeometry.idxs[i1];
             i2 = this->hostGeometry.idxs[i2];
         }
+        else if (this->hasQuadFaces())
+        {
+            i0 = getQuadFaceVertIdx(triangleIdx, 0);
+            i1 = getQuadFaceVertIdx(triangleIdx, 1);
+            i2 = getQuadFaceVertIdx(triangleIdx, 2);
+        }
 
         const uint32_t localAreaLightIdx = static_cast<uint32_t>(this->hostGeometry.areaLights.size());
         this->hostGeometry.areaLights.emplace_back();
@@ -169,7 +178,7 @@ void Instance::addAreaLights(const std::vector<uint32_t>& triangleIdxs)
         // Every triangle of an emissive face is an area light and the face's lights are
         // consecutive, so the face stores its first triangle's light index. The face's first
         // triangle must therefore come first; the one exception is the non-emissive degenerate
-        // padding triangle of an odd custom model, which is never listed at all
+        // second triangle of a custom model's lone triangle face, which is never listed at all
         const uint32_t triIdxInFace = triangleIdx & ((1u << this->trisPerFaceLog2) - 1u);
         const uint32_t faceLightIdx = localAreaLightIdx - triIdxInFace;
         PerFaceData& faceData = this->hostGeometry.perFaceDatas[triangleIdx >> this->trisPerFaceLog2];
@@ -192,7 +201,16 @@ uint32_t Instance::getId() const
 
 uint32_t Instance::getTriCount() const
 {
-    return this->hostGeometry.idxs.empty() ? (this->hostGeometry.verts.size() / 3) : (this->hostGeometry.idxs.size() / 3);
+    if (!this->hostGeometry.idxs.empty())
+    {
+        return this->hostGeometry.idxs.size() / 3;
+    }
+    return this->hasQuadFaces() ? (this->hostGeometry.verts.size() / 2) : (this->hostGeometry.verts.size() / 3);
+}
+
+bool Instance::hasQuadFaces() const
+{
+    return this->trisPerFaceLog2 == 1 && this->hostGeometry.idxs.empty();
 }
 
 bool Instance::getIsGeometryFinalized() const
@@ -798,6 +816,7 @@ void Scene::makeQueuedBlases(ID3D12GraphicsCommandList4* cmdList, ToFreeList& to
         {
             blasInputs.host_idxs = &instance->hostGeometry.idxs;
         }
+        blasInputs.hasQuadIdxs = instance->hasQuadFaces();
 
         if (instance->hostGeometry.ommIdxs.size() > 0)
         {

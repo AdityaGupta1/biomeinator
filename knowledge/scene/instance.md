@@ -1,4 +1,4 @@
-_Last edited: 2026-10-02_
+_Last edited: 2026-10-07_
 
 # Instance
 
@@ -7,8 +7,9 @@ _Last edited: 2026-10-02_
 ## Lifecycle
 
 1. `Scene::requestNewInstance()` allocates on main thread, taking pooled CPU geometry vectors if any.
-2. Worker thread fills `hostGeometry.verts`, `.idxs`, `.perFaceDatas` directly (public vectors),
-   and sets `trisPerFaceLog2` if a `PerFaceData` entry covers more than one triangle. Terrain
+2. Worker thread fills `hostGeometry.verts` and `.perFaceDatas` directly (public vectors), plus
+   `.idxs` for indexed glTF meshes, and sets `trisPerFaceLog2` if a `PerFaceData` entry covers
+   more than one triangle. Terrain
    also fills `hostGeometry.packedTerrainVerts` and decodes `.verts` back from it, so the BLAS
    build (from the staging upload) and the area lights use the same rounded geometry the shaders
    read; only the packed form goes resident. See
@@ -53,8 +54,11 @@ holds a raw pointer, `pendingTlasEntryAdds` included, before erasing it.
 `PerFaceData` is stored per mesh face, not per triangle: glTF instances have one entry per
 triangle (`trisPerFaceLog2 == 0`), terrain and water one per quad (`== 1`), which halves the
 buffer for terrain since both triangles of a quad always carried identical data. The shader
-maps `PrimitiveIndex() >> trisPerFaceLog2` to the entry. Custom decorator models with an odd
-triangle count get a degenerate padding triangle so every quad's first triangle stays even.
+maps `PrimitiveIndex() >> trisPerFaceLog2` to the entry. A quad's first triangle is always
+even; a custom model's lone triangle fills a whole face with a degenerate second triangle.
+Two-triangle faces with no stored indices have implicit ones (`Instance::hasQuadFaces`), so
+`hostGeometry.idxs` stays empty for terrain and water. LOD tiles are two-triangle faces that keep
+their indices: heightfield cells share one vertex per sample, which implicit quads can't express.
 
 ## Area Lights
 

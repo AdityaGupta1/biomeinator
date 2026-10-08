@@ -110,7 +110,20 @@ struct InstanceData
     uint tangentsBufferOffset; // separate VertexTangent array, or TANGENT_BUFFER_OFFSET_INVALID
     uint trisPerFaceLog2; // triangle index >> this = PerFaceData index; 0 for glTF, 1 for terrain quads
     uint vertexFormat; // VERTEX_FORMAT_*, selects which typed view of the verts buffer to read
+
+    // Quad faces store no indices, see getQuadFaceVertIdx()
+    bool hasQuadFaces()
+    {
+        return trisPerFaceLog2 == 1 && !bool(hasIdxs);
+    }
 };
+
+// Quad faces are four consecutive verts split into triangles (0, 1, 2) and (0, 2, 3), so a
+// triangle's vertex indices follow from its index alone
+inline uint getQuadFaceVertIdx(uint triIdx, uint corner)
+{
+    return (triIdx >> 1) * 4 + (corner == 0 ? 0 : corner + (triIdx & 1));
+}
 
 #define MATERIAL_IDX_INVALID ~0u
 #define TEXTURE_ID_INVALID ~0u

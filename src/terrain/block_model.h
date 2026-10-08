@@ -17,11 +17,14 @@ inline constexpr uint32_t INVALID = ~0u;
 struct Model
 {
     // Surface-mount models use all 24 slots; floor-only models populate only slots 0-3.
+    // Four vertices per quad, in the implicit quad topology of terrain faces (see TriangleQuads).
     std::array<std::vector<Vertex>, 24> orientations;
-    std::vector<uint32_t> indices;
+    // Quads from here on are lone triangles, whose second triangle is degenerate
+    uint32_t numPairedQuads{ 0 };
     bool hasAllFaceOrientations{ false };
 
     const std::vector<Vertex>& getOrientation(uint8_t face, uint8_t turn) const;
+    uint32_t getNumQuads() const;
 };
 
 // Static, uncompressed GLB geometry only. Materials/textures belong to the block.

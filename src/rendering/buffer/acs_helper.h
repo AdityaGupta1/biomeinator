@@ -21,6 +21,8 @@ struct GeometryWrapper
 
     ManagedBufferSection vertsBufferSection{};
     ManagedBufferSection idxsBufferSection{};
+    // See BlasBuildInputs::hasQuadIdxs
+    bool hasQuadIdxs{ false };
     // R16 per-triangle OMM index buffer; a valid section makes the geometry OMM_TRIANGLES
     ManagedBufferSection ommIdxsBufferSection{};
 
@@ -54,6 +56,8 @@ struct BlasBuildInputs
     // host_verts staging upload, which the build does not need afterwards
     const std::vector<PackedTerrainVertex>* host_packedTerrainVerts{ nullptr };
     const std::vector<uint32_t>* host_idxs{ nullptr };
+    // Indexes the verts as quads (see getQuadFaceVertIdx()) from one shared buffer instead of host_idxs
+    bool hasQuadIdxs{ false };
     // Per-triangle OMM Array indices (or special indices); requires a built OMM Array
     const std::vector<uint16_t>* host_ommIdxs{ nullptr };
 

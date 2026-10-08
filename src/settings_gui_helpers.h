@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2025 Aditya Gupta
+// Copyright (c) 2025-2026 Aditya Gupta
 
 #pragma once
 
@@ -29,6 +29,19 @@ struct ScopedItemWidth
     ~ScopedItemWidth()
     {
         ImGui::PopItemWidth();
+    }
+};
+
+struct ScopedId
+{
+    ScopedId(const char* id)
+    {
+        ImGui::PushID(id);
+    }
+
+    ~ScopedId()
+    {
+        ImGui::PopID();
     }
 };
 
@@ -150,10 +163,9 @@ inline bool ComboString(const char* label, const char* settingName, const std::v
     return didChange;
 }
 
-inline void SectionTitle(const char* settingName)
+inline void SectionTitle(const char* title)
 {
-    ImGui::Text(settingName);
-    ImGui::Separator();
+    ImGui::SeparatorText(title);
 }
 
 inline void VerticalSpacing()

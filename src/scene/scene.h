@@ -39,7 +39,7 @@ struct HostGeometry
     // verts then only feeds the BLAS build and area lights, see knowledge/scene/instance.md
     std::vector<PackedTerrainVertex> packedTerrainVerts;
     std::vector<VertexTangent> tangents; // optional, indexed like verts
-    std::vector<uint32_t> idxs;
+    std::vector<uint32_t> idxs; // empty for quad faces, see Instance::hasQuadFaces()
     // One entry per 1 << Instance::trisPerFaceLog2 triangles
     std::vector<PerFaceData> perFaceDatas;
     // Per-triangle OMM Array indices (or special indices); empty for non-OMM geometry
@@ -86,6 +86,10 @@ private:
     uint32_t trisPerFaceLog2{ 0 };
     // VERTEX_FORMAT_* of HostGeometry::packedTerrainVerts, when there are any
     uint32_t packedVertexFormat{ VERTEX_FORMAT_PACKED_TERRAIN };
+
+    // Faces are quads whose indices are implicit (see getQuadFaceVertIdx()) rather than stored. Two-triangle
+    // faces with stored indices (LOD heightfields, which share verts between faces) are not.
+    bool hasQuadFaces() const;
 
     Instance(::Scene* scene, uint32_t id);
 
