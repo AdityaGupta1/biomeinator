@@ -1,4 +1,4 @@
-_Last edited: 2026-10-03_
+_Last edited: 2026-10-07_
 
 # Rendering Tests
 
@@ -30,6 +30,12 @@ All rendering test entries share the `biomeinator_gpu` CTest resource lock. This
 processes from competing for the GPU under parallel CTest runs without preventing CPU-only tests from being
 scheduled concurrently. Each invocation removes only its own generated, copied-golden, and diff
 images, so diagnostics from other entries survive individual or `--rerun-failed` runs.
+
+The resource lock only serializes tests within one CTest invocation. Across invocations (e.g. agents in
+different worktrees) renderers run non-exclusive, so they overlap each other but wait for any exclusive
+instance such as a perf run; see `exclusiveMode` in
+[settings → settings_manager.md](../settings/settings_manager.md). That wait counts toward CTest's default
+1500-second per-test timeout.
 
 `BiomeinatorRenderingTests` is an executable build target: building it also builds `Biomeinator`,
 but does not execute the rendering tests. Launching `BiomeinatorRenderingTests.exe` without

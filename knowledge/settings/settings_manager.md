@@ -1,4 +1,4 @@
-_Last edited: 2026-10-06_
+_Last edited: 2026-10-07_
 
 # Settings Manager
 
@@ -53,6 +53,19 @@ All settings and their defaults are defined in `parseArgs()` and are self-descri
   world's saved camera still takes precedence, and glTF cameras are unaffected.
 - **`perfOutput`**: If set to a `.json` path, the engine warms up, measures `perfFrames` frames, writes GPU timing statistics, and exits. Mutually exclusive with `renderToFile`. See [tests → perf_runs.md](../tests/perf_runs.md).
 - **`isAutomatedRun()`** is true for either of the above and is what code should test for "automated run" behaviour (await voxel import); `isRenderToFileMode()` and `isPerfMode()` are for the behaviour specific to each, such as the render-to-file window staying hidden while a perf run's comes to the foreground. An automated run also defaults `lockCamera`, `showGui`, `animTimePaused` and `useVsync` to a fixed, unanimated, unthrottled viewpoint, and `sharc` off (see [rendering → sharc.md](../rendering/sharc.md)), but only when they were not passed explicitly. This is the single place those defaults live; the rendering test runner and `run_perf.py` pass only their output path.
+- **`exclusiveMode`**: Every instance takes a per-user instance lock before any window or GPU work. Without
+  the flag the lock is shared, so render-to-file runs and rendering tests from several agents overlap freely;
+  with it, the instance waits for every other instance to exit and keeps new ones waiting until it exits, so
+  perf numbers are not skewed by a neighbour. The lock is `LockFileEx` under `%LOCALAPPDATA%\biomeinator`
+  because the OS releases it when the process dies, even on a crash or kill; a named semaphore counting
+  instances would leak a slot on every crash and block exclusive runs forever. `LockFileEx` does not favour a
+  waiting exclusive lock over new shared ones, so every instance first passes a named turnstile mutex that a
+  waiting exclusive instance keeps holding; without it, a steady stream of rendering tests could starve a perf
+  run. Names are fixed rather than derived from the exe path so instances from different worktrees see each
+  other. Only instances of the same user in the same login session take part: the lock file is per user and
+  the turnstile lives in the session's `Local\` namespace, which a sandboxed token may not share. Builds from
+  before the lock existed do not take part either. If the lock cannot be taken, a shared instance warns and
+  runs anyway, while an exclusive one exits rather than measure unprotected.
 - **`forEachSetting`** exists so a perf report can embed every setting it ran with; there is no other reason to enumerate the map.
 - **`lockCamera`**: Disables player input; useful for test screenshots to get a reproducible viewpoint.
 - **`animTimePaused`** (default `false`): Freezes only the animation time driving world animation

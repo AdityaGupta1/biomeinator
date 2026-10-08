@@ -47,6 +47,11 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
     ADD_OPTION("scene", "Scene file (*.gltf; *.glb)", std::string, "");
     ADD_OPTION("renderToFile", "Render one image to this path (*.png) in a hidden window, then exit", std::string, "");
     ADD_OPTION("perfOutput", "Performance measurement output path (*.json)", std::string, "");
+    ADD_OPTION("exclusiveMode",
+               "Wait until no other instance is running and keep others from starting until this one exits "
+               "(defaults to true for perf runs)",
+               bool,
+               "false");
     ADD_OPTION("perfWarmupFrames", "Perf run: minimum frames before measuring starts", uint32_t, "100");
     ADD_OPTION("perfWarmupSeconds", "Perf run: minimum seconds before measuring starts", float, "2");
     ADD_OPTION("perfFrames", "Perf run: number of frames to measure", uint32_t, "300");
@@ -202,6 +207,7 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         COPY_SETTING("scene", std::string);
         COPY_SETTING("renderToFile", std::string);
         COPY_SETTING("perfOutput", std::string);
+        COPY_SETTING("exclusiveMode", bool);
         COPY_SETTING("perfWarmupFrames", uint32_t);
         COPY_SETTING("perfWarmupSeconds", float);
         COPY_SETTING("perfFrames", uint32_t);
@@ -333,24 +339,31 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         parsedSettings["antialiasingMode"] = static_cast<uint32_t>(AntialiasingMode::DLSS);
     }
 
+    const auto defaultTo = [&parseResult, &parsedSettings](const char* name, const bool value)
+    {
+        if (parseResult.count(name) == 0)
+        {
+            parsedSettings[name] = value;
+        }
+    };
+
     // An automated run renders a fixed, unanimated viewpoint with no frame-rate cap, so render-to-file
     // screenshots are reproducible and perf measurements are not throttled; each of these can
     // still be overridden explicitly
     const bool isParsedAutomatedRun = !getString("renderToFile").empty() || !getString("perfOutput").empty();
     if (isParsedAutomatedRun)
     {
-        const auto defaultTo = [&parseResult, &parsedSettings](const char* name, const bool value)
-        {
-            if (parseResult.count(name) == 0)
-            {
-                parsedSettings[name] = value;
-            }
-        };
         defaultTo("sharc", false); // Unbiased reference output; goldens and perf baselines are uncached.
         defaultTo("lockCamera", true);
         defaultTo("showGui", false);
         defaultTo("animTimePaused", true);
         defaultTo("useVsync", false);
+    }
+
+    // Perf measurements are only meaningful without other instances competing for the GPU and CPU
+    if (!getString("perfOutput").empty())
+    {
+        defaultTo("exclusiveMode", true);
     }
 
     worldSeed = getUint("worldSeed");
