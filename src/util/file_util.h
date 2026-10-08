@@ -15,6 +15,7 @@ namespace FileUtil
 {
 
 std::filesystem::path getDocumentsDir(const std::string& category);
+std::filesystem::path getLocalAppDataDir(const std::string& category);
 std::string getTimestampString();
 
 // Coordinates this process's reads and replacements of the same normalized path.

@@ -143,6 +143,12 @@ TEST_CASE("SettingsManager applies and permits overriding automated-run defaults
         CHECK(SettingsManager::getAsBool("exclusiveMode"));
     }
 
+    SECTION("render-to-file runs can opt into exclusive mode")
+    {
+        requireSuccess({ "Biomeinator", "--renderToFile=result.png", "--exclusiveMode=true" });
+        CHECK(SettingsManager::getAsBool("exclusiveMode"));
+    }
+
     SECTION("explicit values win over automated-run defaults")
     {
         requireSuccess({ "Biomeinator",

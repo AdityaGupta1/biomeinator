@@ -28,7 +28,9 @@ Anything after `run`'s own options is passed through to every launch, e.g. `--pe
 Perf runs default to `--exclusiveMode`, so each launch waits for other instances (e.g. another agent's
 rendering tests) to exit and keeps new ones out while it measures; see
 [settings → settings_manager.md](../settings/settings_manager.md). The lock is per launch, so another
-instance can still slip in between two scenes of one `run`, but never during a measurement.
+instance can still slip in between two scenes of one `run`, but never during a measurement. Like
+rendering tests, run perf launches outside the agent sandbox: an exclusive instance that cannot open its
+lock file exits instead of measuring.
 
 ## Defaults, and which one actually binds
 

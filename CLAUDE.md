@@ -42,7 +42,7 @@ rendering tests, it must run outside the agent sandbox (see
 
 ## Exclusive runs
 
-Every `Biomeinator.exe` takes a machine-wide instance lock at startup. Pass
+Every `Biomeinator.exe` takes a per-user instance lock at startup. Pass
 `--exclusiveMode` when the run needs the machine to itself: perf runs (which
 default to it) and interactive sessions you launch for the user. An exclusive
 instance waits until every other instance has exited and keeps new ones waiting

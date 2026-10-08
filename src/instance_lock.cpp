@@ -4,12 +4,14 @@
 #include "instance_lock.h"
 #include "logger.h"
 
+#include "util/file_util.h"
+
 #include <Windows.h>
-#include <shlobj.h>
 
 #include <cstdlib>
 #include <filesystem>
-#include <system_error>
+#include <format>
+#include <string>
 
 namespace InstanceLock
 {
@@ -17,38 +19,39 @@ namespace InstanceLock
 namespace
 {
 
-std::filesystem::path getLockFilePath()
-{
-    wchar_t localAppDataPath[MAX_PATH];
-    if (!SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, localAppDataPath)))
-    {
-        return {};
-    }
-
-    const std::filesystem::path dir = std::filesystem::path(localAppDataPath) / "biomeinator";
-    std::error_code error;
-    std::filesystem::create_directories(dir, error);
-
-    return dir / "instance.lock";
-}
-
 // A shared instance may run unprotected, but an exclusive one must not
-void handleFailure(const bool exclusive, const char* what, const DWORD error)
+void handleFailure(const bool exclusive, const std::string& what)
 {
     if (exclusive)
     {
-        Logger::logError("Exclusive mode: %s (error %lu)", what, error);
+        Logger::logError("Exclusive mode: %s", what.c_str());
         std::exit(EXIT_FAILURE);
     }
 
-    Logger::logWarning("Instance lock: %s (error %lu); running without it", what, error);
+    Logger::logWarning("Instance lock: %s", what.c_str());
 }
 
 } // namespace
 
 void acquire(const bool exclusive)
 {
-    const std::filesystem::path lockFilePath = getLockFilePath();
+    std::filesystem::path lockDir;
+    try
+    {
+        lockDir = FileUtil::getLocalAppDataDir("locks");
+    }
+    catch (const std::filesystem::filesystem_error& error)
+    {
+        handleFailure(exclusive, std::format("failed to create the lock directory: {}", error.what()));
+        return;
+    }
+    if (lockDir.empty())
+    {
+        handleFailure(exclusive, "failed to locate %LOCALAPPDATA%");
+        return;
+    }
+
+    const std::filesystem::path lockFilePath = lockDir / "instance.lock";
     const HANDLE lockFile = CreateFileW(lockFilePath.c_str(),
                                         GENERIC_READ | GENERIC_WRITE,
                                         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
@@ -58,7 +61,7 @@ void acquire(const bool exclusive)
                                         nullptr);
     if (lockFile == INVALID_HANDLE_VALUE)
     {
-        handleFailure(exclusive, "failed to open the lock file", GetLastError());
+        handleFailure(exclusive, std::format("failed to open {} (error {})", lockFilePath.string(), GetLastError()));
         return;
     }
 
@@ -78,23 +81,22 @@ void acquire(const bool exclusive)
     // Every instance passes through the turnstile before locking, and a waiting exclusive instance keeps
     // holding it, so a steady stream of shared instances cannot starve the exclusive one
     const HANDLE turnstile = CreateMutexW(nullptr, FALSE, L"Local\\BiomeinatorInstanceTurnstile");
-    if (!turnstile)
+    bool ownsTurnstile = false;
+    if (turnstile)
     {
-        handleFailure(exclusive, "failed to create the turnstile", GetLastError());
-        return;
+        // WAIT_ABANDONED means the previous holder died while holding the turnstile, which still grants ownership
+        DWORD waitResult = WaitForSingleObject(turnstile, 0);
+        if (waitResult == WAIT_TIMEOUT)
+        {
+            logWaiting();
+            waitResult = WaitForSingleObject(turnstile, INFINITE);
+        }
+        ownsTurnstile = waitResult != WAIT_FAILED;
     }
-
-    // WAIT_ABANDONED means a previous holder exited while queued, which still grants ownership
-    DWORD waitResult = WaitForSingleObject(turnstile, 0);
-    if (waitResult == WAIT_TIMEOUT)
+    // Without the turnstile a shared instance only loses starvation protection, so it still takes the file lock
+    if (!ownsTurnstile)
     {
-        logWaiting();
-        waitResult = WaitForSingleObject(turnstile, INFINITE);
-    }
-    if (waitResult == WAIT_FAILED)
-    {
-        handleFailure(exclusive, "failed to wait for the turnstile", GetLastError());
-        return;
+        handleFailure(exclusive, std::format("failed to take the turnstile (error {})", GetLastError()));
     }
 
     const DWORD lockFlags = exclusive ? LOCKFILE_EXCLUSIVE_LOCK : 0;
@@ -108,11 +110,18 @@ void acquire(const bool exclusive)
     }
     const DWORD lockError = GetLastError();
 
-    ReleaseMutex(turnstile);
+    if (ownsTurnstile)
+    {
+        ReleaseMutex(turnstile);
+    }
+    if (turnstile)
+    {
+        CloseHandle(turnstile);
+    }
 
     if (!locked)
     {
-        handleFailure(exclusive, "failed to lock the lock file", lockError);
+        handleFailure(exclusive, std::format("failed to lock {} (error {})", lockFilePath.string(), lockError));
     }
 }
 

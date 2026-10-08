@@ -36,6 +36,20 @@ std::shared_ptr<std::mutex> getPathMutex(const std::filesystem::path& path)
     }
     return mutex;
 }
+
+std::filesystem::path getKnownFolderDir(const int csidl, const std::string& category)
+{
+    wchar_t folderPath[MAX_PATH];
+    if (!SUCCEEDED(SHGetFolderPathW(nullptr, csidl, nullptr, SHGFP_TYPE_CURRENT, folderPath)))
+    {
+        return {};
+    }
+
+    const std::filesystem::path dir = std::filesystem::path(folderPath) / "biomeinator" / category;
+    std::filesystem::create_directories(dir);
+
+    return dir;
+}
 } // namespace
 
 PathLock::PathLock(const std::filesystem::path& path) : mutex(getPathMutex(path)), lock(*mutex)
@@ -93,17 +107,12 @@ bool writeAtomically(const std::filesystem::path& path, std::span<const char> by
 
 std::filesystem::path getDocumentsDir(const std::string& category)
 {
-    wchar_t documentsPath[MAX_PATH];
-    if (!SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, documentsPath)))
-    {
-        return {};
-    }
+    return getKnownFolderDir(CSIDL_PERSONAL, category);
+}
 
-    const std::filesystem::path dir =
-        std::filesystem::path(documentsPath) / "biomeinator" / category;
-    std::filesystem::create_directories(dir);
-
-    return dir;
+std::filesystem::path getLocalAppDataDir(const std::string& category)
+{
+    return getKnownFolderDir(CSIDL_LOCAL_APPDATA, category);
 }
 
 std::string getTimestampString()
