@@ -36,6 +36,7 @@ void ToFreeList::freeAll()
     {
         Renderer::sharedDescHeapAlloc.free(descriptorIdx);
     }
+    descriptorIdxs.clear();
 
     for (auto& resource : this->resources)
     {

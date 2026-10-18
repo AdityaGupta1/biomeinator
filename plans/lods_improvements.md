@@ -31,16 +31,16 @@ Done in this round, all committed and pushed: seam cracks at the voxel ring, con
 coarse tiles popping in near the player (lingering chunks), snow layers and block shapes in voxel tiles,
 ring generation speed, the voxel distance scaling with render distance, the sea ice outline and grass sides
 on LOD tiles, water shading fade distances, Tianzi spikes, the heightfield/voxel resolution mismatch,
-decorators on voxel tiles, cell footprints, redwood trunk tops and widths, region readiness caching, and
-the compacted terrain cache.
+decorators on voxel tiles, cell footprints, redwood trunk tops and widths, region readiness caching, the
+compacted terrain cache, dropping all LOD index buffers, and import/export with LODs (checked: reimport
+leaves nothing from the old world, export round-trips, automated runs wait for LODs on imported worlds).
 
 ## Remaining work
 
-1. Structure stand-ins and plant darkening on heightfield tiles (deferred by the user)
-2. Voxel mode regolding
-3. World import/export with LODs
-4. Possible further speedups
-5. Revisit the fog look
+1. Structure stand-ins and plant darkening on heightfield tiles (deferred by the user, after merge)
+2. Goldens: add an LOD test
+3. Possible further speedups
+4. Revisit the fog look (separate branch)
 
 Known and accepted (the user decided not to fix these):
 - The water seam seen only while the world loads (`knowledge/terrain/terrain_lod.md`, Gotchas).
@@ -89,31 +89,19 @@ Tried or rejected for decorators:
 - Procedural intersection shader over a thin layer above tiles: slowest RT path, grazing rays march many
   cells, can't match the chunks' sequential decorator RNG, still aliases.
 
-### 2. Voxel mode regolding
+### 2. Goldens
 
-The voxel goldens need regolding as a whole:
-- Fog is on all day and goldens include fog (e.g. `grass_biome_blend` fails at 0.0145 against 0.01 from
-  fog alone).
-- Automated runs default `--lodDistance` to 0, so goldens don't see LODs. Decide whether goldens pass
-  `--lodDistance` (likely, so they cover LODs); then nearly every voxel scene changes (distant terrain, the
-  ring, fog and shadows past the chunk distance). Regold all voxel tests in one pass once the LOD look
-  settles, rather than per change. Automated runs already wait for `TerrainLod::isSettled` when LODs are on.
+Existing goldens keep LODs off (automated runs default `--lodDistance` to 0). Fog on all day with new
+defaults failed 7 sunlit voxel scenes; all are regolded, and `fog_haze` was dropped. `fog_god_rays` has a
+new world at a sunrise view where the rays show, and its old world moved to `voxel/overcast` for the
+`overcast` test and the `fog_god_rays` perf scene, whose timings stay comparable that way.
 
-### 3. World import/export with LODs
+The user will capture a world for a new test with LODs on. Its `tests.json` entry should pin
+`--lodDistance`, `--renderDistance` and `--lodVoxelDistanceScale`. Everything past the chunk distance
+comes from the seed, not the world file, so that golden changes whenever terrain generation does
+(`knowledge/terrain/world_export_import.md`).
 
-Not yet checked with LODs on. Things to verify:
-- Imported regions are never evicted and may come from an older build that generates differently, while
-  LOD tiles (heightfield and surface-only) generate from the seed. Tiles beyond the imported area, and
-  surface-only chunks next to it, may not match the imported terrain at the seam.
-- Imported chunks get geometry through the normal pipeline; check that LOD tiles inside the imported area
-  hand over to them (atomic swaps, lingering chunks) and that nothing assumes generated chunks.
-- Reimport (`resetTerrainState`) resets `TerrainLod` and `SurfaceChunkCache`; check no task, pinned cells,
-  lingering chunk or compacted terrain survives it.
-- Export writes completed regions only; make sure lingering chunks and LOD state don't leak into it.
-- `pollAutomatedRunTerrain`'s imported-world path doesn't wait for LODs yet (only the procedural path calls
-  `TerrainLod::isSettled`).
-
-### 4. Possible further speedups
+### 3. Possible further speedups
 
 History: ring generation went from 15.4 s to about 6.5 s on a fresh load at render distance 30; the LOD
 update from 3.9 ms to about 1.3 ms per frame at 100 blocks/s (regions cache chunk readiness); terrain
@@ -139,7 +127,7 @@ Tried and dropped:
 - Raising count caps on uncompacted terrain: 1024 chunks holding blocks (256 MB) fixed fresh-load stalls
   (9.5 s to 7.0 s) but still regenerated 1.26 times per chunk; compaction reached 1.0 in the same memory.
 
-### 5. Revisit the fog look
+### 4. Revisit the fog look
 
 The user wants to revisit both the fog's god rays and the aerial haze: they look overly dark in some areas
 and overly bright in others. Not yet investigated; start from captures of the problem areas (reproduce them

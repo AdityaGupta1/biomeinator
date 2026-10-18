@@ -1,4 +1,4 @@
-_Last edited: 2026-10-03_
+_Last edited: 2026-10-17_
 
 # World Export / Import
 
@@ -108,7 +108,8 @@ The interactive import path does not need to know when import finishes — frame
 For fresh procedural worlds, the same gate waits until the entire geometry ring has reached
 `HAS_GEOMETRY`. This prevents fast empty frames from exhausting screenshot accumulation before
 chunk generation starts. Imported worlds retain the bounded counter below; waiting for a full
-procedural ring would change their existing test behavior.
+procedural ring would change their existing test behavior. With LODs on, either path then also
+waits for `TerrainLod::isSettled`.
 
 ### Counter mechanics
 
@@ -142,6 +143,16 @@ Counts are bounded before decompression and size arithmetic; release builds reje
 oversized payloads as well. These are defensive limits, not typical population sizes
 or proofs about placement density, since separate generators can share an anchor.
 
+## LOD tiles are not part of a world
+
+Only full-resolution chunks are saved. Heightfield tiles and the surface-only chunks behind voxel
+tiles are rebuilt from the seed by the current generator on every load, so with LODs on, everything
+past the chunk distance follows today's terrain generation rather than the build that exported the
+world. A golden with LODs on changes whenever generation does, and an import from an older build can
+show a seam where its chunks hand over to tiles. Saving LOD data would need its own region version
+for little gain, so this is accepted. Surface-only chunks belong to no region, so export never sees
+them; lingering chunks are ordinary finished chunks and export like any other.
+
 ## `reimportWorld` flushes everything
 
 `Ctrl+O` first decodes and allocates the replacement privately. Failed reads leave the
@@ -149,6 +160,8 @@ current terrain, camera, and seed intact. This temporarily requires memory for b
 worlds. Only after preparation succeeds does it stop workers, clear old terrain and
 queues, install the replacement and settings, and restart workers. Half-running tasks
 holding `Chunk*` pointers into a torn-down `regions` map would crash, hence the full flush.
+The flush includes `TerrainLod::reset`, which also clears `SurfaceChunkCache`, so no tile or cell
+from the old seed survives.
 
 ## Validation
 

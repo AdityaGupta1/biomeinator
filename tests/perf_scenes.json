@@ -33,7 +33,7 @@
         },
         {
             "name": "fog_god_rays",
-            "world": "voxel/fog_god_rays",
+            "world": "voxel/overcast",
             "args": [
                 "--width=2560",
                 "--height=1440",

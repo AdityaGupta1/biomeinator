@@ -732,21 +732,6 @@
             "threshold": 0.005
         },
         {
-            "name": "fog_haze",
-            "world": "voxel/fog_haze",
-            "args": [
-                "--width=480",
-                "--height=270",
-                "--antialiasingMode=1",
-                "--maxAccumulatedFrames=2048",
-                "--maxPathDepth=6",
-                "--animTime=585",
-                "--clouds=false"
-            ],
-            "golden": "voxel/fog_haze/golden.png",
-            "threshold": 0.01
-        },
-        {
             "name": "fog_god_rays",
             "world": "voxel/fog_god_rays",
             "args": [
@@ -755,7 +740,7 @@
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=6",
-                "--animTime=585",
+                "--animTime=20",
                 "--clouds=false"
             ],
             "golden": "voxel/fog_god_rays/golden.png",
@@ -763,7 +748,7 @@
         },
         {
             "name": "overcast",
-            "world": "voxel/fog_god_rays",
+            "world": "voxel/overcast",
             "args": [
                 "--width=480",
                 "--height=270",
@@ -773,7 +758,7 @@
                 "--animTime=585",
                 "--cloudCoverage=0.5"
             ],
-            "golden": "voxel/fog_god_rays/golden_overcast.png",
+            "golden": "voxel/overcast/golden.png",
             "threshold": 0.01
         },
         {

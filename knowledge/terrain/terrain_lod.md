@@ -1,4 +1,4 @@
-_Last edited: 2026-10-07_
+_Last edited: 2026-10-17_
 
 # Terrain LODs
 
@@ -232,8 +232,9 @@ geometry is freed, except within `keepGeometryMarginChunks` of the edge (see abo
   outlining lakes and ice.
 - Blocks with `lodSideShowsBottom` (grass and similar) show their bottom texture on LOD side faces: the
   side texture's strip of the top aliased into stripes on distant slopes.
-- Automated runs wait for `TerrainLod::isSettled` too, so `--renderToFile` with `--lodDistance` captures
-  the finished LODs. `--fovY` reproduces a capture taken with zoom held (0.3 times the default 35).
+- Automated runs wait for `TerrainLod::isSettled` too, imported worlds included, so `--renderToFile`
+  with `--lodDistance` captures the finished LODs. Tiles are never saved with a world (see
+  [world_export_import.md](world_export_import.md)). `--fovY` reproduces a capture taken with zoom held (0.3 times the default 35).
 - Known and deferred: while the world loads, with coarse tiles still standing in near the camera, a thin
   bright line can show across open water, likely where water surfaces of tiles at different levels meet.
   It is gone once the tiles settle and hasn't been reproduced in a steady state.

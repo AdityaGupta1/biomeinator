@@ -1391,42 +1391,41 @@ void reimportWorld(const std::filesystem::path& worldDir)
 
 bool pollAutomatedRunTerrain()
 {
-    if (!worldImportActive.load(std::memory_order_relaxed))
+    if (worldImportActive.load(std::memory_order_relaxed))
     {
-        // Imported worlds retain their bounded import gate. Fresh procedural worlds
-        // must finish the geometry ring before screenshot accumulation can start.
-        if (SettingsManager::getAsString("world").empty())
+        const uint32_t enqueued = importedChunksEnqueuedForBlas.load(std::memory_order_relaxed);
+        const uint32_t expected = expectedImportedChunks.load(std::memory_order_relaxed);
+        ASSERT(enqueued <= expected, "imported BLAS-enqueue counter exceeded expected total");
+        if (enqueued < expected)
         {
-            if (lastChunkPos == glm::ivec2(INT_MAX, INT_MAX))
-            {
-                return false;
-            }
-            const int createBlasDistance = getCreateBlasDistance();
-            for (int z = -createBlasDistance; z <= createBlasDistance; ++z)
-            {
-                for (int x = -createBlasDistance; x <= createBlasDistance; ++x)
-                {
-                    const Chunk* chunk = findChunk(lastChunkPos + glm::ivec2(x, z));
-                    if (chunk == nullptr || chunk->getState() < ChunkState::HAS_GEOMETRY)
-                    {
-                        return false;
-                    }
-                }
-            }
+            return false;
         }
-        return !lodsEnabled || TerrainLod::isSettled();
-    }
-    const uint32_t enqueued = importedChunksEnqueuedForBlas.load(std::memory_order_relaxed);
-    const uint32_t expected = expectedImportedChunks.load(std::memory_order_relaxed);
-    ASSERT(enqueued <= expected, "imported BLAS-enqueue counter exceeded expected total");
-    if (enqueued >= expected)
-    {
         Logger::log("world import: fully loaded, %u/%u imported chunks queued for BLAS",
                     enqueued, expected);
         worldImportActive.store(false, std::memory_order_relaxed);
-        return true;
     }
-    return false;
+    else if (SettingsManager::getAsString("world").empty())
+    {
+        // Imported worlds retain their bounded import gate. Fresh procedural worlds
+        // must finish the geometry ring before screenshot accumulation can start.
+        if (lastChunkPos == glm::ivec2(INT_MAX, INT_MAX))
+        {
+            return false;
+        }
+        const int createBlasDistance = getCreateBlasDistance();
+        for (int z = -createBlasDistance; z <= createBlasDistance; ++z)
+        {
+            for (int x = -createBlasDistance; x <= createBlasDistance; ++x)
+            {
+                const Chunk* chunk = findChunk(lastChunkPos + glm::ivec2(x, z));
+                if (chunk == nullptr || chunk->getState() < ChunkState::HAS_GEOMETRY)
+                {
+                    return false;
+                }
+            }
+        }
+    }
+    return !lodsEnabled || TerrainLod::isSettled();
 }
 
 void shutdown()
