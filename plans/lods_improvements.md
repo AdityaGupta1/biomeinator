@@ -33,14 +33,18 @@ ring generation speed, the voxel distance scaling with render distance, the sea 
 on LOD tiles, water shading fade distances, Tianzi spikes, the heightfield/voxel resolution mismatch,
 decorators on voxel tiles, cell footprints, redwood trunk tops and widths, region readiness caching, the
 compacted terrain cache, dropping all LOD index buffers, and import/export with LODs (checked: reimport
-leaves nothing from the old world, export round-trips, automated runs wait for LODs on imported worlds).
+leaves nothing from the old world, export round-trips, automated runs wait for LODs on imported worlds), and
+goldens. Automated runs keep LODs on and the older voxel tests pass `--lodDistance=0`; the all-day fog
+regolded the sunlit ones and `fog_haze` was dropped; `fog_god_rays` has a new sunrise world, its old one
+kept as `voxel/overcast` for `overcast` and the perf scene. The procedural `lods` test (seed 1738, render
+distance 30, no world file) covers LODs at a coastal view with Tianzi pillars and distant mesas, so it changes
+whenever terrain generation does.
 
 ## Remaining work
 
 1. Structure stand-ins and plant darkening on heightfield tiles (deferred by the user, after merge)
-2. Goldens: add an LOD test
-3. Possible further speedups
-4. Revisit the fog look (separate branch)
+2. Possible further speedups
+3. Revisit the fog look (separate branch)
 
 Known and accepted (the user decided not to fix these):
 - The water seam seen only while the world loads (`knowledge/terrain/terrain_lod.md`, Gotchas).
@@ -89,19 +93,7 @@ Tried or rejected for decorators:
 - Procedural intersection shader over a thin layer above tiles: slowest RT path, grazing rays march many
   cells, can't match the chunks' sequential decorator RNG, still aliases.
 
-### 2. Goldens
-
-Existing goldens keep LODs off (automated runs default `--lodDistance` to 0). Fog on all day with new
-defaults failed 7 sunlit voxel scenes; all are regolded, and `fog_haze` was dropped. `fog_god_rays` has a
-new world at a sunrise view where the rays show, and its old world moved to `voxel/overcast` for the
-`overcast` test and the `fog_god_rays` perf scene, whose timings stay comparable that way.
-
-The user will capture a world for a new test with LODs on. Its `tests.json` entry should pin
-`--lodDistance`, `--renderDistance` and `--lodVoxelDistanceScale`. Everything past the chunk distance
-comes from the seed, not the world file, so that golden changes whenever terrain generation does
-(`knowledge/terrain/world_export_import.md`).
-
-### 3. Possible further speedups
+### 2. Possible further speedups
 
 History: ring generation went from 15.4 s to about 6.5 s on a fresh load at render distance 30; the LOD
 update from 3.9 ms to about 1.3 ms per frame at 100 blocks/s (regions cache chunk readiness); terrain
@@ -127,7 +119,7 @@ Tried and dropped:
 - Raising count caps on uncompacted terrain: 1024 chunks holding blocks (256 MB) fixed fresh-load stalls
   (9.5 s to 7.0 s) but still regenerated 1.26 times per chunk; compaction reached 1.0 in the same memory.
 
-### 4. Revisit the fog look
+### 3. Revisit the fog look
 
 The user wants to revisit both the fog's god rays and the aerial haze: they look overly dark in some areas
 and overly bright in others. Not yet investigated; start from captures of the problem areas (reproduce them
