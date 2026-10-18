@@ -1,6 +1,7 @@
 ﻿// SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 Aditya Gupta
 
+#include "instance_lock.h"
 #include "settings_manager.h"
 
 #include "rendering/renderer.h"
@@ -16,6 +17,7 @@ extern "C"
 int main(int argc, char** argv)
 {
     SettingsManager::parseArgs(argc, argv);
+    InstanceLock::acquire(SettingsManager::getAsBool("exclusiveMode"));
 
     WindowManager::init();
     Renderer::init();
