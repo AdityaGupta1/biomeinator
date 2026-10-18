@@ -1,4 +1,4 @@
-_Last edited: 2026-10-07_
+_Last edited: 2026-10-17_
 
 # Rendering Tests
 
@@ -36,6 +36,11 @@ different worktrees) renderers run non-exclusive, so they overlap each other but
 instance such as a perf run; see `exclusiveMode` in
 [settings → settings_manager.md](../settings/settings_manager.md). That wait counts toward CTest's default
 1500-second per-test timeout.
+
+A script that launches many instances concurrently to check how they overlap must take each instance's end
+time from the process exit (`Popen.wait()`), not from its stdout reaching EOF. Children launched around the
+same time can hold each other's pipe handles, so EOF can arrive long after the process exited, which makes
+correctly serialized instances look like they overlapped.
 
 `BiomeinatorRenderingTests` is an executable build target: building it also builds `Biomeinator`,
 but does not execute the rendering tests. Launching `BiomeinatorRenderingTests.exe` without
