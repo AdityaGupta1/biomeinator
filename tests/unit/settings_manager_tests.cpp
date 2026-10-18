@@ -135,6 +135,19 @@ TEST_CASE("SettingsManager applies and permits overriding automated-run defaults
         CHECK(SettingsManager::getAsBool("animTimePaused"));
         CHECK_FALSE(SettingsManager::getAsBool("useVsync"));
         CHECK(SettingsManager::getAsInt("lodDistance") == 0);
+        CHECK_FALSE(SettingsManager::getAsBool("exclusiveMode"));
+    }
+
+    SECTION("perf runs default to exclusive mode")
+    {
+        requireSuccess({ "Biomeinator", "--perfOutput=result.json" });
+        CHECK(SettingsManager::getAsBool("exclusiveMode"));
+    }
+
+    SECTION("render-to-file runs can opt into exclusive mode")
+    {
+        requireSuccess({ "Biomeinator", "--renderToFile=result.png", "--exclusiveMode=true" });
+        CHECK(SettingsManager::getAsBool("exclusiveMode"));
     }
 
     SECTION("explicit values win over automated-run defaults")
@@ -146,7 +159,8 @@ TEST_CASE("SettingsManager applies and permits overriding automated-run defaults
                          "--showGui=true",
                          "--animTimePaused=false",
                          "--useVsync=true",
-                         "--lodDistance=256" });
+                         "--lodDistance=256",
+                         "--exclusiveMode=false" });
         CHECK_FALSE(SettingsManager::isRenderToFileMode());
         CHECK(SettingsManager::isPerfMode());
         CHECK(SettingsManager::isAutomatedRun());
@@ -156,6 +170,7 @@ TEST_CASE("SettingsManager applies and permits overriding automated-run defaults
         CHECK_FALSE(SettingsManager::getAsBool("animTimePaused"));
         CHECK(SettingsManager::getAsBool("useVsync"));
         CHECK(SettingsManager::getAsInt("lodDistance") == 256);
+        CHECK_FALSE(SettingsManager::getAsBool("exclusiveMode"));
     }
 }
 
