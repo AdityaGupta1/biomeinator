@@ -1,0 +1,2415 @@
+{
+  "biomes": [
+    {
+      "id": "marble",
+      "name": "Contact Marble",
+      "blurb": "Spinel, ruby and lapis in white marble (Mogok, Afghanistan). Borders LUSH."
+    },
+    {
+      "id": "pegmatite",
+      "name": "Pegmatite Pocket",
+      "blurb": "Elbaite (incl. watermelon), smoky quartz, aquamarine in coarse granite with clay-filled pockets."
+    },
+    {
+      "id": "opal",
+      "name": "Opal Fields",
+      "blurb": "Boulder opal seams and kernels in ironstone concretions within weathered sandstone (Queensland)."
+    },
+    {
+      "id": "copper",
+      "name": "Oxidized Copper Zone",
+      "blurb": "Malachite, azurite, atacamite, brochantite, cuprite, caledonite crusts over tan/rust matrix (Bisbee, Tsumeb)."
+    },
+    {
+      "id": "franklin",
+      "name": "Franklin",
+      "blurb": "Red zincite, black franklinite, green willemite and pink rhodonite in marble (Franklin, NJ). Fluorescent."
+    },
+    {
+      "id": "vug",
+      "name": "Hydrothermal Vug",
+      "blurb": "Fluorite cubes, celestine blades/geodes and calcite lining cavities in dolomite (Clay Center, OH)."
+    },
+    {
+      "id": "sulfur",
+      "name": "Sulfur / Hellish",
+      "blurb": "Sulfur crystals, realgar and orpiment on red iron-oxide rock (Dallol, Sicily)."
+    },
+    {
+      "id": "schist",
+      "name": "Kyanite Schist",
+      "blurb": "Giant kyanite blades and almandine garnets in silvery mica schist."
+    }
+  ],
+  "images": [
+    {
+      "id": "ad0f581693b8",
+      "biome": "pegmatite",
+      "file": "images/ad0f581693b8.jpg",
+      "caption": "Watermelon tourmaline, unpolished",
+      "source": "https://commons.wikimedia.org/wiki/File:Watermelon_Tourmaline_unpolished.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e9/Watermelon_Tourmaline_unpolished.jpg/1280px-Watermelon_Tourmaline_unpolished.jpg"
+    },
+    {
+      "id": "4119822941af",
+      "biome": "marble",
+      "file": "images/4119822941af.jpg",
+      "caption": "Ruby crystals in white marble \u2014 red-in-white contrast, host rock grain",
+      "source": "https://commons.wikimedia.org/wiki/File:Ruby_%26_marble_J1.jpg",
+      "rating": "cool",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/25/Ruby_%26_marble_J1.jpg/1280px-Ruby_%26_marble_J1.jpg"
+    },
+    {
+      "id": "1a64c822c0e2",
+      "biome": "marble",
+      "file": "images/1a64c822c0e2.jpg",
+      "caption": "Ruby in white marble specimen (Smithsonian) \u2014 ruby density/distribution in host",
+      "source": "https://commons.wikimedia.org/wiki/File:2009_04_19_-_4686_-_Washington_DC_-_Natural_History_Museum_-_Corundum_(white_marble_with_ruby)_(3526698689).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/71/2009_04_19_-_4686_-_Washington_DC_-_Natural_History_Museum_-_Corundum_%28white_marble_with_ruby%29_%283526698689%29.jpg/1280px-2009_04_19_-_4686_-_Washington_DC_-_Natural_History_Museum_-_Corundum_%28white_marble_with_ruby%29_%283526698689%29.jpg"
+    },
+    {
+      "id": "b316da85f151",
+      "biome": "marble",
+      "file": "images/b316da85f151.jpg",
+      "caption": "Spinel, Mogok Metamorphic Belt, Burma \u2014 crystal habit + color",
+      "source": "https://commons.wikimedia.org/wiki/File:Spinel_(Mogok_Metamorphic_Belt,_Jurassic_to_Miocene;_Momeik_Township,_Shan_State,_Burma).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cb/Spinel_%28Mogok_Metamorphic_Belt%2C_Jurassic_to_Miocene%3B_Momeik_Township%2C_Shan_State%2C_Burma%29.jpg/1280px-Spinel_%28Mogok_Metamorphic_Belt%2C_Jurassic_to_Miocene%3B_Momeik_Township%2C_Shan_State%2C_Burma%29.jpg"
+    },
+    {
+      "id": "4d86dc65b65e",
+      "biome": "marble",
+      "file": "images/4d86dc65b65e.jpg",
+      "caption": "Spinel in marble \u2014 octahedra embedded in calcite host",
+      "source": "https://commons.wikimedia.org/wiki/File:Spinel-Marble-59222.jpg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/4/4a/Spinel-Marble-59222.jpg"
+    },
+    {
+      "id": "6e7c57c5fc25",
+      "biome": "marble",
+      "file": "images/6e7c57c5fc25.jpg",
+      "caption": "Lapis lazuli rough, Sar-e-Sang Afghanistan \u2014 blue lazurite + white calcite/pyrite texture",
+      "source": "https://commons.wikimedia.org/wiki/File:Lapis_lazuli_(lazuritic_metamorphite)_(Sar-e-Sang_Deposit,_Sakhi_Formation,_Precambrian,_2.4-2.7_Ga_(%3F);_Sar-e-Sang_Mining_District,_Hindu-Kush_Mountains,_Afghanistan)_17.jpg",
+      "rating": "cool",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2c/Lapis_lazuli_%28lazuritic_metamorphite%29_%28Sar-e-Sang_Deposit%2C_Sakhi_Formation%2C_Precambrian%2C_2.4-2.7_Ga_%28%3F%29%3B_Sar-e-Sang_Mining_District%2C_Hindu-Kush_Mountains%2C_Afghanistan%29_17.jpg/1280px-thumbnail.jpg"
+    },
+    {
+      "id": "d40ff8b1e393",
+      "biome": "marble",
+      "file": "images/d40ff8b1e393.jpg",
+      "caption": "Graphite band in marble \u2014 dark streak/banding in white host",
+      "source": "https://commons.wikimedia.org/wiki/File:Graphite_Band_in_Marble_(9940614795).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5b/Graphite_Band_in_Marble_%289940614795%29.jpg/1280px-Graphite_Band_in_Marble_%289940614795%29.jpg"
+    },
+    {
+      "id": "a4685bf70033",
+      "biome": "marble",
+      "file": "images/a4685bf70033.jpg",
+      "caption": "Graphitic marble \u2014 graphite flecks in coarse calcite, host texture",
+      "source": "https://commons.wikimedia.org/wiki/File:Graphitic_marble_(49149538298).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/de/Graphitic_marble_%2849149538298%29.jpg/1280px-Graphitic_marble_%2849149538298%29.jpg"
+    },
+    {
+      "id": "6a87b8451358",
+      "biome": "marble",
+      "file": "images/6a87b8451358.jpg",
+      "caption": "Marble with phlogopite + chondrodite \u2014 brown mica/orange flecks in white host",
+      "source": "https://commons.wikimedia.org/wiki/File:Marble_containing_phlogopite_and_chondrodite_(GeoDIL_number_-_724).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Marble_containing_phlogopite_and_chondrodite_%28GeoDIL_number_-_724%29.jpg/1280px-Marble_containing_phlogopite_and_chondrodite_%28GeoDIL_number_-_724%29.jpg"
+    },
+    {
+      "id": "d214c8d605fe",
+      "biome": "marble",
+      "file": "images/d214c8d605fe.jpg",
+      "caption": "Gem market table with loose cut and rough ruby/spinel, Luc Yen, Vietnam (not in-situ; weak ref)",
+      "source": "https://commons.wikimedia.org/wiki/File:Rubi_Luc_Yen.JPG",
+      "rating": "ignore",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3a/Rubi_Luc_Yen.JPG/1280px-Rubi_Luc_Yen.JPG"
+    },
+    {
+      "id": "bfb03ff4a83b",
+      "biome": "marble",
+      "file": "images/bfb03ff4a83b.jpg",
+      "caption": "Luc Yen, Vietnam \u2014 marble karst landscape (large scale)",
+      "source": "https://commons.wikimedia.org/wiki/File:L%E1%BB%A5c_Y%C3%AAn1.jpg",
+      "rating": "ignore",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/aa/L%E1%BB%A5c_Y%C3%AAn1.jpg/1280px-L%E1%BB%A5c_Y%C3%AAn1.jpg"
+    },
+    {
+      "id": "de4c0aaadad3",
+      "biome": "marble",
+      "file": "images/de4c0aaadad3.jpg",
+      "caption": "Gouverneur Marble roadcut, NY \u2014 coarse marble outcrop face (wall-scale texture)",
+      "source": "https://commons.wikimedia.org/wiki/File:Dolomitized_marble_in_marble_(Gouverneur_Marble,_Mesoproterozoic,_~1.1_Ga;_Route_11_roadcut_north_of_Antwerp,_New_York_State,_USA)_6.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5f/Dolomitized_marble_in_marble_%28Gouverneur_Marble%2C_Mesoproterozoic%2C_~1.1_Ga%3B_Route_11_roadcut_north_of_Antwerp%2C_New_York_State%2C_USA%29_6.jpg/1280px-Dolomitized_marble_in_marble_%28Gouverneur_Marble%2C_Mesoproterozoic%2C_~1.1_Ga%3B_Route_11_roadcut_north_of_Antwerp%2C_New_York_State%2C_USA%29_6.jpg"
+    },
+    {
+      "id": "494242500a9a",
+      "biome": "vug",
+      "file": "images/494242500a9a.jpg",
+      "caption": "Celestine-lined walls/ceiling, Crystal Cave, Put-in-Bay OH: in-situ geode cave interior, crystal band between dolomite layers \u2014 key cave-wall ref",
+      "source": "https://commons.wikimedia.org/wiki/File:Celestite_(Crystal_Cave,_South_Bass_Island,_Lake_Erie,_Ohio,_USA)_7_(8321113714).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6e/Celestite_%28Crystal_Cave%2C_South_Bass_Island%2C_Lake_Erie%2C_Ohio%2C_USA%29_7_%288321113714%29.jpg/1280px-Celestite_%28Crystal_Cave%2C_South_Bass_Island%2C_Lake_Erie%2C_Ohio%2C_USA%29_7_%288321113714%29.jpg"
+    },
+    {
+      "id": "a74793df732f",
+      "biome": "vug",
+      "file": "images/a74793df732f.jpg",
+      "caption": "Celestine blades in situ with lens cap for scale, Crystal Cave OH: shows crystal size vs. wall, pale grey-blue color in cave light",
+      "source": "https://commons.wikimedia.org/wiki/File:Celestite_(Crystal_Cave,_South_Bass_Island,_Lake_Erie,_Ohio,_USA)_27_(8321110218).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b5/Celestite_%28Crystal_Cave%2C_South_Bass_Island%2C_Lake_Erie%2C_Ohio%2C_USA%29_27_%288321110218%29.jpg/1280px-Celestite_%28Crystal_Cave%2C_South_Bass_Island%2C_Lake_Erie%2C_Ohio%2C_USA%29_27_%288321110218%29.jpg"
+    },
+    {
+      "id": "3bc365da9713",
+      "biome": "vug",
+      "file": "images/3bc365da9713.jpg",
+      "caption": "Jumbled meter-scale celestine crystals in situ, Crystal Cave OH: chaotic large-crystal wall texture",
+      "source": "https://commons.wikimedia.org/wiki/File:Celestite_(Crystal_Cave,_South_Bass_Island,_Lake_Erie,_Ohio,_USA)_28_(8321110036).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/98/Celestite_%28Crystal_Cave%2C_South_Bass_Island%2C_Lake_Erie%2C_Ohio%2C_USA%29_28_%288321110036%29.jpg/1280px-Celestite_%28Crystal_Cave%2C_South_Bass_Island%2C_Lake_Erie%2C_Ohio%2C_USA%29_28_%288321110036%29.jpg"
+    },
+    {
+      "id": "73d1026cbdd6",
+      "biome": "vug",
+      "file": "images/73d1026cbdd6.jpg",
+      "caption": "Blue-grey celestine wall face in situ, Crystal Cave OH: blocky crystal faces with dolomite rubble at base",
+      "source": "https://commons.wikimedia.org/wiki/File:Celestite_(Crystal_Cave,_South_Bass_Island,_Lake_Erie,_Ohio,_USA)_9_(8321113190).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/99/Celestite_%28Crystal_Cave%2C_South_Bass_Island%2C_Lake_Erie%2C_Ohio%2C_USA%29_9_%288321113190%29.jpg/1280px-Celestite_%28Crystal_Cave%2C_South_Bass_Island%2C_Lake_Erie%2C_Ohio%2C_USA%29_9_%288321113190%29.jpg"
+    },
+    {
+      "id": "131efa9521aa",
+      "biome": "marble",
+      "file": "photos/131efa9521aa.jpg",
+      "caption": "Spinel octahedron on white marble (AMNH)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "50477344694c",
+      "biome": "marble",
+      "file": "photos/50477344694c.jpg",
+      "caption": "Spinel in marble, Myanmar (AMNH #11)",
+      "source": "Your AMNH photo",
+      "rating": "cool"
+    },
+    {
+      "id": "416e5f171a2e",
+      "biome": "marble",
+      "file": "photos/416e5f171a2e.jpg",
+      "caption": "Corundum (ruby) in mica-rich matrix, Norway (AMNH #13)",
+      "source": "Your AMNH photo",
+      "rating": "cool"
+    },
+    {
+      "id": "f14e56f6aeba",
+      "biome": "marble",
+      "file": "photos/f14e56f6aeba.jpg",
+      "caption": "Lapis lazuli with pyrite veins (AMNH)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "07cf7f1b505c",
+      "biome": "pegmatite",
+      "file": "photos/07cf7f1b505c.jpg",
+      "caption": "The Tarugo: giant elbaite, Minas Gerais (AMNH)",
+      "source": "Your AMNH photo",
+      "rating": "cool"
+    },
+    {
+      "id": "a0989a287dc7",
+      "biome": "pegmatite",
+      "file": "photos/a0989a287dc7.jpg",
+      "caption": "Rubellite on cleavelandite albite (AMNH #36)",
+      "source": "Your AMNH photo",
+      "rating": "cool"
+    },
+    {
+      "id": "3742ce5470d4",
+      "biome": "pegmatite",
+      "file": "photos/3742ce5470d4.jpg",
+      "caption": "Rubellite column cluster (AMNH #34)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "54edcffad42f",
+      "biome": "pegmatite",
+      "file": "photos/54edcffad42f.jpg",
+      "caption": "Amazonite crystals (AMNH #14)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "a99903d6deba",
+      "biome": "pegmatite",
+      "file": "photos/a99903d6deba.jpg",
+      "caption": "Aquamarine on albite, Dassu, Pakistan (AMNH)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "4852a998cd0a",
+      "biome": "pegmatite",
+      "file": "photos/4852a998cd0a.jpg",
+      "caption": "Elbaite with quartz, California: color change along length, dark end face (AMNH #32)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "9cfc1cd10f09",
+      "biome": "pegmatite",
+      "file": "photos/9cfc1cd10f09.jpg",
+      "caption": "Watermelon elbaite bundle: green base, pink tips, pocket clay in grooves (AMNH)",
+      "source": "Your AMNH photo",
+      "rating": "cool"
+    },
+    {
+      "id": "f85970a8f575",
+      "biome": "pegmatite",
+      "file": "photos/f85970a8f575.jpg",
+      "caption": "Watermelon tourmaline cross-section: green rind, white band, sector-zoned pink core (AMNH print)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "705bddad011c",
+      "biome": "pegmatite",
+      "file": "photos/705bddad011c.jpg",
+      "caption": "Elbaite, Mt Mica, Maine: pink base, green tip (AMNH #30)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "eb6ec1e89986",
+      "biome": "pegmatite",
+      "file": "photos/eb6ec1e89986.jpg",
+      "caption": "Smoky quartz (AMNH #29)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "f93ca020e7c1",
+      "biome": "opal",
+      "file": "photos/f93ca020e7c1.jpg",
+      "caption": "Boulder opal: vertical bands in ironstone, pinfire (AMNH)",
+      "source": "Your AMNH photo",
+      "rating": "cool"
+    },
+    {
+      "id": "a8f9937d7957",
+      "biome": "opal",
+      "file": "photos/a8f9937d7957.jpg",
+      "caption": "Play of Color case: boulder opal seams, pinfire vs broad flash (AMNH)",
+      "source": "Your AMNH photo",
+      "rating": "cool"
+    },
+    {
+      "id": "ae42e9f4addb",
+      "biome": "copper",
+      "file": "photos/ae42e9f4addb.jpg",
+      "caption": "Atacamite (fibrous green) and diaboleite (blue) (AMNH)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "7cd6a276a34d",
+      "biome": "copper",
+      "file": "photos/7cd6a276a34d.jpg",
+      "caption": "Boleite: indigo cubes on tan matrix with green crust (AMNH)",
+      "source": "Your AMNH photo",
+      "rating": "cool"
+    },
+    {
+      "id": "859ab34b051e",
+      "biome": "copper",
+      "file": "photos/859ab34b051e.jpg",
+      "caption": "The Singing Stone: azurite/malachite block, Arizona (AMNH)",
+      "source": "Your AMNH photo",
+      "rating": "cool"
+    },
+    {
+      "id": "8cdf22cade45",
+      "biome": "copper",
+      "file": "photos/8cdf22cade45.jpg",
+      "caption": "Malachite with azurite (AMNH #15)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "6259b57a057e",
+      "biome": "copper",
+      "file": "photos/6259b57a057e.jpg",
+      "caption": "Cuprite (AMNH #14)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "bc50086754bc",
+      "biome": "copper",
+      "file": "photos/bc50086754bc.jpg",
+      "caption": "Malachite (AMNH #21)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "afe39d2a7469",
+      "biome": "copper",
+      "file": "photos/afe39d2a7469.jpg",
+      "caption": "Azurite botryoidal crust (AMNH #19)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "25358c7c6f8d",
+      "biome": "copper",
+      "file": "photos/25358c7c6f8d.jpg",
+      "caption": "Calcite and aragonite, Bisbee, Arizona (AMNH)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "4ac9ad41afd1",
+      "biome": "copper",
+      "file": "photos/4ac9ad41afd1.jpg",
+      "caption": "Cuprosklodowskite: neon-green needle crust (AMNH #11)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "4d40481222c9",
+      "biome": "copper",
+      "file": "photos/4d40481222c9.jpg",
+      "caption": "Brochantite: dark green blade sprays on pale matrix (AMNH #2)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "42f563eddc08",
+      "biome": "copper",
+      "file": "photos/42f563eddc08.jpg",
+      "caption": "Caledonite: turquoise platy crust on tan matrix; dioptase at bottom edge (AMNH #13)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "38513face49f",
+      "biome": "copper",
+      "file": "photos/38513face49f.jpg",
+      "caption": "Scorodite: blue crystals on quartz, weathering zone (AMNH)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "a785806ac453",
+      "biome": "copper",
+      "file": "photos/a785806ac453.jpg",
+      "caption": "Annabergite: green crust on rusty matrix, weathering zone (AMNH)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "5c3086086b59",
+      "biome": "franklin",
+      "file": "photos/5c3086086b59.jpg",
+      "caption": "Cyprine (#21) and zincite with franklinite and willemite (#16), New Jersey (AMNH)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "053968ebb7f5",
+      "biome": "franklin",
+      "file": "photos/053968ebb7f5.jpg",
+      "caption": "Rhodonite, Franklin, New Jersey (AMNH)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "ff3af1070b66",
+      "biome": "vug",
+      "file": "photos/ff3af1070b66.jpg",
+      "caption": "Green fluorite cubes on sandy matrix (AMNH #18)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "2b934d509db9",
+      "biome": "vug",
+      "file": "photos/2b934d509db9.jpg",
+      "caption": "Blue fluorite on calcite (AMNH #15)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "0ab96180a5ed",
+      "biome": "vug",
+      "file": "photos/0ab96180a5ed.jpg",
+      "caption": "Blue fluorite around golden crystal (AMNH #3)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "65dd2a5defd8",
+      "biome": "vug",
+      "file": "photos/65dd2a5defd8.jpg",
+      "caption": "Celestine geode, pale blue, Hydrothermal Environments case (AMNH #27)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "9c9f548e1d75",
+      "biome": "sulfur",
+      "file": "photos/9c9f548e1d75.jpg",
+      "caption": "Native sulfur: translucent bipyramids, waxy frosted faces (AMNH)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "195d9cf2270e",
+      "biome": "sulfur",
+      "file": "photos/195d9cf2270e.jpg",
+      "caption": "Realgar: orange granular mass (AMNH)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "e587100485ed",
+      "biome": "sulfur",
+      "file": "photos/e587100485ed.jpg",
+      "caption": "Orpiment: red-orange crystal cluster (AMNH)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "4e3f101ec0a3",
+      "biome": "schist",
+      "file": "photos/4e3f101ec0a3.jpg",
+      "caption": "Almandine garnets in mica schist, Alaska (AMNH #7)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "364870650629",
+      "biome": "schist",
+      "file": "photos/364870650629.jpg",
+      "caption": "Kyanite: blue blades with rusty mica (AMNH)",
+      "source": "Your AMNH photo"
+    },
+    {
+      "id": "b0352ae0369d",
+      "biome": "vug",
+      "file": "images/b0352ae0369d.jpg",
+      "caption": "Green fluorite cubes on ironstone matrix, Rogerley Quarry, Weardale: hand specimen for emerald-green cube habit + interpenetrant twins",
+      "source": "https://commons.wikimedia.org/wiki/File:Fluorite_-_Diana_Maria_mine,_Rogerley_quarry,_Stanhope,_County_Durham,_England.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/95/Fluorite_-_Diana_Maria_mine%2C_Rogerley_quarry%2C_Stanhope%2C_County_Durham%2C_England.jpg/1280px-Fluorite_-_Diana_Maria_mine%2C_Rogerley_quarry%2C_Stanhope%2C_County_Durham%2C_England.jpg"
+    },
+    {
+      "id": "69dd0750733f",
+      "biome": "vug",
+      "file": "images/69dd0750733f.jpg",
+      "caption": "Sea-green fluorite cube cluster, Rogerley, Weardale: translucent stepped cube faces, color variation within crystals",
+      "source": "https://commons.wikimedia.org/wiki/File:Fluoryt_-_Kop._Rogerley,_Frosterley,_Durham,_Anglia.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e0/Fluoryt_-_Kop._Rogerley%2C_Frosterley%2C_Durham%2C_Anglia.jpg/1280px-Fluoryt_-_Kop._Rogerley%2C_Frosterley%2C_Durham%2C_Anglia.jpg"
+    },
+    {
+      "id": "4e4a66b0dfc3",
+      "biome": "vug",
+      "file": "images/4e4a66b0dfc3.jpg",
+      "caption": "Deep purple fluorite cubes, Denton Mine, Cave-in-Rock IL: large stacked cube habit, dark violet color",
+      "source": "https://commons.wikimedia.org/wiki/File:Fluorite_(Denton_Mine,_near_Cave-in-Rock,_Illinois,_USA)_2_(34177670250).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/88/Fluorite_%28Denton_Mine%2C_near_Cave-in-Rock%2C_Illinois%2C_USA%29_2_%2834177670250%29.jpg/1280px-Fluorite_%28Denton_Mine%2C_near_Cave-in-Rock%2C_Illinois%2C_USA%29_2_%2834177670250%29.jpg"
+    },
+    {
+      "id": "cda6f80f386a",
+      "biome": "vug",
+      "file": "images/cda6f80f386a.jpg",
+      "caption": "Backlit blue-violet zoned fluorite with calcite, Cave-in-Rock IL: translucency/color zoning ref for emissive or SSS crystal material",
+      "source": "https://commons.wikimedia.org/wiki/File:Fluorite_(mine_near_Cave-in-Rock,_Illinois,_USA)_3.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/eb/Fluorite_%28mine_near_Cave-in-Rock%2C_Illinois%2C_USA%29_3.jpg/1280px-Fluorite_%28mine_near_Cave-in-Rock%2C_Illinois%2C_USA%29_3.jpg"
+    },
+    {
+      "id": "644cc79849b1",
+      "biome": "vug",
+      "file": "images/644cc79849b1.jpg",
+      "caption": "Zoned purple/amber fluorite cube face, Elmwood Mine TN: stepped growth terraces and banded color zoning",
+      "source": "https://commons.wikimedia.org/wiki/File:Fluorite_(Late_Paleozoic;_Elmwood_Mine,_near_Carthage,_Tennessee,_USA)_1_(33750786923).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a2/Fluorite_%28Late_Paleozoic%3B_Elmwood_Mine%2C_near_Carthage%2C_Tennessee%2C_USA%29_1_%2833750786923%29.jpg/1280px-Fluorite_%28Late_Paleozoic%3B_Elmwood_Mine%2C_near_Carthage%2C_Tennessee%2C_USA%29_1_%2833750786923%29.jpg"
+    },
+    {
+      "id": "2dfeb675c3cc",
+      "biome": "vug",
+      "file": "images/2dfeb675c3cc.jpg",
+      "caption": "Celestine geode cut open, Madagascar: pale blue crystal-lined cavity inside grey rind \u2014 geode/vug cross-section structure",
+      "source": "https://commons.wikimedia.org/wiki/File:Celestine_from_Madagascar_in_the_Mineral_Museum_of_Si\u00f3fok.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/03/Celestine_from_Madagascar_in_the_Mineral_Museum_of_Si%C3%B3fok.jpg/1280px-Celestine_from_Madagascar_in_the_Mineral_Museum_of_Si%C3%B3fok.jpg"
+    },
+    {
+      "id": "9600a617b06d",
+      "biome": "vug",
+      "file": "images/9600a617b06d.jpg",
+      "caption": "Pale blue tabular celestine crystals on dolomite, Clay Center OH quarry: close-up of crystal habit and color",
+      "source": "https://commons.wikimedia.org/wiki/File:Celestite_(quarry_at_Clay_Center,_Ohio,_USA)_2.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f8/Celestite_%28quarry_at_Clay_Center%2C_Ohio%2C_USA%29_2.jpg/1280px-Celestite_%28quarry_at_Clay_Center%2C_Ohio%2C_USA%29_2.jpg"
+    },
+    {
+      "id": "36d53c3b2e93",
+      "biome": "vug",
+      "file": "images/36d53c3b2e93.jpg",
+      "caption": "Bladed white-blue celestine in Lockport dolostone, Clay Center OH: blade habit radiating from grey dolomite matrix",
+      "source": "https://commons.wikimedia.org/wiki/File:Celestite_in_dolostone_(Lockport_Dolomite,_Middle_Silurian;_quarry_at_Clay_Center,_Ohio,_USA)_1.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b4/Celestite_in_dolostone_%28Lockport_Dolomite%2C_Middle_Silurian%3B_quarry_at_Clay_Center%2C_Ohio%2C_USA%29_1.jpg/1280px-Celestite_in_dolostone_%28Lockport_Dolomite%2C_Middle_Silurian%3B_quarry_at_Clay_Center%2C_Ohio%2C_USA%29_1.jpg"
+    },
+    {
+      "id": "b6d183eaaa5e",
+      "biome": "vug",
+      "file": "images/b6d183eaaa5e.jpg",
+      "caption": "White saddle dolomite crystals lining a vug in dark dolostone, Duff Quarry OH: vug-in-host-rock matrix texture",
+      "source": "https://commons.wikimedia.org/wiki/File:Dolomite_in_vug_(Duff_Stone_Quarry,_Huntsville,_Ohio,_USA)_3.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/03/Dolomite_in_vug_%28Duff_Stone_Quarry%2C_Huntsville%2C_Ohio%2C_USA%29_3.jpg/1280px-Dolomite_in_vug_%28Duff_Stone_Quarry%2C_Huntsville%2C_Ohio%2C_USA%29_3.jpg"
+    },
+    {
+      "id": "c446970c1ccd",
+      "biome": "vug",
+      "file": "images/c446970c1ccd.jpg",
+      "caption": "Purple fluorite + white barite + calcite crust, Marblehead OH: mixed-mineral vug lining color palette",
+      "source": "https://commons.wikimedia.org/wiki/File:Fluorite-barite-calcite_(Marblehead,_Ohio,_USA)_1.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4f/Fluorite-barite-calcite_%28Marblehead%2C_Ohio%2C_USA%29_1.jpg/1280px-Fluorite-barite-calcite_%28Marblehead%2C_Ohio%2C_USA%29_1.jpg"
+    },
+    {
+      "id": "45496a2664b7",
+      "biome": "marble",
+      "file": "images/45496a2664b7.jpg",
+      "caption": "Lazuritic-pyritic marble, Sar-e-Sang \u2014 blue lazurite + pyrite specks in white marble host",
+      "source": "https://commons.wikimedia.org/wiki/File:Lazuritic-pyritic_marble_(Sar-e-Sang_Deposit,_Sakhi_Formation,_Precambrian,_2.4-2.7_Ga_(%3F);_Sar-e-Sang_Mining_District,_Hindu-Kush_Mountains,_Afghanistan)_2.jpg",
+      "rating": "cool",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4d/Lazuritic-pyritic_marble_%28Sar-e-Sang_Deposit%2C_Sakhi_Formation%2C_Precambrian%2C_2.4-2.7_Ga_%28%3F%29%3B_Sar-e-Sang_Mining_District%2C_Hindu-Kush_Mountains%2C_Afghanistan%29_2.jpg/1280px-Lazuritic-pyritic_marble_%28Sar-e-Sang_Deposit%2C_Sakhi_Formation%2C_Precambrian%2C_2.4-2.7_Ga_%28%3F%29%3B_Sar-e-Sang_Mining_District%2C_Hindu-Kush_Mountains%2C_Afghanistan%29_2.jpg"
+    },
+    {
+      "id": "18bc12eafe3d",
+      "biome": "marble",
+      "file": "images/18bc12eafe3d.jpg",
+      "caption": "Lazuritic-pyritic marble close-up, Sar-e-Sang \u2014 lapis/marble boundary texture",
+      "source": "https://commons.wikimedia.org/wiki/File:Lazuritic-pyritic_marble_(Sar-e-Sang_Deposit,_Sakhi_Formation,_Precambrian,_2.4-2.7_Ga_(%3F);_Sar-e-Sang_Mining_District,_Hindu-Kush_Mountains,_Afghanistan)_9.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a1/Lazuritic-pyritic_marble_%28Sar-e-Sang_Deposit%2C_Sakhi_Formation%2C_Precambrian%2C_2.4-2.7_Ga_%28%3F%29%3B_Sar-e-Sang_Mining_District%2C_Hindu-Kush_Mountains%2C_Afghanistan%29_9.jpg/1280px-Lazuritic-pyritic_marble_%28Sar-e-Sang_Deposit%2C_Sakhi_Formation%2C_Precambrian%2C_2.4-2.7_Ga_%28%3F%29%3B_Sar-e-Sang_Mining_District%2C_Hindu-Kush_Mountains%2C_Afghanistan%29_9.jpg"
+    },
+    {
+      "id": "2a792229a683",
+      "biome": "marble",
+      "file": "images/2a792229a683.jpg",
+      "caption": "Spinel crystals on calcite/marble \u2014 octahedral habit + host",
+      "source": "https://commons.wikimedia.org/wiki/File:Spinelle,_calcite_1.JPG",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c6/Spinelle%2C_calcite_1.JPG/1280px-Spinelle%2C_calcite_1.JPG"
+    },
+    {
+      "id": "f7d176ad967d",
+      "biome": "marble",
+      "file": "images/f7d176ad967d.jpg",
+      "caption": "Lazurite + afghanite + pyrite on calcite, Sar-e-Sang \u2014 crystal habit in marble",
+      "source": "https://commons.wikimedia.org/wiki/File:Lazurite,_afghanite_et_pyrite_sur_calcite_Sar-e-Sang,_Koksha_Valley,_Badakshan_-_Afghanistan)_2.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/87/Lazurite%2C_afghanite_et_pyrite_sur_calcite_Sar-e-Sang%2C_Koksha_Valley%2C_Badakshan_-_Afghanistan%29_2.jpg/1280px-Lazurite%2C_afghanite_et_pyrite_sur_calcite_Sar-e-Sang%2C_Koksha_Valley%2C_Badakshan_-_Afghanistan%29_2.jpg"
+    },
+    {
+      "id": "e218fa09ed8c",
+      "biome": "opal",
+      "file": "images/e218fa09ed8c.jpg",
+      "caption": "Underground opal mine, Andamooka SA - pale kaolinitic claystone wall with rust-orange iron staining; lamp-lit tunnel scale ref for cave walls",
+      "source": "https://commons.wikimedia.org/wiki/File:Documentary_filming_inside_an_opal_mine_in_Andamooka.jpg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/6/68/Documentary_filming_inside_an_opal_mine_in_Andamooka.jpg"
+    },
+    {
+      "id": "a58e946f62af",
+      "biome": "opal",
+      "file": "images/a58e946f62af.jpg",
+      "caption": "Opal mine drive, Hallion Hill, Andamooka - rough-hewn pale sandstone/claystone tunnel with warm lit end; tunnel shape and wall texture",
+      "source": "https://commons.wikimedia.org/wiki/File:Underground_mining_at_Hallion_Hill,_Andamooka,_Australia.jpg",
+      "rating": "ignore",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9e/Underground_mining_at_Hallion_Hill%2C_Andamooka%2C_Australia.jpg/1280px-Underground_mining_at_Hallion_Hill%2C_Andamooka%2C_Australia.jpg"
+    },
+    {
+      "id": "d2cfb9aa6d7a",
+      "biome": "pegmatite",
+      "file": "images/d2cfb9aa6d7a.jpg",
+      "caption": "Opened tourmaline pocket at Mount Mica, Maine (1911) \u2014 scale of a gem cavity in the pegmatite, rubble floor, person for scale",
+      "source": "https://commons.wikimedia.org/wiki/File:Mount_Mica_Maine_1911.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5c/Mount_Mica_Maine_1911.jpg/1280px-Mount_Mica_Maine_1911.jpg"
+    },
+    {
+      "id": "33c96afc3a41",
+      "biome": "franklin",
+      "file": "images/33c96afc3a41.jpg",
+      "caption": "Franklin NJ zinc mines \u2014 historic mine site overview (large scale)",
+      "source": "https://commons.wikimedia.org/wiki/File:Franklin_NJ_zinc_mines.jpg"
+    },
+    {
+      "id": "4dbbb6e89aca",
+      "biome": "opal",
+      "file": "images/4dbbb6e89aca.jpg",
+      "caption": "Coober Pedy opal mine tunnel - bleached white/cream siltstone with pick-scarred walls; human-scale tunnel reference",
+      "source": "https://commons.wikimedia.org/wiki/File:Outback_Trip_-_Coober_Pedy_Opal_Mine_(4157698270).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/67/Outback_Trip_-_Coober_Pedy_Opal_Mine_%284157698270%29.jpg/1280px-Outback_Trip_-_Coober_Pedy_Opal_Mine_%284157698270%29.jpg"
+    },
+    {
+      "id": "313185bebe04",
+      "biome": "pegmatite",
+      "file": "images/313185bebe04.jpg",
+      "caption": "Radiating black schorl sprays in the mine wall, White Elephant pegmatite, South Dakota \u2014 in-situ wall texture with person for scale",
+      "source": "https://commons.wikimedia.org/wiki/File:Radiating_tourmaline_White_Elephant_Mine_SD.jpg",
+      "rating": "ignore",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/f/f6/Radiating_tourmaline_White_Elephant_Mine_SD.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled"
+    },
+    {
+      "id": "c704fe9840b1",
+      "biome": "pegmatite",
+      "file": "images/c704fe9840b1.jpg",
+      "caption": "Meter-scale K-feldspar crystal in the mine wall, Ruggles pegmatite, New Hampshire \u2014 how big pegmatite grains get on a cave wall",
+      "source": "https://commons.wikimedia.org/wiki/File:Huge_potassium_feldspar_crystal_(Ruggles_Pegmatite,_Devonian;_Ruggles_Pegmatite_Mine,_southern_New_Hampshire,_USA)_(15669755939).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/ce/Huge_potassium_feldspar_crystal_%28Ruggles_Pegmatite%2C_Devonian%3B_Ruggles_Pegmatite_Mine%2C_southern_New_Hampshire%2C_USA%29_%2815669755939%29.jpg/1280px-Huge_potassium_feldspar_crystal_%28Ruggles_Pegmatite%2C_Devonian%3B_Ruggles_Pegmatite_Mine%2C_southern_New_Hampshire%2C_USA%29_%2815669755939%29.jpg"
+    },
+    {
+      "id": "aa9d78916949",
+      "biome": "franklin",
+      "file": "images/aa9d78916949.jpg",
+      "caption": "Zinciferous Franklin Marble, Franklin NJ \u2014 ore-in-marble texture, visible light",
+      "source": "https://commons.wikimedia.org/wiki/File:Zinciferous_marble_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_zinc_mine_in_Franklin%2C_northern_New_Jersey%2C_USA%29_1_%2815045915976%29.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/16/Zinciferous_marble_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_zinc_mine_in_Franklin%2C_northern_New_Jersey%2C_USA%29_1_%2815045915976%29.jpg/1280px-Zinciferous_marble_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_zinc_mine_in_Franklin%2C_northern_New_Jersey%2C_USA%29_1_%2815045915976%29.jpg"
+    },
+    {
+      "id": "db4d29ea5142",
+      "biome": "sulfur",
+      "file": "images/db4d29ea5142.jpg",
+      "caption": "Dallol, Ethiopia wide view: yellow-green sulfur crusts, rust-orange iron-oxide flats, green acid pool \u2014 overall palette/layout ref",
+      "source": "https://commons.wikimedia.org/wiki/File:ET_Afar_asv2018-01_img48_Dallol.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d4/ET_Afar_asv2018-01_img48_Dallol.jpg/1280px-ET_Afar_asv2018-01_img48_Dallol.jpg"
+    },
+    {
+      "id": "66315e4f538c",
+      "biome": "pegmatite",
+      "file": "images/66315e4f538c.jpg",
+      "caption": "Large dark mica book embedded in pale pegmatite wall, Ruggles Mine, NH \u2014 in-situ mica book texture",
+      "source": "https://commons.wikimedia.org/wiki/File:Large_mica_crystal_in_pegmatitic_granite_(Ruggles_Pegmatite,_Devonian;_Ruggles_Pegmatite_Mine,_New_Hampshire,_USA)_2_(8290567239).jpg"
+    },
+    {
+      "id": "a3727f990370",
+      "biome": "sulfur",
+      "file": "images/a3727f990370.jpg",
+      "caption": "Sulfur-salt chimney/cone with yellow-green runoff over orange crusts, Dallol: spire form + terraced flow texture",
+      "source": "https://commons.wikimedia.org/wiki/File:ET_Afar_asv2018-01_img36_Dallol.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/35/ET_Afar_asv2018-01_img36_Dallol.jpg/1280px-ET_Afar_asv2018-01_img36_Dallol.jpg"
+    },
+    {
+      "id": "0500600e9ac4",
+      "biome": "franklin",
+      "file": "images/0500600e9ac4.jpg",
+      "caption": "Zinciferous Franklin Marble under UV \u2014 green willemite / red calcite fluorescence",
+      "source": "https://commons.wikimedia.org/wiki/File:Zinciferous_marble_fluorescing_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_zinc_mine_in_Franklin%2C_northern_New_Jersey%2C_USA%29_2_%2814882365837%29.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fb/Zinciferous_marble_fluorescing_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_zinc_mine_in_Franklin%2C_northern_New_Jersey%2C_USA%29_2_%2814882365837%29.jpg/1280px-Zinciferous_marble_fluorescing_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_zinc_mine_in_Franklin%2C_northern_New_Jersey%2C_USA%29_2_%2814882365837%29.jpg"
+    },
+    {
+      "id": "9ae9a98afab9",
+      "biome": "sulfur",
+      "file": "images/9ae9a98afab9.jpg",
+      "caption": "Yellow sulfur pillar in acid channel between brown salt-rock towers, Dallol: vertical composition, cave-pillar analog",
+      "source": "https://commons.wikimedia.org/wiki/File:ET_Afar_asv2018-01_img16_Dallol.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ee/ET_Afar_asv2018-01_img16_Dallol.jpg/1280px-ET_Afar_asv2018-01_img16_Dallol.jpg"
+    },
+    {
+      "id": "3680c670240d",
+      "biome": "sulfur",
+      "file": "images/3680c670240d.jpg",
+      "caption": "Close-up of hot-spring vents: grey-white salt knobs, yellow sulfur popcorn, green brine, Dallol \u2014 floor surface texture ref",
+      "source": "https://commons.wikimedia.org/wiki/File:ET_Afar_asv2018-01_img37_Dallol.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7e/ET_Afar_asv2018-01_img37_Dallol.jpg/1280px-ET_Afar_asv2018-01_img37_Dallol.jpg"
+    },
+    {
+      "id": "921cb8d10dbb",
+      "biome": "franklin",
+      "file": "images/921cb8d10dbb.jpg",
+      "caption": "Franklinite-willemite-calcite ore rock, Franklin \u2014 black grains in pale matrix, visible light",
+      "source": "https://commons.wikimedia.org/wiki/File:Franklinite-willemite-calcite_rock_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_Franklin%2C_New_Jersey%2C_USA%29_1_%2832403279061%29.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/68/Franklinite-willemite-calcite_rock_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_Franklin%2C_New_Jersey%2C_USA%29_1_%2832403279061%29.jpg/1280px-Franklinite-willemite-calcite_rock_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_Franklin%2C_New_Jersey%2C_USA%29_1_%2832403279061%29.jpg"
+    },
+    {
+      "id": "a116e2fb74ad",
+      "biome": "sulfur",
+      "file": "images/a116e2fb74ad.jpg",
+      "caption": "Rust-red/orange iron-oxide crust around green acid pool with white salt rim, Dallol: surface texture + color transition",
+      "source": "https://commons.wikimedia.org/wiki/File:Dallol-Ethiopie_(45).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/65/Dallol-Ethiopie_%2845%29.jpg/1280px-Dallol-Ethiopie_%2845%29.jpg"
+    },
+    {
+      "id": "6001912b4b91",
+      "biome": "sulfur",
+      "file": "images/6001912b4b91.jpg",
+      "caption": "Needle sulfur crystal fur coating fumarole vent, Vulcano, Italy: in-situ sublimate texture for wall/vent surfaces",
+      "source": "https://commons.wikimedia.org/wiki/File:Sulfur_crystals_in_fumarole_on_Vulcano,_Lipari_Islands,_Italy_-_panoramio.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2e/Sulfur_crystals_in_fumarole_on_Vulcano%2C_Lipari_Islands%2C_Italy_-_panoramio.jpg/1280px-Sulfur_crystals_in_fumarole_on_Vulcano%2C_Lipari_Islands%2C_Italy_-_panoramio.jpg"
+    },
+    {
+      "id": "42093bd65ac2",
+      "biome": "franklin",
+      "file": "images/42093bd65ac2.jpg",
+      "caption": "Franklinite-willemite-calcite rock under UV \u2014 green/red fluorescent pattern",
+      "source": "https://commons.wikimedia.org/wiki/File:Franklinite-willemite-calcite_rock_fluorescing_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_zinc_mine_in_northern_New_Jersey%2C_USA%29_2_%2831232832761%29.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/27/Franklinite-willemite-calcite_rock_fluorescing_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_zinc_mine_in_northern_New_Jersey%2C_USA%29_2_%2831232832761%29.jpg/1280px-Franklinite-willemite-calcite_rock_fluorescing_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_zinc_mine_in_northern_New_Jersey%2C_USA%29_2_%2831232832761%29.jpg"
+    },
+    {
+      "id": "11b883f96314",
+      "biome": "sulfur",
+      "file": "images/11b883f96314.jpg",
+      "caption": "Kawah Ijen fumarole field: pale sulfur-crusted slope, steam plumes, pipes \u2014 large-scale in-situ sulfur deposit",
+      "source": "https://commons.wikimedia.org/wiki/File:Sulfur_mining_at_Kawah_Ijen,_Java,_Indonesia,_20220821_0523_9640.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3e/Sulfur_mining_at_Kawah_Ijen%2C_Java%2C_Indonesia%2C_20220821_0523_9640.jpg/1280px-Sulfur_mining_at_Kawah_Ijen%2C_Java%2C_Indonesia%2C_20220821_0523_9640.jpg"
+    },
+    {
+      "id": "a633a5caf796",
+      "biome": "sulfur",
+      "file": "images/a633a5caf796.jpg",
+      "caption": "Large bright-yellow native sulfur crystal cluster (dipyramidal), specimen: crystal habit + saturated color (locality unknown)",
+      "source": "https://commons.wikimedia.org/wiki/File:Large_Sulfur_Crystal.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/56/Large_Sulfur_Crystal.jpg/1280px-Large_Sulfur_Crystal.jpg"
+    },
+    {
+      "id": "18c9abc99a2b",
+      "biome": "franklin",
+      "file": "images/18c9abc99a2b.jpg",
+      "caption": "Zinciferous marble, Sterling Hill Mine \u2014 ore texture",
+      "source": "https://commons.wikimedia.org/wiki/File:Zinciferous_marble_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_Sterling_Hill_Mine%2C_northern_New_Jersey%2C_USA%29_2_%2830021228511%29.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/85/Zinciferous_marble_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_Sterling_Hill_Mine%2C_northern_New_Jersey%2C_USA%29_2_%2830021228511%29.jpg/1280px-Zinciferous_marble_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_Sterling_Hill_Mine%2C_northern_New_Jersey%2C_USA%29_2_%2830021228511%29.jpg"
+    },
+    {
+      "id": "78ae00e8a10d",
+      "biome": "pegmatite",
+      "file": "images/78ae00e8a10d.jpg",
+      "caption": "Ruggles Mine, NH \u2014 pegmatite open pit with arched galleries; large-scale cavern/wall shapes in pale granitic pegmatite",
+      "source": "https://commons.wikimedia.org/wiki/File:Ruggles_Mine-01.jpg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/e/ea/Ruggles_Mine-01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled"
+    },
+    {
+      "id": "4aa665b8104a",
+      "biome": "opal",
+      "file": "images/4aa665b8104a.jpg",
+      "caption": "Open-cut opal mine, Lightning Ridge NSW - banded white/pink/ochre weathered claystone walls and spoil heaps; large-scale strata colours",
+      "source": "https://commons.wikimedia.org/wiki/File:Open_Cut_Opal_Mine_at_Lightning_Ridge_-_panoramio.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/89/Open_Cut_Opal_Mine_at_Lightning_Ridge_-_panoramio.jpg/1280px-Open_Cut_Opal_Mine_at_Lightning_Ridge_-_panoramio.jpg"
+    },
+    {
+      "id": "09253897dad8",
+      "biome": "sulfur",
+      "file": "images/09253897dad8.jpg",
+      "caption": "Translucent amber-yellow sulfur crystal on white celestine/aragonite, Sicily: gem translucency + matrix contrast",
+      "source": "https://commons.wikimedia.org/wiki/File:Soufresicile2.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e4/Soufresicile2.jpg/1280px-Soufresicile2.jpg"
+    },
+    {
+      "id": "670abd725837",
+      "biome": "pegmatite",
+      "file": "images/670abd725837.jpg",
+      "caption": "Graphic granite (runic quartz in cream feldspar), Ruggles Mine, NH \u2014 host rock texture for pegmatite walls",
+      "source": "https://commons.wikimedia.org/wiki/File:Graphic_granite_(Ruggles_Pegmatite,_Devonian;_Ruggles_Mine,_New_Hampshire,_USA)_(48751570932).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0d/Graphic_granite_%28Ruggles_Pegmatite%2C_Devonian%3B_Ruggles_Mine%2C_New_Hampshire%2C_USA%29_%2848751570932%29.jpg/1280px-Graphic_granite_%28Ruggles_Pegmatite%2C_Devonian%3B_Ruggles_Mine%2C_New_Hampshire%2C_USA%29_%2848751570932%29.jpg"
+    },
+    {
+      "id": "f8b9f410ca8d",
+      "biome": "franklin",
+      "file": "images/f8b9f410ca8d.jpg",
+      "caption": "Rhodonite, Franklin NJ (MNHN) \u2014 pink crystal habit",
+      "source": "https://commons.wikimedia.org/wiki/File:Rhodonite_Franklin_MNHN_Min%C3%A9ralogie.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/00/Rhodonite_Franklin_MNHN_Min%C3%A9ralogie.jpg/1280px-Rhodonite_Franklin_MNHN_Min%C3%A9ralogie.jpg"
+    },
+    {
+      "id": "b174be6d30d5",
+      "biome": "sulfur",
+      "file": "images/b174be6d30d5.jpg",
+      "caption": "Sulfur crystals on grey celestine-sparkled limestone, Machow, Poland: sulfur-in-matrix host rock texture",
+      "source": "https://commons.wikimedia.org/wiki/File:Siarka_z_celestynem_-_Mach\u00f3w,_Polska..JPG",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/61/Siarka_z_celestynem_-_Mach%C3%B3w%2C_Polska..JPG/1280px-Siarka_z_celestynem_-_Mach%C3%B3w%2C_Polska..JPG"
+    },
+    {
+      "id": "246c950dfe16",
+      "biome": "opal",
+      "file": "images/246c950dfe16.jpg",
+      "caption": "Boulder opal in ironstone concretion, Winton Formation QLD - blue/violet opal seams on brown ironstone; core palette for opal-in-host blocks",
+      "source": "https://commons.wikimedia.org/wiki/File:Precious_opal_in_ironstone_concretion_(Winton_Formation,_mid-Cretaceous;_Queensland,_northeastern_Australia)_2_(15230210476).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/74/Precious_opal_in_ironstone_concretion_%28Winton_Formation%2C_mid-Cretaceous%3B_Queensland%2C_northeastern_Australia%29_2_%2815230210476%29.jpg/1280px-Precious_opal_in_ironstone_concretion_%28Winton_Formation%2C_mid-Cretaceous%3B_Queensland%2C_northeastern_Australia%29_2_%2815230210476%29.jpg"
+    },
+    {
+      "id": "c27a706ee75d",
+      "biome": "pegmatite",
+      "file": "images/c27a706ee75d.jpg",
+      "caption": "Pink and green elbaite in purple lepidolite pegmatite, Brazil \u2014 lithium-rich core zone rock texture and palette",
+      "source": "https://commons.wikimedia.org/wiki/File:Pegmatite_de_tourmalines_rubellite,_elba%C3%AFte,_mica_(Br%C3%A9sil).JPG",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/14/Pegmatite_de_tourmalines_rubellite%2C_elba%C3%AFte%2C_mica_%28Br%C3%A9sil%29.JPG/1280px-Pegmatite_de_tourmalines_rubellite%2C_elba%C3%AFte%2C_mica_%28Br%C3%A9sil%29.JPG"
+    },
+    {
+      "id": "38c79d3e1777",
+      "biome": "sulfur",
+      "file": "images/38c79d3e1777.jpg",
+      "caption": "Orange-gold orpiment with red realgar and dark matrix: arsenic-sulfide palette for hellish accent blocks",
+      "source": "https://commons.wikimedia.org/wiki/File:Orpiment_with_realgar,_University_of_North_Dakota_Mineralogy_Collection.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/43/Orpiment_with_realgar%2C_University_of_North_Dakota_Mineralogy_Collection.jpg/1280px-Orpiment_with_realgar%2C_University_of_North_Dakota_Mineralogy_Collection.jpg"
+    },
+    {
+      "id": "aa3e8ecf2805",
+      "biome": "pegmatite",
+      "file": "images/aa3e8ecf2805.jpg",
+      "caption": "Rubellite sprays in grey lepidolite matrix, Stewart Mine, Pala CA \u2014 embedded (not pocket) tourmaline pattern for wall blocks",
+      "source": "https://commons.wikimedia.org/wiki/File:Lithia_pegmatite_with_rubellite_tourmaline_in_lepidolite_mica_matrix,_Pala_CA.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/26/Lithia_pegmatite_with_rubellite_tourmaline_in_lepidolite_mica_matrix%2C_Pala_CA.jpg/1280px-Lithia_pegmatite_with_rubellite_tourmaline_in_lepidolite_mica_matrix%2C_Pala_CA.jpg"
+    },
+    {
+      "id": "09a1e9af0ef4",
+      "biome": "franklin",
+      "file": "images/09a1e9af0ef4.jpg",
+      "caption": "Zincite + franklinite + willemite in calcite, Franklin \u2014 red/black/green ore mix",
+      "source": "https://commons.wikimedia.org/wiki/File:Zincite%2C_franklinite%2C_calcite_and_willemite_%28GeoDIL_number_-_1558%29.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/56/Zincite%2C_franklinite%2C_calcite_and_willemite_%28GeoDIL_number_-_1558%29.jpg/1280px-Zincite%2C_franklinite%2C_calcite_and_willemite_%28GeoDIL_number_-_1558%29.jpg"
+    },
+    {
+      "id": "a474b8b47ac3",
+      "biome": "opal",
+      "file": "images/a474b8b47ac3.jpg",
+      "caption": "Boulder opal slab - thin opal veins cutting concentric banded ironstone; vein geometry + ironstone ring texture",
+      "source": "https://commons.wikimedia.org/wiki/File:Veins_of_opal_in_a_boulder_opal.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c5/Veins_of_opal_in_a_boulder_opal.jpg/1280px-Veins_of_opal_in_a_boulder_opal.jpg"
+    },
+    {
+      "id": "b73c7447d3ec",
+      "biome": "pegmatite",
+      "file": "images/b73c7447d3ec.jpg",
+      "caption": "Peach-pink elbaite prism on white cleavelandite rosettes, Paprok, Afghanistan \u2014 classic pocket crystal habit",
+      "source": "https://commons.wikimedia.org/wiki/File:Elba%C3%AFte_et_cleavelandite_(Paprok_Mine,_Kunar,_Nuristan_-_Afghanistan).jpg",
+      "rating": "ignore",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/19/Elba%C3%AFte_et_cleavelandite_%28Paprok_Mine%2C_Kunar%2C_Nuristan_-_Afghanistan%29.jpg/1280px-Elba%C3%AFte_et_cleavelandite_%28Paprok_Mine%2C_Kunar%2C_Nuristan_-_Afghanistan%29.jpg"
+    },
+    {
+      "id": "f6846fb4706b",
+      "biome": "opal",
+      "file": "images/f6846fb4706b.jpg",
+      "caption": "Boulder opal nodules - green/teal opal network filling cracks in rusty ironstone concretion; matrix opal pattern for ore texture",
+      "source": "https://commons.wikimedia.org/wiki/File:Boulder_Opal.jpg",
+      "rating": "cool",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/17/Boulder_Opal.jpg/1280px-Boulder_Opal.jpg"
+    },
+    {
+      "id": "334ce4aab166",
+      "biome": "pegmatite",
+      "file": "images/334ce4aab166.jpg",
+      "caption": "Watermelon elbaite cross-section slice (pink core, green rim), Dunton Quarry, Newry, Maine \u2014 triangular zoning pattern",
+      "source": "https://commons.wikimedia.org/wiki/File:Elbaite_tourmaline_(Oxford_Pegmatite_Field;_Dunton_Quarry,_Newry,_Maine,_USA)_2_(43321961242).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d8/Elbaite_tourmaline_%28Oxford_Pegmatite_Field%3B_Dunton_Quarry%2C_Newry%2C_Maine%2C_USA%29_2_%2843321961242%29.jpg/1280px-Elbaite_tourmaline_%28Oxford_Pegmatite_Field%3B_Dunton_Quarry%2C_Newry%2C_Maine%2C_USA%29_2_%2843321961242%29.jpg"
+    },
+    {
+      "id": "cea61720c7aa",
+      "biome": "pegmatite",
+      "file": "images/cea61720c7aa.jpg",
+      "caption": "Aquamarine prisms on orthoclase with brown muscovite books \u2014 pocket assemblage color and habit (locality unknown)",
+      "source": "https://commons.wikimedia.org/wiki/File:Aquamarine,_orthoclase,_muscovite_(9146117105).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/38/Aquamarine%2C_orthoclase%2C_muscovite_%289146117105%29.jpg/1280px-Aquamarine%2C_orthoclase%2C_muscovite_%289146117105%29.jpg"
+    },
+    {
+      "id": "86ee4d502ef8",
+      "biome": "pegmatite",
+      "file": "images/86ee4d502ef8.jpg",
+      "caption": "Lavender lepidolite balls on smoky quartz with pink elbaite, Himalaya Mine, Mesa Grande CA \u2014 pocket lining detail",
+      "source": "https://commons.wikimedia.org/wiki/File:Lepidolite,_Quartz,_Elbaite._Himalaya_Mine,_Mesa_Grande,_California,_USA-9023.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/72/Lepidolite%2C_Quartz%2C_Elbaite._Himalaya_Mine%2C_Mesa_Grande%2C_California%2C_USA-9023.jpg/1280px-Lepidolite%2C_Quartz%2C_Elbaite._Himalaya_Mine%2C_Mesa_Grande%2C_California%2C_USA-9023.jpg"
+    },
+    {
+      "id": "0c1724e6548c",
+      "biome": "opal",
+      "file": "images/0c1724e6548c.jpg",
+      "caption": "Black opal, Lightning Ridge NSW - broad-flash/harlequin red-green-blue patches on dark body; play-of-colour reference (broad flash)",
+      "source": "https://commons.wikimedia.org/wiki/File:Precious_opal_(Lightning_Ridge,_New_South_Wales,_Australia)_3_(29801544831).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bf/Precious_opal_%28Lightning_Ridge%2C_New_South_Wales%2C_Australia%29_3_%2829801544831%29.jpg/1280px-Precious_opal_%28Lightning_Ridge%2C_New_South_Wales%2C_Australia%29_3_%2829801544831%29.jpg"
+    },
+    {
+      "id": "e7e01bcef932",
+      "biome": "opal",
+      "file": "images/e7e01bcef932.jpg",
+      "caption": "Opalized belemnites in pale claystone, Coober Pedy - fossil replaced by opal still in host rock; opalized-fossil block idea",
+      "source": "https://commons.wikimedia.org/wiki/File:Opal_fossilized_belemnoidea_Coober_Pedy_MNHN_Min\u00e9ralogie.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1f/Opal_fossilized_belemnoidea_Coober_Pedy_MNHN_Min%C3%A9ralogie.jpg/1280px-Opal_fossilized_belemnoidea_Coober_Pedy_MNHN_Min%C3%A9ralogie.jpg"
+    },
+    {
+      "id": "3ad8b8655985",
+      "biome": "sulfur",
+      "file": "images/3ad8b8655985.jpg",
+      "caption": "Blood-red cinnabar crystals scattered through white dolomite, Hunan, China: red-in-white ore/matrix texture for accent block",
+      "source": "https://commons.wikimedia.org/wiki/File:Cinnabar_on_dolomite_(Hunan,_China)_(18662853690).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d4/Cinnabar_on_dolomite_%28Hunan%2C_China%29_%2818662853690%29.jpg/1280px-Cinnabar_on_dolomite_%28Hunan%2C_China%29_%2818662853690%29.jpg"
+    },
+    {
+      "id": "838ea09fc9d1",
+      "biome": "opal",
+      "file": "images/838ea09fc9d1.jpg",
+      "caption": "Mexican fire opal on rhyolite matrix - translucent orange opal with green flashes in reddish vuggy rhyolite; volcanic variant palette",
+      "source": "https://commons.wikimedia.org/wiki/File:Precious_Mexican_Fire_Opal_with_attached_matrix.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/48/Precious_Mexican_Fire_Opal_with_attached_matrix.jpg/1280px-Precious_Mexican_Fire_Opal_with_attached_matrix.jpg"
+    },
+    {
+      "id": "1fcbf1e64b9c",
+      "biome": "opal",
+      "file": "images/1fcbf1e64b9c.jpg",
+      "caption": "Fire opal mine, Queretaro Mexico - weathered pink-orange rhyolite walls and rubble; in-situ look of volcanic opal host",
+      "source": "https://commons.wikimedia.org/wiki/File:Opal_mine_queretaro.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/85/Opal_mine_queretaro.jpg/1280px-Opal_mine_queretaro.jpg"
+    },
+    {
+      "id": "9b84065965d1",
+      "biome": "opal",
+      "file": "images/9b84065965d1.jpg",
+      "caption": "Ethiopian (Welo-type) precious opal in pale volcanic tuff, Berbere Hill - glassy honey opal with rainbow flash; volcanic variant",
+      "source": "https://commons.wikimedia.org/wiki/File:Precious_opal_(Berbere_Hill,_Ethiopia)_20.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/41/Precious_opal_%28Berbere_Hill%2C_Ethiopia%29_20.jpg/1280px-Precious_opal_%28Berbere_Hill%2C_Ethiopia%29_20.jpg"
+    },
+    {
+      "id": "fff999c67e4c",
+      "biome": "franklin",
+      "file": "images/fff999c67e4c.png",
+      "caption": "Inside adit portal, Sterling Hill Mine \u2014 tunnel walls in ore/marble (in-situ scale)",
+      "source": "https://commons.wikimedia.org/wiki/File:Sterling-hill-mining-museum-inside-adit-portal.png",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/24/Sterling-hill-mining-museum-inside-adit-portal.png/1280px-Sterling-hill-mining-museum-inside-adit-portal.png"
+    },
+    {
+      "id": "42b27480691f",
+      "biome": "franklin",
+      "file": "images/42b27480691f.jpg",
+      "caption": "Edison Tunnel, Sterling Hill \u2014 underground passage/rock wall reference",
+      "source": "https://commons.wikimedia.org/wiki/File:The_Edison_Tunnel%2C_Sterling_Hill_Mining_Museum%2C_Ogdensburg%2C_NJ_-_2025.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/91/The_Edison_Tunnel%2C_Sterling_Hill_Mining_Museum%2C_Ogdensburg%2C_NJ_-_2025.jpg/1280px-The_Edison_Tunnel%2C_Sterling_Hill_Mining_Museum%2C_Ogdensburg%2C_NJ_-_2025.jpg"
+    },
+    {
+      "id": "69e7f002dcdc",
+      "biome": "franklin",
+      "file": "images/69e7f002dcdc.jpg",
+      "caption": "Adit entrance, Sterling Hill Mine \u2014 rock face at mine opening",
+      "source": "https://commons.wikimedia.org/wiki/File:Adit%2C_Sterling_Hill_Mine%2C_Ogdensburg%2C_NJ_-_2025.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/19/Adit%2C_Sterling_Hill_Mine%2C_Ogdensburg%2C_NJ_-_2025.jpg/1280px-Adit%2C_Sterling_Hill_Mine%2C_Ogdensburg%2C_NJ_-_2025.jpg"
+    },
+    {
+      "id": "157bfddee6bb",
+      "biome": "franklin",
+      "file": "images/157bfddee6bb.jpg",
+      "caption": "Mine tunnel wall, locality unverified (may not be Franklin; dark)",
+      "source": "https://commons.wikimedia.org/wiki/File:Mine_tunnel_wall.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/79/Mine_tunnel_wall.jpg/1280px-Mine_tunnel_wall.jpg"
+    },
+    {
+      "id": "e1f978b6ce51",
+      "biome": "franklin",
+      "file": "images/e1f978b6ce51.jpg",
+      "caption": "Willemite, natural vs UV light side-by-side \u2014 color shift reference",
+      "source": "https://commons.wikimedia.org/wiki/File:Willemite_in_natural_and_ultraviolet_light.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f7/Willemite_in_natural_and_ultraviolet_light.jpg/1280px-Willemite_in_natural_and_ultraviolet_light.jpg"
+    },
+    {
+      "id": "595af20a843e",
+      "biome": "franklin",
+      "file": "images/595af20a843e.jpg",
+      "caption": "Fluorescent minerals under UV (Franklin-type) \u2014 glow color palette",
+      "source": "https://commons.wikimedia.org/wiki/File:Fluorescent_minerals_hg.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/12/Fluorescent_minerals_hg.jpg/1280px-Fluorescent_minerals_hg.jpg"
+    },
+    {
+      "id": "ca00c93aa563",
+      "biome": "franklin",
+      "file": "images/ca00c93aa563.jpg",
+      "caption": "Zincite + franklinite in calcite, Franklin \u2014 red zincite / black franklinite ore texture",
+      "source": "https://commons.wikimedia.org/wiki/File:Zincite%2C_Franklinite%2C_Calcite._Franklin%2C_New_Jersey%2C_USA-8957.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d5/Zincite%2C_Franklinite%2C_Calcite._Franklin%2C_New_Jersey%2C_USA-8957.jpg/1280px-Zincite%2C_Franklinite%2C_Calcite._Franklin%2C_New_Jersey%2C_USA-8957.jpg"
+    },
+    {
+      "id": "cbf7d9d5895d",
+      "biome": "franklin",
+      "file": "images/cbf7d9d5895d.jpg",
+      "caption": "Franklinite-zincite-calcite rock, Franklin Marble \u2014 host rock close-up",
+      "source": "https://commons.wikimedia.org/wiki/File:Franklinite-zincite-calcite_rock_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_Franklin%2C_northern_New_Jersey%2C_USA%29_2.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7d/Franklinite-zincite-calcite_rock_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_Franklin%2C_northern_New_Jersey%2C_USA%29_2.jpg/1280px-Franklinite-zincite-calcite_rock_%28Franklin_Marble%2C_Mesoproterozoic%2C_1.03-1.08_Ga%3B_Franklin%2C_northern_New_Jersey%2C_USA%29_2.jpg"
+    },
+    {
+      "id": "b577bf5eb50d",
+      "biome": "schist",
+      "file": "images/b577bf5eb50d.jpg",
+      "caption": "Blue kyanite blades scattered through silvery mica schist, Ticino, Switzerland \u2014 target look for kyanite-in-host wall blocks",
+      "source": "https://commons.wikimedia.org/wiki/File:Kyanite,_Tessin,_Switzerland-8823.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e0/Kyanite%2C_Tessin%2C_Switzerland-8823.jpg/1280px-Kyanite%2C_Tessin%2C_Switzerland-8823.jpg"
+    },
+    {
+      "id": "d85de0fbdf26",
+      "biome": "schist",
+      "file": "images/d85de0fbdf26.jpg",
+      "caption": "Large parallel kyanite blade cluster with white quartz, Itamarandiba, Minas Gerais \u2014 big-blade habit and blue/white banding",
+      "source": "https://commons.wikimedia.org/wiki/File:Kyanite_Itamarandiba_MNHN_Min%C3%A9ralogie.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c2/Kyanite_Itamarandiba_MNHN_Min%C3%A9ralogie.jpg/1280px-Kyanite_Itamarandiba_MNHN_Min%C3%A9ralogie.jpg"
+    },
+    {
+      "id": "0288676c10de",
+      "biome": "schist",
+      "file": "images/0288676c10de.jpg",
+      "caption": "Fanned kyanite blades on quartz \u2014 color gradient within blades, fibrous/striated surface",
+      "source": "https://commons.wikimedia.org/wiki/File:Kyanite_crystals.jpg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/0/00/Kyanite_crystals.jpg"
+    },
+    {
+      "id": "ea5a0ddf81ae",
+      "biome": "schist",
+      "file": "images/ea5a0ddf81ae.jpg",
+      "caption": "Kyanite schist packed with small blue blades in grey matrix \u2014 dense host-rock texture option",
+      "source": "https://commons.wikimedia.org/wiki/File:Kyanite_schist_1_(31284731697).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1d/Kyanite_schist_1_%2831284731697%29.jpg/1280px-Kyanite_schist_1_%2831284731697%29.jpg"
+    },
+    {
+      "id": "15f0f853473f",
+      "biome": "schist",
+      "file": "images/15f0f853473f.jpg",
+      "caption": "Kyanite-muscovite schist outcrop (knife for scale) \u2014 in-situ: pale kyanite blades in glittery dark mica foliation",
+      "source": "https://commons.wikimedia.org/wiki/File:Kyanite-muscovite_schist_(GeoDIL_number_-_1697).jpg"
+    },
+    {
+      "id": "6afb21d42c1b",
+      "biome": "schist",
+      "file": "images/6afb21d42c1b.jpg",
+      "caption": "Garnet mica schist outcrop, Syros, Greece (coin for scale) \u2014 in-situ density of red-brown garnet porphyroblasts on a rock face",
+      "source": "https://commons.wikimedia.org/wiki/File:Garnet_Mica_Schist_Syros_Greece.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/76/Garnet_Mica_Schist_Syros_Greece.jpg/1280px-Garnet_Mica_Schist_Syros_Greece.jpg"
+    },
+    {
+      "id": "9766b3dff218",
+      "biome": "schist",
+      "file": "images/9766b3dff218.jpg",
+      "caption": "Dark almandine dodecahedra standing out of green-silver mica schist, Granatkogel, \u00d6tztal, Austria \u2014 garnet habit and weathering relief",
+      "source": "https://commons.wikimedia.org/wiki/File:Almandine_in_Mica_schist._Granatkogel,_%C3%96ztal,_Austria-8869.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/18/Almandine_in_Mica_schist._Granatkogel%2C_%C3%96ztal%2C_Austria-8869.jpg/1280px-Almandine_in_Mica_schist._Granatkogel%2C_%C3%96ztal%2C_Austria-8869.jpg"
+    },
+    {
+      "id": "009d2f7a1e6a",
+      "biome": "schist",
+      "file": "images/009d2f7a1e6a.jpg",
+      "caption": "Garnet schist hand sample \u2014 wavy silvery-grey foliation sheen with scattered red almandine",
+      "source": "https://commons.wikimedia.org/wiki/File:Garnet_schist_1_(16735443408).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/14/Garnet_schist_1_%2816735443408%29.jpg/1280px-Garnet_schist_1_%2816735443408%29.jpg"
+    },
+    {
+      "id": "a9699e93237f",
+      "biome": "schist",
+      "file": "images/a9699e93237f.jpg",
+      "caption": "Coarse sparkly mica schist, Talcville, Adirondacks NY \u2014 reference for the glittery/specular mica surface under a path tracer",
+      "source": "https://commons.wikimedia.org/wiki/File:Mica_schist_(Mesoproterozoic,_~1.13_Ga;_Talcville,_Adirondack_Mountains,_New_York_State,_USA).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/07/Mica_schist_%28Mesoproterozoic%2C_~1.13_Ga%3B_Talcville%2C_Adirondack_Mountains%2C_New_York_State%2C_USA%29.jpg/1280px-Mica_schist_%28Mesoproterozoic%2C_~1.13_Ga%3B_Talcville%2C_Adirondack_Mountains%2C_New_York_State%2C_USA%29.jpg"
+    },
+    {
+      "id": "9da2a548410a",
+      "biome": "schist",
+      "file": "images/9da2a548410a.jpg",
+      "caption": "Brown staurolite cross-twin in pale sparkly schist, Keivy, Kola Peninsula \u2014 optional accent mineral",
+      "source": "https://commons.wikimedia.org/wiki/File:Staurolite_schist_(Keivy_Schist;_Mt._Ploskaya,_Kola_Peninsula,_Russia)_11.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/17/Staurolite_schist_%28Keivy_Schist%3B_Mt._Ploskaya%2C_Kola_Peninsula%2C_Russia%29_11.jpg/1280px-Staurolite_schist_%28Keivy_Schist%3B_Mt._Ploskaya%2C_Kola_Peninsula%2C_Russia%29_11.jpg"
+    },
+    {
+      "id": "e9164c06b0d2",
+      "biome": "schist",
+      "file": "images/e9164c06b0d2.jpg",
+      "caption": "Birch Creek schist cliff above river \u2014 large-scale: tilted, slabby foliation planes and blocky jointing for cave walls",
+      "source": "https://commons.wikimedia.org/wiki/File:Birch_Creek_schist_cliff_(54412647613).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0c/Birch_Creek_schist_cliff_%2854412647613%29.jpg/1280px-Birch_Creek_schist_cliff_%2854412647613%29.jpg"
+    },
+    {
+      "id": "a52b76aab243",
+      "biome": "schist",
+      "file": "images/a52b76aab243.jpg",
+      "caption": "Old quarry face, Ruhla, Thuringia (rock type unverified; may not be mica schist)",
+      "source": "https://commons.wikimedia.org/wiki/File:WAK_Ruhla_037a.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8e/WAK_Ruhla_037a.jpg/1280px-WAK_Ruhla_037a.jpg"
+    },
+    {
+      "id": "019a8f65681b",
+      "biome": "copper",
+      "file": "images/019a8f65681b.jpg",
+      "caption": "Kapunda copper mine, SA - outcrop wall with big blue-green copper-stained patch among ochre/pink weathered rock; best large-scale wall colour ref",
+      "source": "https://commons.wikimedia.org/wiki/File:Kapunda_mine_site-2.JPG",
+      "rating": "cool",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a7/Kapunda_mine_site-2.JPG/1280px-Kapunda_mine_site-2.JPG"
+    },
+    {
+      "id": "befab6beee02",
+      "biome": "copper",
+      "file": "images/befab6beee02.jpg",
+      "caption": "Kapunda mine face, SA - blocky fractured rock with blue azurite/green malachite staining along joints; in-situ stain pattern on cave wall",
+      "source": "https://commons.wikimedia.org/wiki/File:Kapunda_azurite.JPG",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3b/Kapunda_azurite.JPG/1280px-Kapunda_azurite.JPG"
+    },
+    {
+      "id": "bcc91c6277d2",
+      "biome": "copper",
+      "file": "images/bcc91c6277d2.jpg",
+      "caption": "Kapunda open cut, SA - banded rust/grey/green walls over acid-green copper pool; flooded-cavern mood + wall strata",
+      "source": "https://commons.wikimedia.org/wiki/File:Kapunda_mine_site-3.JPG",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f1/Kapunda_mine_site-3.JPG/1280px-Kapunda_mine_site-3.JPG"
+    },
+    {
+      "id": "53c049342152",
+      "biome": "copper",
+      "file": "images/53c049342152.jpg",
+      "caption": "Lavender Pit, Bisbee AZ - benched open pit in rust-red/purple/grey gossan and altered rock; large-scale oxidized-zone palette",
+      "source": "https://commons.wikimedia.org/wiki/File:Bisbee-The_Lavender_Pit-1.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7b/Bisbee-The_Lavender_Pit-1.jpg/1280px-Bisbee-The_Lavender_Pit-1.jpg"
+    },
+    {
+      "id": "fbf50d11d6d3",
+      "biome": "copper",
+      "file": "images/fbf50d11d6d3.jpg",
+      "caption": "Azurite + malachite on rusty limonite gossan, Morenci AZ - deep blue crust, green blebs, orange-brown host; key 3-colour combo",
+      "source": "https://commons.wikimedia.org/wiki/File:Azurite-malachite_on_gossan_(Morenci_Mine,_Arizona,_USA)_(27890565095).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7f/Azurite-malachite_on_gossan_%28Morenci_Mine%2C_Arizona%2C_USA%29_%2827890565095%29.jpg/1280px-Azurite-malachite_on_gossan_%28Morenci_Mine%2C_Arizona%2C_USA%29_%2827890565095%29.jpg"
+    },
+    {
+      "id": "a88cde91818b",
+      "biome": "copper",
+      "file": "images/a88cde91818b.jpg",
+      "caption": "Malachite-stained sandstone, Salina Canyon UT - diffuse teal copper staining over tan/rust host rock; host-rock texture for stained stone blocks",
+      "source": "https://commons.wikimedia.org/wiki/File:Malachite_(near_old_copper_mine,_Salina_Canyon,_Sevier_County,_Utah,_USA)_1.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/68/Malachite_%28near_old_copper_mine%2C_Salina_Canyon%2C_Sevier_County%2C_Utah%2C_USA%29_1.jpg/1280px-Malachite_%28near_old_copper_mine%2C_Salina_Canyon%2C_Sevier_County%2C_Utah%2C_USA%29_1.jpg"
+    },
+    {
+      "id": "c9cf55b17ee7",
+      "biome": "copper",
+      "file": "images/c9cf55b17ee7.jpg",
+      "caption": "Botryoidal malachite on grey matrix - bubbly dark-green hemispheres; crust/nodule habit for wall growths",
+      "source": "https://commons.wikimedia.org/wiki/File:Botryoidal_malachite_02.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cd/Botryoidal_malachite_02.jpg/1280px-Botryoidal_malachite_02.jpg"
+    },
+    {
+      "id": "aee08cf4d01c",
+      "biome": "copper",
+      "file": "images/aee08cf4d01c.png",
+      "caption": "Banded + stalactitic malachite - concentric light/dark green rings and dripstone tubes; banding texture and speleothem-style malachite",
+      "source": "https://commons.wikimedia.org/wiki/File:Free-form_Malachite_Growing_like_Tree_Rings.png",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/65/Free-form_Malachite_Growing_like_Tree_Rings.png/1280px-Free-form_Malachite_Growing_like_Tree_Rings.png"
+    },
+    {
+      "id": "bea7777c4b66",
+      "biome": "copper",
+      "file": "images/bea7777c4b66.jpg",
+      "caption": "Azurite crystals partly replaced by malachite, Tsumeb Namibia - dark blue prisms with green pseudomorph rinds on tan matrix; crystal habit",
+      "source": "https://commons.wikimedia.org/wiki/File:2546,Azurit,Tsumeb,Afrika,123g_(1).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fa/2546%2CAzurit%2CTsumeb%2CAfrika%2C123g_%281%29.jpg/1280px-2546%2CAzurit%2CTsumeb%2CAfrika%2C123g_%281%29.jpg"
+    },
+    {
+      "id": "b93ecc54c75c",
+      "biome": "copper",
+      "file": "images/b93ecc54c75c.jpg",
+      "caption": "Dioptase with calcite, Tsumeb Namibia - vivid emerald-green crystals among white calcite rhombs; rare accent crystal cluster",
+      "source": "https://commons.wikimedia.org/wiki/File:Dioptasetsumeb5.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/27/Dioptasetsumeb5.jpg/1280px-Dioptasetsumeb5.jpg"
+    },
+    {
+      "id": "e4bf21b57d31",
+      "biome": "copper",
+      "file": "images/e4bf21b57d31.jpg",
+      "caption": "Chrysocolla crust close-up - turquoise/cyan glassy botryoidal surface with rusty patches; cyan end of the copper palette",
+      "source": "https://commons.wikimedia.org/wiki/File:Chrysocolla.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/35/Chrysocolla.jpg/1280px-Chrysocolla.jpg"
+    },
+    {
+      "id": "b820d6f1c89a",
+      "biome": "copper",
+      "file": "images/b820d6f1c89a.jpg",
+      "caption": "Atacamite on malachite, Mt Gunson SA - dark bottle-green bladed crystal mass; darker green crystal texture variant",
+      "source": "https://commons.wikimedia.org/wiki/File:Atacamite_on_malachite_-_Mt_Gunson_mines,_South_Australia.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9b/Atacamite_on_malachite_-_Mt_Gunson_mines%2C_South_Australia.jpg/1280px-Atacamite_on_malachite_-_Mt_Gunson_mines%2C_South_Australia.jpg"
+    },
+    {
+      "id": "f75d3c3a71db",
+      "biome": "franklin",
+      "file": "images/f75d3c3a71db.jpg",
+      "caption": "Rainbow Tunnel, Sterling Hill Mine, under UV: in-situ tunnel wall/ceiling glowing green willemite + red calcite over a flooded floor (photo Jeff Glover) \u2014 wall-scale fluorescent ore target",
+      "source": "https://www.smithsonianmag.com/travel/largest-collection-fluorescent-rocks-180962572/",
+      "url": "https://tf-cmsv2-smithsonianmag-media.s3.amazonaws.com/filer/4a/41/4a419589-54f0-4e5e-9aa2-fa223e8296f6/april-may2010001_2.jpg"
+    },
+    {
+      "id": "b8519ed95633",
+      "biome": "franklin",
+      "file": "images/b8519ed95633.jpg",
+      "caption": "Rainbow Tunnel, Sterling Hill, under UV with visitors for scale: whole tunnel face fluorescing green/red \u2014 shows how the glow reads at room scale (photo Jeff Glover)",
+      "source": "https://www.smithsonianmag.com/travel/largest-collection-fluorescent-rocks-180962572/",
+      "url": "https://th-thumbnailer.cdn-si-edu.com/6c1CgwIh0hSZucREvAvHiN-C4mI=/fit-in/1600x0/https://tf-cmsv2-smithsonianmag-media.s3.amazonaws.com/filer/2e/17/2e17ae4c-d574-40d8-a97a-bf9c11ccd5e7/summer2009106_2.jpg"
+    },
+    {
+      "id": "7557d4d3dc62",
+      "biome": "franklin",
+      "file": "images/7557d4d3dc62.jpg",
+      "caption": "Rainbow Room, Sterling Hill, under UV: red-fluorescing calcite band arching over the drift ceiling with green willemite; boulders in front are a display",
+      "source": "https://www.sterlinghillminingmuseum.org/inside-the-mine",
+      "url": "https://images.squarespace-cdn.com/content/v1/5b3a261fec4eb7788172ec89/75c8eb92-15e9-4cd5-99b3-eeaba3a64fe2/rainbow.jpg?format=1500w"
+    },
+    {
+      "id": "48ac10bef4f1",
+      "biome": "franklin",
+      "file": "images/48ac10bef4f1.jpg",
+      "caption": "Sterling Hill Mine drift in normal light: rough tan/rust/grey marble-and-ore walls, rail and walkway \u2014 visible-light counterpart to the UV shots",
+      "source": "https://www.sterlinghillminingmuseum.org/inside-the-mine",
+      "url": "https://images.squarespace-cdn.com/content/v1/5b3a261fec4eb7788172ec89/1531235181238-WYM164ZK6B3PL937CAX8/Tunnel1.jpeg"
+    },
+    {
+      "id": "333243b2a5e2",
+      "biome": "pegmatite",
+      "file": "images/333243b2a5e2.jpg",
+      "caption": "Opened pocket, Havey pegmatite, Maine (2018): green tourmaline pencils scattered in pale pocket clay beside blocky cream feldspar \u2014 in-situ pocket contents target",
+      "source": "https://www.gia.edu/gems-gemology/summer-2025-colored-stones-unearthed",
+      "url": "https://www.gia.edu/dam/migrated-assets/images/SU25-CSU-Fig11-331245-636px.jpg"
+    },
+    {
+      "id": "33369a26be1a",
+      "biome": "pegmatite",
+      "file": "images/33369a26be1a.jpg",
+      "caption": "Open pockets along the core zone, Havey pegmatite, Maine (2017): dark cavities strung along a pale pegmatite quarry face, person for scale \u2014 pocket spacing/size at wall scale",
+      "source": "https://www.gia.edu/gems-gemology/summer-2025-colored-stones-unearthed",
+      "url": "https://www.gia.edu/dam/migrated-assets/images/SU25-CSU-Fig7-331247-468px.jpg"
+    },
+    {
+      "id": "87aa0e1ac9f3",
+      "biome": "pegmatite",
+      "file": "images/87aa0e1ac9f3.jpg",
+      "caption": "Underground subhorizontal pegmatite dike (~2 m thick), San Diego mine, Mesa Grande CA: emptied pockets along the dike center, pale core vs pink/rust margins \u2014 layered dike cross-section",
+      "source": "https://www.gia.edu/gems-gemology/summer-2025-colored-stones-unearthed",
+      "url": "https://www.gia.edu/dam/migrated-assets/images/SU25-CSU-Fig10-331243-636px.jpg"
+    },
+    {
+      "id": "8b0d0e88c7cf",
+      "biome": "pegmatite",
+      "file": "images/8b0d0e88c7cf.jpg",
+      "caption": "Mt Mica, Maine, pocket 1-09: gemmy blue-green tourmaline pieces lying exactly as exposed after washing out pocket mud, among white quartz/feldspar and rusty stain (Coromoto Minerals; small image)",
+      "source": "https://coromotominerals.com/MM08Jan.html"
+    },
+    {
+      "id": "9c487e964582",
+      "biome": "pegmatite",
+      "file": "images/9c487e964582.jpg",
+      "caption": "Mt Mica pocket 2-09: large fractured green tourmaline still in pocket debris of cream feldspar and rusty mud, drill steel for scale (Coromoto Minerals)",
+      "source": "https://coromotominerals.com/MM08Jan.html"
+    },
+    {
+      "id": "f678e07a790e",
+      "biome": "pegmatite",
+      "file": "images/f678e07a790e.jpg",
+      "caption": "Mt Mica pocket 2-09 just chiseled open underground: dark cavity with blocky feldspar margin in rust/tan pegmatite wall, hose for scale \u2014 pocket-as-hole shape",
+      "source": "https://coromotominerals.com/MM08Jan.html"
+    },
+    {
+      "id": "ed894f4cd123",
+      "biome": "marble",
+      "file": "images/ed894f4cd123.jpg",
+      "caption": "Ruby (corundum) crystal plate on white calcite/marble base, Pyin-Oo-Lwin District, Myanmar \u2014 dense raspberry-red crust sitting on white host",
+      "source": "http://n2t.net/ark:/65665/34bf5d7ef-d72f-4a27-a7f5-bd19c75e54ea",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3e4558f4224274d4794f5a6d9c78dbf24?max=1600"
+    },
+    {
+      "id": "e1711a7488ce",
+      "biome": "marble",
+      "file": "images/e1711a7488ce.jpg",
+      "caption": "Corundum crystal on pale matrix, Azad Kashmir, Pakistan \u2014 hexagonal barrel habit, glowing hot-pink translucency",
+      "source": "http://n2t.net/ark:/65665/3acc23f9e-5a88-450c-b932-73ae8ca1d7a9",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3e6e69ac5dba340d183c716803f38cba0?max=1600"
+    },
+    {
+      "id": "aeecd9147136",
+      "biome": "marble",
+      "file": "images/aeecd9147136.jpg",
+      "caption": "Ruby crystal cluster on green matrix, Mandalay, Myanmar \u2014 deep red stacked crystals, red-on-green contrast",
+      "source": "http://n2t.net/ark:/65665/3892a869a-b2e8-47b5-872a-07aa8b494d7d",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3641292ced16f4bc294d4e6b87de8c139?max=1600"
+    },
+    {
+      "id": "26371ae25d1f",
+      "biome": "marble",
+      "file": "images/26371ae25d1f.jpg",
+      "caption": "Lazurite with calcite, pyrite and nepheline(?), Afghanistan \u2014 large blue lazurite crystals with white calcite seams",
+      "source": "http://n2t.net/ark:/65665/3a51a42b0-744f-4ab4-a2c1-416199fd0650",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3d338eb4a4b30499097f1ad9cd6edf4db?max=1600"
+    },
+    {
+      "id": "9b4a8802b29c",
+      "biome": "marble",
+      "file": "images/9b4a8802b29c.jpg",
+      "caption": "Lazurite in pale grey-white host rock, Lake Baikal, Siberia \u2014 patchy blue lazurite vs white, non-Afghan palette",
+      "source": "http://n2t.net/ark:/65665/347401ed0-e8da-40a2-8914-07c365e7cbfc",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m36af1f4ebca6d478992c4a1ad71cffa3b?max=1600"
+    },
+    {
+      "id": "ecf2d3ae61b5",
+      "biome": "marble",
+      "file": "images/ecf2d3ae61b5.jpg",
+      "caption": "Afghanite crystals in white matrix, Koksha Valley, Badakhshan, Afghanistan \u2014 blue prisms embedded in pale host",
+      "source": "http://n2t.net/ark:/65665/3bba0ef4b-ee90-40e9-813d-635642ab7704",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m37ecf5fb1de7d40c3b2c4a3b5773b2d19?max=1600"
+    },
+    {
+      "id": "20ca29652f17",
+      "biome": "marble",
+      "file": "images/20ca29652f17.jpg",
+      "caption": "Corundum with spinel in banded grey-white rock, Elgon, Kenya \u2014 sparse pink-red crystals in foliated host (low-density ore look)",
+      "source": "http://n2t.net/ark:/65665/360470e8e-69a2-49ec-b95c-6e939d13962a",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m33f64dbae7a5b43748110069786f75ff8?max=1600"
+    },
+    {
+      "id": "8b86c55c27b0",
+      "biome": "pegmatite",
+      "file": "images/8b86c55c27b0.jpg",
+      "caption": "Elbaite cluster, Pala, San Diego Co. CA \u2014 color-zoned crystals with pink/green terminations on pale pocket matrix",
+      "source": "http://n2t.net/ark:/65665/3db7a9732-00b3-4f5e-a4a1-c381b6317c4d",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3d4df1057acae4586aecc417c4b2d5817?max=1600"
+    },
+    {
+      "id": "e2d10c2d0843",
+      "biome": "pegmatite",
+      "file": "images/e2d10c2d0843.jpg",
+      "caption": "Amazonite (microcline) with white bladed feldspar sprays, Crystal Peak, Teller Co. CO \u2014 pocket close-up, blue-green blocks in white fluff",
+      "source": "http://n2t.net/ark:/65665/363a2fc90-41d6-4f24-9fe2-9b0ebe4e3154",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3452fe0fc599941e898c3ab2256bd0b5e?max=1600"
+    },
+    {
+      "id": "92a9eb695900",
+      "biome": "pegmatite",
+      "file": "images/92a9eb695900.jpg",
+      "caption": "Beryl var. morganite crystals on a mica ball, Pala, San Diego Co. CA \u2014 peach beryl on olive-green scaly mica",
+      "source": "http://n2t.net/ark:/65665/398ac2b38-7c0d-414e-a658-cc1c8a847613",
+      "rating": "ignore",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3a3efc515dfa8408ea1ea1d2acc026f58?max=1600"
+    },
+    {
+      "id": "efd547bf488e",
+      "biome": "pegmatite",
+      "file": "images/efd547bf488e.jpg",
+      "caption": "Lepidolite with elbaite and orthoclase, Pala, San Diego Co. CA \u2014 purple lepidolite books crusting pale feldspar",
+      "source": "http://n2t.net/ark:/65665/3969fa4e2-0d5a-44ef-859b-d7aa629ac6b6",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3faa794cb3d504bdb872efbda219b384c?max=1600"
+    },
+    {
+      "id": "4e66ede81e69",
+      "biome": "pegmatite",
+      "file": "images/4e66ede81e69.jpg",
+      "caption": "Aquamarine prisms in muscovite, Gilgit, Pakistan \u2014 pale blue beryl nested in bronze mica rosettes",
+      "source": "http://n2t.net/ark:/65665/3ea92c9e2-86aa-4c01-96b2-03af07f947e2",
+      "rating": "ignore",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m310614da6da854ce7a824823b6e221023?max=1600"
+    },
+    {
+      "id": "0ca89232c46d",
+      "biome": "pegmatite",
+      "file": "images/0ca89232c46d.jpg",
+      "caption": "Amazonite (microcline) on smoky quartz, Colorado \u2014 blue-green feldspar against dark brown quartz",
+      "source": "http://n2t.net/ark:/65665/35ff03822-2eb8-4787-8dbf-76969144cbe2",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m36068990c564547198bdcdec9260df90f?max=1600"
+    },
+    {
+      "id": "aa72f4fefd3c",
+      "biome": "pegmatite",
+      "file": "images/aa72f4fefd3c.jpg",
+      "caption": "Lepidolite, radial slab, Muiane Pegmatite, Mozambique \u2014 pink-lilac radiating fibrous texture",
+      "source": "http://n2t.net/ark:/65665/323011ef2-d6a0-413c-995b-9a5644325bad",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m39b6c586de3b6460b897040ecd44373b7?max=1600"
+    },
+    {
+      "id": "621e361fe412",
+      "biome": "opal",
+      "file": "images/621e361fe412.jpg",
+      "caption": "Opal, Clover Creek, Lincoln Co. ID \u2014 cross-section with wood-like growth rings (appears to be opalized wood); tan/yellow palette",
+      "source": "http://n2t.net/ark:/65665/374af2606-1f2a-4af7-9df0-6161fe1bc640",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m32e046180d1fb447bbb0c0637b5234471?max=1600"
+    },
+    {
+      "id": "ae46a63fe3f3",
+      "biome": "opal",
+      "file": "images/ae46a63fe3f3.jpg",
+      "caption": "Opal, Virgin Valley, Humboldt Co. NV \u2014 limb-shaped piece with pale body and red/green play of color along the break",
+      "source": "http://n2t.net/ark:/65665/394b31ace-0917-40c1-94be-9b56229b0d19",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m308b22c52ca454e78a40c8db665152621?max=1600"
+    },
+    {
+      "id": "084937099ee9",
+      "biome": "opal",
+      "file": "images/084937099ee9.jpg",
+      "caption": "Roebling Opal (rough black opal), Virgin Valley NV \u2014 large rough chunk with intense green/blue flash and gold-toned surface",
+      "source": "http://n2t.net/ark:/65665/30b2fd83b-e213-407f-9f55-5f297641ac81",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3f8d8d3b4fa984885bb2391fee247937f?max=1600"
+    },
+    {
+      "id": "a81f1520e756",
+      "biome": "opal",
+      "file": "images/a81f1520e756.jpg",
+      "caption": "Rough opal, Australia \u2014 pale potch-like body with blue flashes and weathered crust; unpolished nodule look",
+      "source": "http://n2t.net/ark:/65665/3e80296d4-0727-4a61-8fe6-900bbbfc6e80",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m39d214628179a4a658559bc526dcdb84d?max=1600"
+    },
+    {
+      "id": "3e442e3de70b",
+      "biome": "opal",
+      "file": "images/3e442e3de70b.jpg",
+      "caption": "Opal in ironstone shell, Queensland \u2014 multicolor opal core ringed by dark brown ironstone (nut/nodule geometry)",
+      "source": "http://n2t.net/ark:/65665/3411253c3-301b-4740-82a4-68df4ae912a7",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3328d7083f559433fa8e3348bbef770cc?max=1600"
+    },
+    {
+      "id": "6f56f49c7fc7",
+      "biome": "opal",
+      "file": "images/6f56f49c7fc7.jpg",
+      "caption": "Opal in rhyolite matrix, Quer\u00e9taro, Mexico \u2014 opal filling vugs in tan porous host rock, flashes of green",
+      "source": "http://n2t.net/ark:/65665/37c56b08c-a274-4ab7-b156-174734a0e9ab",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3b5e588ba459e43fe8d1e95b4c990f65b?max=1600"
+    },
+    {
+      "id": "a9fc2df45314",
+      "biome": "opal",
+      "file": "images/a9fc2df45314.jpg",
+      "caption": "Opal close-up, Virgin Valley NV \u2014 macro of red/green play-of-color patches on dark body",
+      "source": "http://n2t.net/ark:/65665/3d5ebebe6-5c55-4fd6-b30a-58b7736c6880",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m34fc1d9557f1a437ab83879595e93534c?max=1600"
+    },
+    {
+      "id": "ebfa5f74ab3d",
+      "biome": "franklin",
+      "file": "images/ebfa5f74ab3d.jpg",
+      "caption": "Willemite with zincite, Franklin NJ \u2014 orange-red zincite band through white calcite with dark grains",
+      "source": "http://n2t.net/ark:/65665/311b34b77-07fb-43f8-b767-ed5b9b54e0f3",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m36e935c3799294e88850a6c71f35f740a?max=1600"
+    },
+    {
+      "id": "a5e670754249",
+      "biome": "franklin",
+      "file": "images/a5e670754249.jpg",
+      "caption": "Zincite crystal on white matrix, Franklin NJ \u2014 large deep-red pyramidal crystal with orange grains",
+      "source": "http://n2t.net/ark:/65665/3099751ce-dbac-4a01-873b-64d8dd5010aa",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3b4c824dcd2d04e09bc3f4f676ecd9c6b?max=1600"
+    },
+    {
+      "id": "9f334bda2b64",
+      "biome": "franklin",
+      "file": "images/9f334bda2b64.jpg",
+      "caption": "Zincite in white calcite, Ogdensburg NJ \u2014 cut pair showing dark red-brown zincite veins swirling through white host",
+      "source": "http://n2t.net/ark:/65665/37c47de3e-4daa-4c39-b45f-51b0bef38017",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m327f4bc676ea347fcb6667a659ef41942?max=1600"
+    },
+    {
+      "id": "fcea9c75a6a9",
+      "biome": "franklin",
+      "file": "images/fcea9c75a6a9.jpg",
+      "caption": "Willemite with black grains in calcite, Franklin NJ \u2014 salmon/orange + black + white ore mix, visible light",
+      "source": "http://n2t.net/ark:/65665/38c89aaca-6f5d-4c26-9931-46532be9b6bd",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m30bf15ace9e8d4f76ada40d697de8a14d?max=1600"
+    },
+    {
+      "id": "054585ffaef0",
+      "biome": "franklin",
+      "file": "images/054585ffaef0.jpg",
+      "caption": "Norbergite in calcite, Franklin NJ \u2014 brown grains scattered through white marble host (texture)",
+      "source": "http://n2t.net/ark:/65665/39f87a62d-760d-4145-91a0-cb54b281129f",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3a45e90ae57f04101b2fa849b82ef3c43?max=1600"
+    },
+    {
+      "id": "2f09e5120c87",
+      "biome": "franklin",
+      "file": "images/2f09e5120c87.jpg",
+      "caption": "Willemite prism, Sussex Co. NJ \u2014 rare crystal habit, pale brown striated prism",
+      "source": "http://n2t.net/ark:/65665/35381371f-fa29-451b-b797-3705c3c826ea",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m358ff3657e70240d4bf95b20fdf2a5124?max=1600"
+    },
+    {
+      "id": "576db6336752",
+      "biome": "franklin",
+      "file": "images/576db6336752.jpg",
+      "caption": "Franklinite, New Jersey \u2014 massive black metallic ore chunk, sheen and fracture",
+      "source": "http://n2t.net/ark:/65665/3a035a435-bf3b-4caf-9b69-cc23409f0ed8",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3c49e5d2b8ac94e7788fdde4a73031e9c?max=1600"
+    },
+    {
+      "id": "aed28e3deedd",
+      "biome": "schist",
+      "file": "images/aed28e3deedd.jpg",
+      "caption": "Kyanite quartzite outdoor rock surface (GeoDIL; page gives no locality): grey-blue kyanite blades weathering out in relief from pale quartz \u2014 in-situ-looking blade density, not vivid blue",
+      "source": "https://commons.wikimedia.org/wiki/File:Kyanite_Quartzite_(GeoDIL_number_-_2550).jpg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/8/86/Kyanite_Quartzite_%28GeoDIL_number_-_2550%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+    },
+    {
+      "id": "3a8119744670",
+      "biome": "schist",
+      "file": "images/3a8119744670.jpg",
+      "caption": "Vadito Group muscovite schist road cut, Dixon\u2013Picuris NM, at midday: parallel mica flakes reflect sun so the whole wall reads as silvery metal \u2014 wall-scale mica sheen target",
+      "source": "https://commons.wikimedia.org/wiki/File:Vadito_schist_wall.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Vadito_schist_wall.jpg/1280px-Vadito_schist_wall.jpg"
+    },
+    {
+      "id": "d2840dc2c720",
+      "biome": "copper",
+      "file": "images/d2840dc2c720.jpg",
+      "caption": "Dioptase lining a cavity in rusty host rock, Congo (Rep.): whole vug wall packed with emerald-green crystals \u2014 crystal-lined pocket, not just a cluster",
+      "source": "http://n2t.net/ark:/65665/37cc8867c-ba1b-4f87-a8b1-4c1b8df7488f",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m31217909e42c54102956fb895b428c07e?max=1600"
+    },
+    {
+      "id": "3baab4edacf8",
+      "biome": "copper",
+      "file": "images/3baab4edacf8.jpg",
+      "caption": "Stalactitic azurite, Bisbee AZ: dark-blue crystal-studded columns rising from green malachite base \u2014 speleothem-shaped copper growths for pillars",
+      "source": "http://n2t.net/ark:/65665/36d221f78-27d2-4280-aaf2-1dfd08a01865",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m36e9c9b76e3e24f58a085fc8abd55b9ef?max=1600"
+    },
+    {
+      "id": "006b655da067",
+      "biome": "copper",
+      "file": "images/006b655da067.jpg",
+      "caption": "Aurichalcite, Bisbee AZ: pale sky-blue radiating tufts filling a pocket in brown limonite \u2014 soft pastel accent inside rusty host",
+      "source": "http://n2t.net/ark:/65665/3a37c3666-fa4a-47b9-a0b3-49077a43168f",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m39a7efd6fa3884ecc9d48f00a55497e9e?max=1600"
+    },
+    {
+      "id": "c96e43353e1b",
+      "biome": "copper",
+      "file": "images/c96e43353e1b.jpg",
+      "caption": "Malachite, Wissen, Germany (close-up): silky green needle sprays in dark cellular boxwork gossan \u2014 sparse crystals in porous weathered host",
+      "source": "http://n2t.net/ark:/65665/39b735e07-c0b5-464d-a224-885abbca4591",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m37a508fa08acf44dd895e0e194cdb92c4?max=1600"
+    },
+    {
+      "id": "f3f27e2ba589",
+      "biome": "copper",
+      "file": "images/f3f27e2ba589.jpg",
+      "caption": "Azurite, Bisbee AZ: dark-blue crystals sitting in a pale-green malachite-lined pocket on tan rock \u2014 pocket interior colour layering",
+      "source": "http://n2t.net/ark:/65665/37c554cbc-eaee-4bcd-b181-4bd7babe4f00",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3cc0d517a0af941f8a39ae01051ed3e2d?max=1600"
+    },
+    {
+      "id": "3913ce2f2530",
+      "biome": "copper",
+      "file": "images/3913ce2f2530.jpg",
+      "caption": "Azurite with malachite, Campbell Mine, Bisbee AZ: blue crystal crust over salmon/orange-red host rock \u2014 blue-on-red contrast palette",
+      "source": "http://n2t.net/ark:/65665/3d25bcf29-502f-4614-9566-4110726df3a7",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m353c7236341404a4f87637d0b2e6c2f88?max=1600"
+    },
+    {
+      "id": "69a6f0377a84",
+      "biome": "copper",
+      "file": "images/69a6f0377a84.jpg",
+      "caption": "Malachite after azurite with calcite, Canoas, Zacatecas MX: dark-green bladed pseudomorph sprays on white calcite \u2014 bladed habit variant",
+      "source": "http://n2t.net/ark:/65665/3f74f9c71-6509-43d6-8419-021a2de9879f",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m34cb3a8815cd44a1a8f8c4f6636d077e8?max=1600"
+    },
+    {
+      "id": "bac93691febc",
+      "biome": "copper",
+      "file": "images/bac93691febc.jpg",
+      "caption": "Azurite rosettes (sectioned \"suns\"), Bisbee AZ: radial deep-blue fibres with pale core \u2014 radial/concentric texture for ore nodules",
+      "source": "http://n2t.net/ark:/65665/38bb459b6-b685-47d5-a62c-786c5930ad90",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m37330b23344f246349ca93947ba6f4354?max=1600"
+    },
+    {
+      "id": "35ba0d31d4be",
+      "biome": "vug",
+      "file": "images/35ba0d31d4be.jpg",
+      "caption": "Fluorite geode, Junction City OH: purple fluorite cubes lining a cavity in pale grey carbonate host \u2014 vug-in-host-rock structure at hand scale",
+      "source": "http://n2t.net/ark:/65665/3694adc5f-9f3e-4d88-91a7-434b15a9f283",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m39c36162fcaf74d2a85785019bf492e75?max=1600"
+    },
+    {
+      "id": "f4735ddef024",
+      "biome": "vug",
+      "file": "images/f4735ddef024.jpg",
+      "caption": "Calcite with sphalerite, Elmwood Mine near Carthage TN: large golden-amber scalenohedra (dogtooth) with dark sphalerite on grey matrix \u2014 fills golden-calcite gap",
+      "source": "http://n2t.net/ark:/65665/330003115-49e9-4bef-9a39-45a3a952ae82",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m37d6f07280b804903820816ace8c45e19?max=1600"
+    },
+    {
+      "id": "3832b312647f",
+      "biome": "vug",
+      "file": "images/3832b312647f.jpg",
+      "caption": "Calcite, Reynolds Co. MO: twinned golden-brown scalenohedral crystal pair \u2014 amber translucency and dogtooth tip shape",
+      "source": "http://n2t.net/ark:/65665/3db855f82-1060-47ac-95b4-c30bf13c3f42",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3a26f5ace8a564336a38de1d488e0c41d?max=1600"
+    },
+    {
+      "id": "3f12c6ab5923",
+      "biome": "vug",
+      "file": "images/3f12c6ab5923.jpg",
+      "caption": "Calcite, Santo Domingo Mine, Santa Eulalia MX: star-burst cluster of grey dogtooth scalenohedra \u2014 spiky wall-crust habit",
+      "source": "http://n2t.net/ark:/65665/3a17d847c-3793-4fa3-aba7-1a27499cba60",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m318d004f3e0d142a286d7e20c783b32c2?max=1600"
+    },
+    {
+      "id": "baa84896176a",
+      "biome": "vug",
+      "file": "images/baa84896176a.jpg",
+      "caption": "Calcite with sphalerite and fluorite, near Carthage TN: black sphalerite, golden calcite and purple fluorite together \u2014 MVT three-mineral palette",
+      "source": "http://n2t.net/ark:/65665/3a5c62799-1add-4541-b718-7ae589c1fc10",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3e61afb087acc4475bf3e8736e3c713b7?max=1600"
+    },
+    {
+      "id": "c267bd194edf",
+      "biome": "vug",
+      "file": "images/c267bd194edf.jpg",
+      "caption": "Sphalerite with dolomite and calcite, Treece KS: black sphalerite crystals scattered over pale dolomite-crystal crust with a few honey calcites \u2014 MVT vug wall pattern",
+      "source": "http://n2t.net/ark:/65665/303541fb7-2366-424b-a3b8-1f61e58a4e0d",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m334df94ac56be413cb06dff64b78399ca?max=1600"
+    },
+    {
+      "id": "b4f0830feb5f",
+      "biome": "vug",
+      "file": "images/b4f0830feb5f.jpg",
+      "caption": "Barite with calcite (Elk Creek, Meade Co. SD per photo label): golden-brown barite blades fanning off a tan calcite crust \u2014 barite habit, currently missing on board",
+      "source": "http://n2t.net/ark:/65665/32e866add-443c-495e-b6fa-edd9cfdf8400",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3511de87c124c4d5db90dfe9e12ebe229?max=1600"
+    },
+    {
+      "id": "3e79fc84043b",
+      "biome": "vug",
+      "file": "images/3e79fc84043b.jpg",
+      "caption": "Sphalerite, Clay Center OH (close-up): honey-brown sphalerite crust with white needle crystals \u2014 Ohio dolostone vug palette",
+      "source": "http://n2t.net/ark:/65665/36246d665-a036-4ab2-965a-757f6701b784",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3a9e4cf44a8c2476e86d8a63633c94ff3?max=1600"
+    },
+    {
+      "id": "aee9f3db74aa",
+      "biome": "sulfur",
+      "file": "images/aee9f3db74aa.jpg",
+      "caption": "Native sulfur, Agrigento, Sicily: bright yellow bipyramids scattered over dark grey matrix \u2014 strong yellow-on-dark contrast for wall blocks",
+      "source": "http://n2t.net/ark:/65665/36cbf41a7-eaeb-4fdf-a322-678f2bbec0fc",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3c96612444cfe43c3862cf84160c67ef0?max=1600"
+    },
+    {
+      "id": "3e8f5bcb1968",
+      "biome": "sulfur",
+      "file": "images/3e8f5bcb1968.jpg",
+      "caption": "Native sulfur, Sicily: translucent yellow crystals sitting on pale grey limestone-like matrix \u2014 sparse crystals on host rock",
+      "source": "http://n2t.net/ark:/65665/36a4deb4e-cf7f-42dc-ad8d-506de2e63f1f",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3ae3e43eee2414978bed282b523920e01?max=1600"
+    },
+    {
+      "id": "8fc824850f73",
+      "biome": "sulfur",
+      "file": "images/8fc824850f73.jpg",
+      "caption": "Sulfur with calcite, Maybee MI: yellow sulfur crystals nested in a small white calcite-lined cavity in dark rock \u2014 sulfur inside a carbonate vug",
+      "source": "http://n2t.net/ark:/65665/302d2fa27-64b4-4323-9334-f700a5405a85",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m32170ac224883487a84c4d8cc201eeefe?max=1600"
+    },
+    {
+      "id": "116031805e92",
+      "biome": "sulfur",
+      "file": "images/116031805e92.jpg",
+      "caption": "Native sulfur, Agrigento, Sicily (close-up): pale yellow crystals mixed through a white crystalline crust \u2014 yellow/white intergrowth texture",
+      "source": "http://n2t.net/ark:/65665/3d4a7b70b-7aa1-4c9a-81c1-25f96a442f85",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m348be37056c574e329b900ebbf871ee1f?max=1600"
+    },
+    {
+      "id": "1e0001a0317b",
+      "biome": "sulfur",
+      "file": "images/1e0001a0317b.jpg",
+      "caption": "Sulfur with bitumen, Bologna, Italy: dark amber-brown sulfur crystals on black bitumen \u2014 dark, dirty sulfur variant",
+      "source": "http://n2t.net/ark:/65665/3421f8a45-493b-4be7-8bcf-b1b6b7fe73bd",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m379768c51b06443a5a360a5e8c520fb81?max=1600"
+    },
+    {
+      "id": "ef603a056ee1",
+      "biome": "sulfur",
+      "file": "images/ef603a056ee1.jpg",
+      "caption": "Orpiment, Baden-W\u00fcrttemberg, Germany: golden bladed orpiment streaked through dark grey rock \u2014 orpiment as a vein/host texture, not just a cluster",
+      "source": "http://n2t.net/ark:/65665/38c7ba522-be75-4178-a4f8-455872f6f341",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m38d67c11d97734ac5ad6a89c5c6ea747b?max=1600"
+    },
+    {
+      "id": "203b1e4b3c33",
+      "biome": "sulfur",
+      "file": "images/203b1e4b3c33.jpg",
+      "caption": "Realgar, Allchar, Macedonia: blood-red granular realgar crust on grey host rock \u2014 red ore band on stone",
+      "source": "http://n2t.net/ark:/65665/351cb36bf-fadd-4ad4-823d-ab418b15b81f",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3876e1fc7f84a47c3bcb6990109030014?max=1600"
+    },
+    {
+      "id": "06f2fc00ba7c",
+      "biome": "sulfur",
+      "file": "images/06f2fc00ba7c.jpg",
+      "caption": "Cinnabar, Hunan, China: dark red-grey twinned cinnabar crystals on white crystalline matrix \u2014 crystal habit of cinnabar (vs. disseminated)",
+      "source": "http://n2t.net/ark:/65665/34f028137-f131-47fd-b2ca-eaf127ca75c4",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m30902c4805aba4e63982973ceeb0e9647?max=1600"
+    },
+    {
+      "id": "06c0ef4cb0d4",
+      "biome": "schist",
+      "file": "images/06c0ef4cb0d4.jpg",
+      "caption": "Kyanite, Ticino, Switzerland (close-up): criss-crossing blue-white kyanite blades with dark staurolite prisms in pale schist \u2014 combined kyanite/staurolite block look",
+      "source": "http://n2t.net/ark:/65665/32366a2ee-3c8e-4607-b7cc-59e9c9849f63",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m32c133230421b4f978fe05389d2f89b86?max=1600"
+    },
+    {
+      "id": "4773762f464f",
+      "biome": "schist",
+      "file": "images/4773762f464f.jpg",
+      "caption": "Staurolite, Windham ME: dark brown staurolite prisms studding glittery grey-gold mica schist \u2014 staurolite in host rock",
+      "source": "http://n2t.net/ark:/65665/3b79f0328-c96c-4a04-95ba-f085539fdf93",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m36c874aa2890b4c4a8eeeb4438244adff?max=1600"
+    },
+    {
+      "id": "f4dacb01eca5",
+      "biome": "schist",
+      "file": "images/f4dacb01eca5.jpg",
+      "caption": "Staurolite, Kerzest, Brittany FR: dark green-brown staurolite prisms and twins scattered in pale tan schist \u2014 sparse-inclusion pattern",
+      "source": "http://n2t.net/ark:/65665/38785ba49-3332-4957-95f4-caefb03e59d3",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m32cd60bbeb6d04dcea21e38ef4b4c0be2?max=1600"
+    },
+    {
+      "id": "fa1ac528deff",
+      "biome": "schist",
+      "file": "images/fa1ac528deff.jpg",
+      "caption": "Kyanite schist (locality not recorded): steel-blue kyanite blades woven through dark grey foliated schist \u2014 dense blue-on-dark host texture",
+      "source": "http://n2t.net/ark:/65665/38258b53c-baca-41fb-8ed5-1737747692bc",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m38ee4ca1ef38243b9bf81299a59590ea1?max=1600"
+    },
+    {
+      "id": "04702e64de7f",
+      "biome": "schist",
+      "file": "images/04702e64de7f.jpg",
+      "caption": "Almandine, Fort Wrangell AK (close-up): dark red-brown dodecahedra embedded in grey fine-grained schist \u2014 garnet porphyroblast relief",
+      "source": "http://n2t.net/ark:/65665/390c2d479-f81d-4bd9-acb1-482298f503be",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m3b6b37da65f9d4c129bcba456358c765b?max=1600"
+    },
+    {
+      "id": "30fe718515e6",
+      "biome": "schist",
+      "file": "images/30fe718515e6.jpg",
+      "caption": "Almandine with muscovite and microcline, Westfield MA: large dark-red garnet dodecahedra with smaller ones on silvery mica \u2014 garnet habit + mica sparkle",
+      "source": "http://n2t.net/ark:/65665/305651843-6552-4528-a8ae-6b17707cfb28",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m37a2929490a1a4705bbf35421c4004551?max=1600"
+    },
+    {
+      "id": "98a35ec974e4",
+      "biome": "schist",
+      "file": "images/98a35ec974e4.jpg",
+      "caption": "Kyanite, Roxbury CT: long grey-blue kyanite blades lying in dark green-grey schist \u2014 subdued, low-saturation kyanite option",
+      "source": "http://n2t.net/ark:/65665/3664b6968-ea00-4931-bf54-35c88db046ad",
+      "url": "https://ids.si.edu/ids/deliveryService/id/ark:/65665/m375cd7c355fdd44c19450f5ea71fb7abe?max=1600"
+    },
+    {
+      "id": "e3724ee91333",
+      "biome": "marble",
+      "file": "images/e3724ee91333.jpg",
+      "caption": "Bai Son, Luc Yen: miners working a deep crevasse in grey marble karst for blue spinel \u2014 marble walls at mine scale, dark cavity at back (GIA/Pardieu)",
+      "source": "https://www.gia.edu/gems-gemology/wn13-long-gemstone-mining-vietnam",
+      "url": "https://www.gia.edu/dam/migrated-assets/images/157458_468x620.jpg"
+    },
+    {
+      "id": "0bf7316fa9fd",
+      "biome": "marble",
+      "file": "images/0bf7316fa9fd.jpg",
+      "caption": "Cong Troi marble cliff, Luc Yen \u2014 largest pink spinel mining area: huge white marble spoil/cliff face above the mining camp; scale of bright white host rock",
+      "source": "https://www.gia.edu/gems-gemology/wn13-long-gemstone-mining-vietnam",
+      "url": "https://www.gia.edu/dam/migrated-assets/images/157461_636x358.jpg"
+    },
+    {
+      "id": "87a6f72580fb",
+      "biome": "marble",
+      "file": "images/87a6f72580fb.jpg",
+      "caption": "Afghan lapis lazuli mine (Philip Poupin series): swirled white marble cliff pocked with dark adit mouths, blast dust, dark grey band at right, tiny miners for scale \u2014 wall-scale marble host",
+      "source": "https://philippoupin.pictures/lapislazuli/",
+      "url": "https://i0.wp.com/philippoupin.pictures/wp-content/uploads/2024/04/POU8152.webp?fit=1278%2C1920&#038;ssl=1"
+    },
+    {
+      "id": "11d3a440c843",
+      "biome": "marble",
+      "file": "images/11d3a440c843.jpg",
+      "caption": "Afghan lapis mine mountainside: white/cream marble cliffs with black bands and rust layers above a pale blue-grey spoil chute, one miner (tiny, bottom centre) for scale",
+      "source": "https://philippoupin.pictures/lapislazuli/",
+      "url": "https://i0.wp.com/philippoupin.pictures/wp-content/uploads/2024/04/POU7842.webp?fit=1920%2C1278&#038;ssl=1"
+    },
+    {
+      "id": "86114b37fd58",
+      "biome": "marble",
+      "file": "images/86114b37fd58.jpg",
+      "caption": "Inside an Afghan lapis lazuli mine: miners drilling blast holes in a dusty pale tunnel lit by headlamps \u2014 underground working atmosphere/light",
+      "source": "https://philippoupin.pictures/lapislazuli/",
+      "rating": "ignore",
+      "url": "https://i0.wp.com/philippoupin.pictures/wp-content/uploads/2024/04/POU8342.webp?fit=1920%2C1278&#038;ssl=1"
+    },
+    {
+      "id": "c7530247073d",
+      "biome": "marble",
+      "file": "images/c7530247073d.jpg",
+      "caption": "Afghan lapis mine: freshly broken royal-blue lapis blocks stacked in sacks against a dark mine wall \u2014 rough lapis color/texture at block scale",
+      "source": "https://philippoupin.pictures/lapislazuli/",
+      "url": "https://i0.wp.com/philippoupin.pictures/wp-content/uploads/2024/04/POU7899.webp?fit=1920%2C1278&#038;ssl=1"
+    },
+    {
+      "id": "18175a1ff711",
+      "biome": "copper",
+      "file": "images/18175a1ff711.jpg",
+      "caption": "Great Orme Bronze Age copper mine, Wales: tunnel ceiling of dark ore with scattered green (malachite-coloured) flecks over rust-brown dolomite \u2014 underground ore-in-wall texture (tour sign in frame)",
+      "source": "https://commons.wikimedia.org/wiki/File:Great_Orme_Mine_(7849).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/31/Great_Orme_Mine_%287849%29.jpg/1280px-Great_Orme_Mine_%287849%29.jpg"
+    },
+    {
+      "id": "5d359c899be2",
+      "biome": "copper",
+      "file": "images/5d359c899be2.jpg",
+      "caption": "Great Orme copper mine passage: hand-dug rounded tunnel in brown rock with green staining patches low on the right wall \u2014 cramped prehistoric-mine tunnel shape",
+      "source": "https://commons.wikimedia.org/wiki/File:Great_Orme_Mine_(7869).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0c/Great_Orme_Mine_%287869%29.jpg/1280px-Great_Orme_Mine_%287869%29.jpg"
+    },
+    {
+      "id": "828a1e80906e",
+      "biome": "sulfur",
+      "file": "images/828a1e80906e.jpg",
+      "caption": "Inside an old sulfur mine (Italy; Commons gives no site): adit walls crusted bright yellow over grey-green rock with orange-stained floor water \u2014 underground sulfur wall palette",
+      "source": "https://commons.wikimedia.org/wiki/File:Miniera_di_zolfo_interno.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3c/Miniera_di_zolfo_interno.jpg/1280px-Miniera_di_zolfo_interno.jpg"
+    },
+    {
+      "id": "3b5f65582dd2",
+      "biome": "sulfur",
+      "file": "images/3b5f65582dd2.jpg",
+      "caption": "Sulfur mine gallery described as Etruscan-era: square-cut tunnel with dripping yellow/green/blue mineral crusts and rust-orange water channel (photo looks heavily processed \u2014 use for form, not exact colour)",
+      "source": "https://commons.wikimedia.org/wiki/File:Miniera_di_zolfo.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c7/Miniera_di_zolfo.jpg/1280px-Miniera_di_zolfo.jpg"
+    },
+    {
+      "id": "a9949a15514e",
+      "biome": "sulfur",
+      "file": "images/a9949a15514e.jpg",
+      "caption": "Sulphur Cave, Wai-O-Tapu NZ: overhang/ceiling crusted pale yellow-green sulfur above grey rubble \u2014 sulfur deposition on a cave roof",
+      "source": "https://commons.wikimedia.org/wiki/File:Sulphur_Cave_at_Wai-O-Tapu.jpg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/1/15/Sulphur_Cave_at_Wai-O-Tapu.jpg"
+    },
+    {
+      "id": "c00c61e41211",
+      "biome": "sulfur",
+      "file": "images/c00c61e41211.jpg",
+      "caption": "Cave in the Solfatara, Monterano reserve (Lazio): bleached pink/yellow altered rock arching over a dark cavity with orange acid-water pool \u2014 small sulfur-cave entrance",
+      "source": "https://commons.wikimedia.org/wiki/File:Grotta_Solfatara_Riserva_di_Monterano.JPG",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/da/Grotta_Solfatara_Riserva_di_Monterano.JPG/1280px-Grotta_Solfatara_Riserva_di_Monterano.JPG"
+    },
+    {
+      "id": "63d7ef341b1a",
+      "biome": "sulfur",
+      "file": "images/63d7ef341b1a.jpg",
+      "caption": "Grotta del Fiume (Frasassi), Italy: microbial 'snottite' draperies on a cave wall crusted with elemental sulfur, iron oxide and gypsum \u2014 cream/yellow crust with rust-brown streaks at cm scale (A.S. Engel)",
+      "source": "https://www.jsg.utexas.edu/chemhydro/research/karst/active-sulfidic-cave-systems/",
+      "url": "https://www.jsg.utexas.edu/chemhydro/files/microh3-300x210.jpg"
+    },
+    {
+      "id": "7b43972bd46f",
+      "biome": "sulfur",
+      "file": "images/7b43972bd46f.jpg",
+      "caption": "Snottites hanging from the ceiling in Cueva de Villa Luz, Mexico (active H2S cave) \u2014 dripping white acid biofilm stalactites over dark rock (J. Pisarowicz; small image)",
+      "source": "https://www.jsg.utexas.edu/chemhydro/research/karst/active-sulfidic-cave-systems/",
+      "url": "https://www.jsg.utexas.edu/chemhydro/files/pisarowicz6-300x200.jpg"
+    },
+    {
+      "id": "d322b3cd4aac",
+      "biome": "sulfur",
+      "file": "images/d322b3cd4aac.jpg",
+      "caption": "Airbell in Movile Cave, Romania: sulfidic water with floating microbial mats and mat-coated tan limestone walls/ceiling \u2014 enclosed chemo-cave atmosphere (1998 photo; sampling grid in frame)",
+      "source": "https://www.jsg.utexas.edu/chemhydro/research/karst/active-sulfidic-cave-systems/",
+      "url": "https://www.jsg.utexas.edu/chemhydro/files/microh1-300x214.jpg"
+    },
+    {
+      "id": "e59be48987b5",
+      "biome": "vug",
+      "file": "images/e59be48987b5.jpg",
+      "caption": "Quarry wall of brown Geneva Dolomite, St. Paul IN: white calcite-filled vugs scattered through bedded dolomitic limestone \u2014 vug density/size at wall scale",
+      "source": "https://commons.wikimedia.org/wiki/File:Geneva_Dolomite_Member_of_the_Jeffersonville_Limestone_(Lower_Devonian)_(St._Paul_Stone_Quarry,_St._Paul,_Indiana,_USA)_(21834352059).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a0/Geneva_Dolomite_Member_of_the_Jeffersonville_Limestone_%28Lower_Devonian%29_%28St._Paul_Stone_Quarry%2C_St._Paul%2C_Indiana%2C_USA%29_%2821834352059%29.jpg/1280px-Geneva_Dolomite_Member_of_the_Jeffersonville_Limestone_%28Lower_Devonian%29_%28St._Paul_Stone_Quarry%2C_St._Paul%2C_Indiana%2C_USA%29_%2821834352059%29.jpg"
+    },
+    {
+      "id": "4db300c6a478",
+      "biome": "vug",
+      "file": "images/4db300c6a478.jpg",
+      "caption": "Macrocrystalline calcite-filled vug in dolomitic limestone, St. Paul Stone Quarry IN: blocky cream rhombs packing a cavity in brown host \u2014 close-up of a vug from the wall above",
+      "source": "https://commons.wikimedia.org/wiki/File:Macrocrystalline_calcite_in_dolomitic_limestone_(apparently_the_Geneva_Dolomite_Member,_Jeffersonville_Limestone,_Lower_Devonian;_St._Paul_Stone_Quarry,_St._Paul,_Indiana,_USA)_4_(22008713692).jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a9/Macrocrystalline_calcite_in_dolomitic_limestone_%28apparently_the_Geneva_Dolomite_Member%2C_Jeffersonville_Limestone%2C_Lower_Devonian%3B_St._Paul_Stone_Quarry%2C_St._Paul%2C_Indiana%2C_USA%29_4_%2822008713692%29.jpg/1280px-thumbnail.jpg"
+    },
+    {
+      "id": "c5c666b96e85",
+      "biome": "vug",
+      "file": "images/c5c666b96e85.jpg",
+      "caption": "Roof of the November Gem pocket, Diana Maria mine, Weardale: in-situ emerald-green fluorite cubes scattered under a creamy calcite crust on a mine ceiling \u2014 the target 'fluorite in the wall' look",
+      "source": "https://www.ukminingventures.com/dianamaria.html",
+      "url": "https://www.ukminingventures.com/images/dianamaria-gempocket-roof.jpg"
+    },
+    {
+      "id": "4b90e4ec9f7a",
+      "biome": "vug",
+      "file": "images/4b90e4ec9f7a.jpg",
+      "caption": "Diana Maria mine, Weardale: development drive inside the portal, rails following the Sutcliffe vein through grey limestone \u2014 Weardale fluorite mine interior scale",
+      "source": "https://www.ukminingventures.com/dianamaria.html",
+      "url": "https://www.ukminingventures.com/images/dianamaria-portal-drive.jpg"
+    },
+    {
+      "id": "4686abe43b9a",
+      "biome": "vug",
+      "file": "images/4686abe43b9a.jpg",
+      "caption": "Large dissolution cavity in the Great Limestone quarry face, Diana Maria mine, Weardale (2018): metre-scale dark hollow in pale grey limestone \u2014 big-vug/cave-pocket shape",
+      "source": "https://www.ukminingventures.com/dianamaria.html",
+      "url": "https://www.ukminingventures.com/images/dianamaria-dissolutioncavity.jpg"
+    },
+    {
+      "id": "bd3e52172776",
+      "biome": "vug",
+      "file": "images/bd3e52172776.jpg",
+      "caption": "Exposed dissolution cavities lined with calcite crystals in ironstone replacement flats, Diana Maria mine (hand for scale) \u2014 small vugs in tan/rust host at arm's length",
+      "source": "https://www.ukminingventures.com/dianamaria.html",
+      "url": "https://www.ukminingventures.com/images/dianamaria-dissolutioncavities.jpg"
+    },
+    {
+      "id": "7b729dd592ff",
+      "biome": "vug",
+      "file": "images/7b729dd592ff.jpg",
+      "caption": "Rich fluorite mineralisation in the Diana Maria opencast (2017): collapsed metasomatic flat with dark fluorite around slumped sides and base, clay/rubble infill \u2014 mineralised zone within quarry wall",
+      "source": "https://www.ukminingventures.com/dianamaria.html",
+      "url": "https://www.ukminingventures.com/images/dianamaria-rich-fluorite-mineralisation.jpg"
+    },
+    {
+      "id": "c09fee4362ae",
+      "biome": "opal",
+      "file": "images/c09fee4362ae.jpg",
+      "caption": "Serbian Orthodox dugout church, Coober Pedy: vaulted chamber cut into cream/pink banded sandstone, tool marks and bedding visible on the curved roof (sealed rock) \u2014 bare-rock dugout interior",
+      "source": "https://commons.wikimedia.org/wiki/File:Serbian_Orthodox_Church_in_Coober_Pedy.jpg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/0/0a/Serbian_Orthodox_Church_in_Coober_Pedy.jpg"
+    },
+    {
+      "id": "700b931e2d25",
+      "biome": "opal",
+      "file": "images/700b931e2d25.jpg",
+      "caption": "Coober Pedy underground house display: long flat-roofed dugout with pale, pick-scarred sandstone ceiling showing faint pink/orange banding \u2014 living-space tunnel in the opal host rock",
+      "source": "https://commons.wikimedia.org/wiki/File:Coober_Pedy_underground_house.jpg",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/4/4d/Coober_Pedy_underground_house.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled"
+    },
+    {
+      "id": "20889d2f45b0",
+      "biome": "opal",
+      "file": "images/20889d2f45b0.jpg",
+      "caption": "Coober Pedy underground motel room (2007): raw cream sandstone walls with orange/pink horizontal banding and drill-scar texture above panelling \u2014 host-rock colour banding at room scale",
+      "source": "https://commons.wikimedia.org/wiki/File:Coober_Pedy_underground_motel_room,_2007.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/95/Coober_Pedy_underground_motel_room%2C_2007.jpg/1280px-Coober_Pedy_underground_motel_room%2C_2007.jpg"
+    },
+    {
+      "id": "dfc1a584e097",
+      "biome": "opal",
+      "file": "images/dfc1a584e097.jpg",
+      "caption": "Crystal opal seam in a mine wall (Mintabie opal fields page): thin blue-green opal 'level' running horizontally through pale sandstone with rust-red below \u2014 exactly the in-place seam look",
+      "source": "https://mineshaft.com.au/mintabie-opal-fields/",
+      "rating": "cool",
+      "url": "https://mineshaft.com.au/wp-content/uploads/2022/01/crystal-opal-in-wall.jpg"
+    },
+    {
+      "id": "2ca93e46c5c3",
+      "biome": "opal",
+      "file": "images/2ca93e46c5c3.jpg",
+      "caption": "Underground opal mine drive (page on Lightning Ridge/Coober Pedy mining; exact field not stated): low hand-cut tunnel in cream/pink-banded rock with rusty streaks, pipe and bucket \u2014 drive shape and wall colour",
+      "source": "https://opalgalaxy.com/opal-mining/",
+      "url": "https://opalgalaxy.com/wp-content/uploads/2022/05/opal-mine-1.jpg"
+    },
+    {
+      "id": "c4e9d87729c9",
+      "biome": "opal",
+      "file": "images/c4e9d87729c9.jpg",
+      "caption": "Looking up a round opal-mine shaft with ladder (captioned '98% of mining in Lightning Ridge is below ground'): pale pinkish claystone walls with drill spiral marks \u2014 shaft entrance geometry",
+      "source": "https://opalgalaxy.com/opal-mining/",
+      "url": "https://opalgalaxy.com/wp-content/uploads/2022/05/lightning-ridge-below-ground.jpg"
+    },
+    {
+      "id": "40c964735c29",
+      "biome": "copper",
+      "file": "images/40c964735c29.jpg",
+      "caption": "Inside the Copper Prince Mine, Bisbee: oxide-ore contact of malachite and iron oxides against Escabrosa limestone \u2014 green, rust and cream mottled tunnel wall beside an ore car",
+      "source": "https://www.bisbeeminingandminerals.com/geology-gallery",
+      "url": "https://static.wixstatic.com/media/6ae83b_0a9a748292a549089dcc4b78fb7a16f3~mv2_d_1500_1316_s_2.jpg"
+    },
+    {
+      "id": "b05c849f341f",
+      "biome": "copper",
+      "file": "images/b05c849f341f.jpg",
+      "caption": "B level, Copper Queen Mine, Bisbee: calcite-crystal pocket forming at the contact of Escabrosa limestone and iron oxides at the edge of an orebody \u2014 banded yellow/cream/rust wall in situ",
+      "source": "https://www.bisbeeminingandminerals.com/geology-gallery",
+      "url": "https://static.wixstatic.com/media/6ae83b_b56e2e004d9f440f956f98909c362c88~mv2.jpg"
+    },
+    {
+      "id": "c0a68132e1d4",
+      "biome": "franklin",
+      "file": "images/c0a68132e1d4.jpg",
+      "caption": "Open-pit Passaic Mine, Sterling Hill (2025): weathered grey-white marble walls of the old open cut \u2014 surface-scale host rock around the ore zone (ore not distinguishable here)",
+      "source": "https://commons.wikimedia.org/wiki/File:Passaic_Mine,_Sterling_Hill_Mining_Museum,_Ogdensburg,_NJ_-_2025.jpg",
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f5/Passaic_Mine%2C_Sterling_Hill_Mining_Museum%2C_Ogdensburg%2C_NJ_-_2025.jpg/1280px-Passaic_Mine%2C_Sterling_Hill_Mining_Museum%2C_Ogdensburg%2C_NJ_-_2025.jpg"
+    }
+  ],
+  "comments": [
+    {
+      "id": "b34dc50241",
+      "target": "a0989a287dc7",
+      "text": "good color palette",
+      "ts": "2026-09-28 21:57",
+      "read": true
+    },
+    {
+      "id": "75fde52316",
+      "target": "07cf7f1b505c",
+      "text": "I like the overall shape of the pillars almost with terraces. will likely have to be large scale to capture that with voxels.",
+      "ts": "2026-09-28 21:58",
+      "read": true
+    },
+    {
+      "id": "2122331486",
+      "target": "3742ce5470d4",
+      "text": "similar to Tarugo, good overall",
+      "ts": "2026-09-28 21:58",
+      "read": true
+    },
+    {
+      "id": "095fa51d77",
+      "target": "54edcffad42f",
+      "text": "nice color palette",
+      "ts": "2026-09-28 21:59",
+      "read": true
+    },
+    {
+      "id": "a33adbdb78",
+      "target": "a99903d6deba",
+      "text": "similar to amazonite, nice color palette. hexagonal shape might be hard to replicate.",
+      "ts": "2026-09-28 21:59",
+      "read": true
+    },
+    {
+      "id": "b1f134b765",
+      "target": "9cfc1cd10f09",
+      "text": "good colors, and the little clay bits are nice, but idk how we can replicate the clay unless the crystals are really huge.",
+      "ts": "2026-09-28 21:59",
+      "read": true
+    },
+    {
+      "id": "38638e7baa",
+      "target": "f85970a8f575",
+      "text": "white band might be hard to do since it\u2019s thin, maybe just do green and pink",
+      "ts": "2026-09-28 22:00",
+      "read": true
+    },
+    {
+      "id": "f130792a60",
+      "target": "eb6ec1e89986",
+      "text": "meh, not sure if we really need this",
+      "ts": "2026-09-28 22:00",
+      "read": true
+    },
+    {
+      "id": "18f99baf31",
+      "target": "c704fe9840b1",
+      "text": "nice potential base color, but might be too saturated so might drown out the crystals",
+      "ts": "2026-09-28 22:30",
+      "read": true
+    },
+    {
+      "id": "02ff37d5f2",
+      "target": "aa3e8ecf2805",
+      "text": "if we scale these way up an make them jut out it could be cool",
+      "ts": "2026-09-28 22:30",
+      "read": true
+    },
+    {
+      "id": "78a76a814e",
+      "target": "9c487e964582",
+      "text": "good placement, would need to scale up severely though",
+      "ts": "2026-09-28 22:31",
+      "read": true
+    },
+    {
+      "id": "ed2c608dbf",
+      "target": "e2d10c2d0843",
+      "text": "similar to the AMNH one, good though",
+      "ts": "2026-09-28 22:32",
+      "read": true
+    },
+    {
+      "id": "936f2dd4b4",
+      "target": "efd547bf488e",
+      "text": "nice placement",
+      "ts": "2026-09-28 22:32",
+      "read": true
+    },
+    {
+      "id": "58bf8f21aa",
+      "target": "4e66ede81e69",
+      "text": "the structure of the mica would be practically impossible to do",
+      "ts": "2026-09-28 22:32",
+      "read": true
+    },
+    {
+      "id": "01510ff7cd",
+      "target": "0ca89232c46d",
+      "text": "good",
+      "ts": "2026-09-28 22:32",
+      "read": true
+    },
+    {
+      "id": "b5c69144c7",
+      "target": "biome:pegmatite",
+      "text": "mostly desaturated host stone with colorful embedded crystals. possibly separate but similar biomes for tourmaline and amazonite, or placement rules to keep similar crystals together",
+      "ts": "2026-09-28 22:34",
+      "read": true
+    },
+    {
+      "id": "57af5b44ef",
+      "target": "f93ca020e7c1",
+      "text": "great color ref",
+      "ts": "2026-09-28 22:37",
+      "read": true
+    },
+    {
+      "id": "9f6b7e83d7",
+      "target": "a8f9937d7957",
+      "text": "also great color ref",
+      "ts": "2026-09-28 22:38",
+      "read": true
+    },
+    {
+      "id": "f1964daf07",
+      "target": "a8f9937d7957",
+      "text": "lots of specimens available here",
+      "ts": "2026-09-28 22:38",
+      "read": true
+    },
+    {
+      "id": "cd18cabd5f",
+      "target": "4dbbb6e89aca",
+      "text": "nice host rock candidate",
+      "ts": "2026-09-28 22:38",
+      "read": true
+    },
+    {
+      "id": "b4441d946e",
+      "target": "f6846fb4706b",
+      "text": "good green color",
+      "ts": "2026-09-28 22:38",
+      "read": true
+    },
+    {
+      "id": "8d9f7c3616",
+      "target": "e7e01bcef932",
+      "text": "not sure how these spikes form but if they\u2019re fossils I probably will skip these as we don\u2019t have any living creatures that could leave fossils",
+      "ts": "2026-09-28 22:39",
+      "read": true
+    },
+    {
+      "id": "5aee6e575c",
+      "target": "838ea09fc9d1",
+      "text": "very nice fire opal. not sure how this will fit with the regular blue/green opals though. maybe as a rare variant?",
+      "ts": "2026-09-28 22:39",
+      "read": true
+    },
+    {
+      "id": "58713bd56e",
+      "target": "a81f1520e756",
+      "text": "if we scale this up it could be opal veins in a wall (unsure how realistic that is). maybe full opal blocks that transition through opal \u201core\u201d type blocks with flecks of opal, to plain stone",
+      "ts": "2026-09-28 22:40",
+      "read": true
+    },
+    {
+      "id": "b2feee6246",
+      "target": "dfc1a584e097",
+      "text": "good. I like the horizontal seam idea",
+      "ts": "2026-09-28 22:40",
+      "read": true
+    },
+    {
+      "id": "b788cfe5d6",
+      "target": "biome:opal",
+      "text": "pinkish background stone with horizontal seams of opal seems to be the move here. maybe fire opal can spawn rarely instead of the blue green regular kind.",
+      "ts": "2026-09-28 22:41",
+      "read": true
+    },
+    {
+      "id": "04267551fe",
+      "target": "biome:marble",
+      "text": "I\u2019m not happy with the existing marble texture that we have in the renderer, especially its normal map. I think it needs some rough glossy reflection and much less if any normal map.",
+      "ts": "2026-09-28 22:43",
+      "read": true
+    },
+    {
+      "id": "a6da93dbfb",
+      "target": "1a64c822c0e2",
+      "text": "nice deep color",
+      "ts": "2026-09-28 22:44",
+      "read": true
+    },
+    {
+      "id": "9c1d9a76dc",
+      "target": "biome:marble",
+      "text": "most likely not going to do actual octahedra. it\u2019s not off the table but I kinda want to see if we can do this with voxel for now. this will make it less realistic I suppose but whatever. maybe cubes instead of octahedra? but that might look boring.",
+      "ts": "2026-09-28 22:45",
+      "read": true
+    },
+    {
+      "id": "9e790843c5",
+      "target": "biome:marble",
+      "text": "having both lapis and garnet/spinel/whatever red thing in one biome might look kinda discordant",
+      "ts": "2026-09-28 22:45",
+      "read": true
+    },
+    {
+      "id": "96ce6f1bd5",
+      "target": "d40ff8b1e393",
+      "text": "dark streak in white host looks nice",
+      "ts": "2026-09-28 22:46",
+      "read": true
+    },
+    {
+      "id": "13b83ce0dd",
+      "target": "416e5f171a2e",
+      "text": "nice color palette. might be kinda similar to the one I said has a nice palette in pegmatite.",
+      "ts": "2026-09-28 22:47",
+      "read": true
+    },
+    {
+      "id": "622231103e",
+      "target": "45496a2664b7",
+      "text": "very good palette",
+      "ts": "2026-09-28 22:47",
+      "read": true
+    },
+    {
+      "id": "d0585f5435",
+      "target": "f7d176ad967d",
+      "text": "love the pyrite, blue and gold with the lapis is great.",
+      "ts": "2026-09-28 22:47",
+      "read": true
+    },
+    {
+      "id": "be1ec65361",
+      "target": "e1711a7488ce",
+      "text": "nice absorption ref",
+      "ts": "2026-09-28 22:47",
+      "read": true
+    },
+    {
+      "id": "db2a3b572b",
+      "target": "e3724ee91333",
+      "text": "nice steep walls",
+      "ts": "2026-09-28 22:48",
+      "read": true
+    },
+    {
+      "id": "3e56f166af",
+      "target": "0bf7316fa9fd",
+      "text": "this just looks like a landslide tbh, not sure what it is",
+      "ts": "2026-09-28 22:48",
+      "read": true
+    },
+    {
+      "id": "830bceac23",
+      "target": "c7530247073d",
+      "text": "good ref for rough lapis texture",
+      "ts": "2026-09-28 22:48",
+      "read": true
+    },
+    {
+      "id": "a413fdd7ab",
+      "target": "biome:marble",
+      "text": "for both this and pegmatite, we have a reddish mineral and a bluish mineral. even if it\u2019s less accurate, it may look better to put the reddish ones in one biome and the bluish (and pyrite/gold) in another, for color theory.",
+      "ts": "2026-09-28 22:49",
+      "read": true
+    },
+    {
+      "id": "50341157b1",
+      "target": "7cd6a276a34d",
+      "text": "probably the best color ref overall, nice blue and teal colors with yellowish background",
+      "ts": "2026-09-28 23:12",
+      "read": true
+    },
+    {
+      "id": "2c2ac6f00f",
+      "target": "859ab34b051e",
+      "text": "cool patterns, especially the holes in the sides",
+      "ts": "2026-09-28 23:12",
+      "read": true
+    },
+    {
+      "id": "b797298c17",
+      "target": "ae42e9f4addb",
+      "text": "good colors",
+      "ts": "2026-09-28 23:12",
+      "read": true
+    },
+    {
+      "id": "28e27dfc48",
+      "target": "8cdf22cade45",
+      "text": "malachite is nice but the concentric circle pattern (not shown here) would prolly be difficult to recreate",
+      "ts": "2026-09-28 23:13",
+      "read": true
+    },
+    {
+      "id": "465ba34ae1",
+      "target": "6259b57a057e",
+      "text": "nice but idk if the red will fit in with other colors",
+      "ts": "2026-09-28 23:13",
+      "read": true
+    },
+    {
+      "id": "701c7a71ce",
+      "target": "afe39d2a7469",
+      "text": "very nice deep blue",
+      "ts": "2026-09-28 23:13",
+      "read": true
+    },
+    {
+      "id": "e55479c98c",
+      "target": "25358c7c6f8d",
+      "text": "could be some rare patches with this white and light blue coloration and formation",
+      "ts": "2026-09-28 23:14",
+      "read": true
+    },
+    {
+      "id": "5be9e27f34",
+      "target": "4ac9ad41afd1",
+      "text": "glowing uranium for lights maybe",
+      "ts": "2026-09-28 23:14",
+      "read": true
+    },
+    {
+      "id": "6cbe325d10",
+      "target": "42f563eddc08",
+      "text": "nice teal color on light brown or desaturated copper colored background",
+      "ts": "2026-09-28 23:14",
+      "read": true
+    },
+    {
+      "id": "21c8bf802e",
+      "target": "38513face49f",
+      "text": "blue absorption crystals are nice",
+      "ts": "2026-09-28 23:14",
+      "read": true
+    },
+    {
+      "id": "53cd11ce89",
+      "target": "019a8f65681b",
+      "text": "very nice color without being too saturated, could be used for background color while still letting the colorful crystals and minerals stand out",
+      "ts": "2026-09-28 23:15",
+      "read": true
+    },
+    {
+      "id": "8e04858fe8",
+      "target": "befab6beee02",
+      "text": "nice blue",
+      "ts": "2026-09-28 23:15",
+      "read": true
+    },
+    {
+      "id": "a6277faf40",
+      "target": "bcc91c6277d2",
+      "text": "green water would be super cool (note that biome-based water color is already logged as an issue so I would do that before supporting it here)",
+      "ts": "2026-09-28 23:15",
+      "read": true
+    },
+    {
+      "id": "9b6a5edd55",
+      "target": "fbf50d11d6d3",
+      "text": "vibrant orange host is nice but would have to be used in moderation",
+      "ts": "2026-09-28 23:16",
+      "read": true
+    },
+    {
+      "id": "39295134c9",
+      "target": "aee08cf4d01c",
+      "text": "texture would be very hard to recreate at small scale imo",
+      "ts": "2026-09-28 23:16",
+      "read": true
+    },
+    {
+      "id": "371dc4a5a8",
+      "target": "d2840dc2c720",
+      "text": "cool but would likely be some kind of surface decorator, not a real block. not sure how feasible this is",
+      "ts": "2026-09-28 23:17",
+      "read": true
+    },
+    {
+      "id": "735c1eebdf",
+      "target": "006b655da067",
+      "text": "good colors",
+      "ts": "2026-09-28 23:17",
+      "read": true
+    },
+    {
+      "id": "b801491091",
+      "target": "c96e43353e1b",
+      "text": "reminds me of warhammer necrons color scheme. host rock too dark though, would be hard to illuminate (same problem as current CRYSTAL biome with its dark basalt)",
+      "ts": "2026-09-28 23:17",
+      "read": true
+    },
+    {
+      "id": "536952dc8b",
+      "target": "biome:copper",
+      "text": "not sure what the general look of this will be. maybe multicolored host rock, relatively desaturated, with some rare crystals?",
+      "ts": "2026-09-28 23:18",
+      "read": true
+    }
+  ]
+}

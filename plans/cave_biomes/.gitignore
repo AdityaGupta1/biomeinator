@@ -1,0 +1,7 @@
+refboard/static/images/
+refboard/static/thumbs/
+refboard/data.lock
+refboard/data.tmp
+prototype/out/
+__pycache__/
+.venv/
