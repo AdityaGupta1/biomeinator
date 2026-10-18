@@ -1,8 +1,8 @@
-_Last edited: 2026-10-03_
+_Last edited: 2026-10-17_
 
 # World Export / Import
 
-`Terrain::exportWorld` / `importWorld` / `reimportWorld` save completed chunks, the camera, and `worldSeed` to disk. Originally built to give voxel-mode regression tests reproducible terrain; region serialization is also intended for future chunk offloading. Binding: `Ctrl+U` exports, `Ctrl+O` reimports a directory mid-run, `--world=<dir>` imports at startup. The binary format lives in `region_file.cpp`; `terrain.cpp` owns the `world.json` schema and whole-world integration.
+`Terrain::exportWorld` / `importWorld` / `reimportWorld` save completed chunks, the camera, `worldSeed` and the animation time to disk. Originally built to give voxel-mode regression tests reproducible terrain; region serialization is also intended for future chunk offloading. Binding: `Ctrl+U` exports, `Ctrl+O` reimports a directory mid-run, `--world=<dir>` imports at startup. The binary format lives in `region_file.cpp`; `terrain.cpp` owns the `world.json` schema and whole-world integration.
 
 ## Generation inputs and decoding without live pointers
 
@@ -70,6 +70,14 @@ including the ordinary upward/floor-facing value; absence never implicitly means
 Region v5 imports predate block-state records; as a narrow migration, every block that
 now declares `surface_mount` receives an explicit upward-facing entry in memory. A later
 export writes those migrated entries in the current format.
+
+## Animation time
+
+`world.json` optionally carries the live `animTime` so a re-import renders the same sun, water and
+clouds. An explicit `--animTime` overrides it, which keeps rendering tests that pin a time stable
+even if their world is re-exported. Imports without the field keep the current time. Restoring sets
+the renderer's previous anim time too; otherwise the first frame after `Ctrl+O` sees the whole jump
+as one frame's delta in water and cloud motion vectors and the wind offset.
 
 ## Block palette decouples exports from enum values
 

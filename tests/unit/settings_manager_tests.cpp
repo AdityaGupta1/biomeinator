@@ -135,6 +135,8 @@ TEST_CASE("SettingsManager applies and permits overriding automated-run defaults
         CHECK(SettingsManager::getAsBool("animTimePaused"));
         CHECK_FALSE(SettingsManager::getAsBool("useVsync"));
         CHECK_FALSE(SettingsManager::getAsBool("exclusiveMode"));
+        CHECK(SettingsManager::wasPassedOnCommandLine("renderToFile"));
+        CHECK_FALSE(SettingsManager::wasPassedOnCommandLine("animTimePaused"));
     }
 
     SECTION("perf runs default to exclusive mode")
@@ -168,6 +170,7 @@ TEST_CASE("SettingsManager applies and permits overriding automated-run defaults
         CHECK_FALSE(SettingsManager::getAsBool("animTimePaused"));
         CHECK(SettingsManager::getAsBool("useVsync"));
         CHECK_FALSE(SettingsManager::getAsBool("exclusiveMode"));
+        CHECK(SettingsManager::wasPassedOnCommandLine("animTimePaused"));
     }
 }
 
