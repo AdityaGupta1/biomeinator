@@ -910,6 +910,7 @@ static bool writeWorld(const std::filesystem::path& exportDir)
     };
     worldJson["renderDistance"] = SettingsManager::getAsInt("renderDistance");
     worldJson["worldSeed"] = SettingsManager::getWorldSeed();
+    worldJson["animTime"] = Renderer::getAnimTime();
     worldJson["blocks"] = Blocks::blockIdNames;
     worldJson["regions"] = nlohmann::json::array();
 
@@ -1071,7 +1072,9 @@ static bool loadAndValidateWorldJson(const std::filesystem::path& worldJsonPath,
                  outJson["regions"].is_array() && outJson["blocks"].is_array() &&
                  !outJson["blocks"].empty() && outJson["blocks"].size() <= (1u << 16) &&
                  camera.is_object() && camera.contains("posInt") && camera.contains("posFloat") &&
-                 camera.contains("phi") && camera.contains("theta");
+                 camera.contains("phi") && camera.contains("theta") &&
+                 (!outJson.contains("animTime") ||
+                  (outJson["animTime"].is_number() && std::isfinite(outJson["animTime"].get<double>())));
     if (valid)
     {
         valid = camera["posInt"].is_array() && camera["posInt"].size() == 3 &&
@@ -1136,6 +1139,7 @@ struct ImportedWorld
     glm::vec3 cameraPosFloat{ 0.f };
     float phi{ 0.f };
     float theta{ 0.f };
+    std::optional<double> animTime;
 };
 
 static std::optional<ImportedWorld> readWorld(const std::filesystem::path& worldDir)
@@ -1158,6 +1162,10 @@ static std::optional<ImportedWorld> readWorld(const std::filesystem::path& world
                                  cameraJson["posFloat"][2].get<float>() };
         world.phi = cameraJson["phi"].get<float>();
         world.theta = cameraJson["theta"].get<float>();
+        if (worldJson.contains("animTime") && !SettingsManager::wasPassedOnCommandLine("animTime"))
+        {
+            world.animTime = worldJson["animTime"].get<double>();
+        }
         const glm::ivec2 cameraChunkPos = cameraChunkPosition(world.cameraPosInt);
         const int createBlasDistance = getScanDistances(world.renderDistance).createBlasDistance;
         const std::vector<Block> blockRemap = buildBlockRemapTable(worldJson["blocks"]);
@@ -1220,6 +1228,10 @@ static void applyImportedWorld(ImportedWorld&& world, const std::filesystem::pat
         worldImportActive.store(true, std::memory_order_release);
     }
     Renderer::restoreCameraFromImport(world.cameraPosInt, world.cameraPosFloat, world.phi, world.theta);
+    if (world.animTime)
+    {
+        Renderer::restoreAnimTimeFromImport(*world.animTime);
+    }
     setDirty();
     Logger::log("world import: imported %u chunks across %zu regions from %s; expectedImported=%u",
                 world.numChunks, regions.size(), worldDir.generic_string().c_str(), expected);

@@ -42,6 +42,8 @@ void setAsUint(const std::string& name, uint32_t value);
 void setAsFloat(const std::string& name, float value);
 void setAsString(const std::string& name, const std::string& value);
 
+bool wasPassedOnCommandLine(const std::string& name);
+
 uint32_t getWorldSeed();
 void setWorldSeed(uint32_t value);
 

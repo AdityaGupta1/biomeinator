@@ -1315,6 +1315,17 @@ void restoreCameraFromImport(glm::ivec3 posInt, glm::vec3 posFloat, float phi, f
     renderState.camera.restoreFromImport(posInt, posFloat, phi, theta);
 }
 
+double getAnimTime()
+{
+    return renderState.animTime;
+}
+
+void restoreAnimTimeFromImport(const double animTime)
+{
+    renderState.animTime = animTime;
+    renderState.prevAnimTime = animTime;
+}
+
 float getWaveTime()
 {
     return computeWaveTime(renderState.animTime);

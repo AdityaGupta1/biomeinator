@@ -1,4 +1,4 @@
-_Last edited: 2026-10-07_
+_Last edited: 2026-10-17_
 
 # Settings Manager
 
@@ -74,6 +74,9 @@ All settings and their defaults are defined in `parseArgs()` and are self-descri
   state, so there is no pause flag to keep in sync. Automated runs default it to `true` so
   goldens are deterministic. Scrub keys still move
   time while paused — see [rendering → render_loop.md](../rendering/render_loop.md).
+- **`animTime`** is only the starting time. A world export saves the live time and import restores
+  it, unless `--animTime` was passed; `wasPassedOnCommandLine` exists for that kind of precedence,
+  since after parsing a default value is indistinguishable from an explicit one.
 
 ## GUI Helpers
 

@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 
@@ -19,6 +20,7 @@ namespace SettingsManager
 using namespace cxxopts;
 
 static std::unordered_map<std::string, SettingValue> settings;
+static std::unordered_set<std::string> commandLineSettings;
 
 uint32_t worldSeed; // cached due to frequent access
 
@@ -366,8 +368,18 @@ ParseArgsOutcome tryParseArgs(const int argc, const char* const* argv)
         defaultTo("exclusiveMode", true);
     }
 
+    std::unordered_set<std::string> parsedCommandLineSettings;
+    for (const auto& [name, value] : parsedSettings)
+    {
+        if (parseResult.count(name) > 0)
+        {
+            parsedCommandLineSettings.insert(name);
+        }
+    }
+
     worldSeed = getUint("worldSeed");
     settings = std::move(parsedSettings);
+    commandLineSettings = std::move(parsedCommandLineSettings);
     return { ParseArgsStatus::Success, {} };
 }
 
@@ -445,6 +457,11 @@ void setAsFloat(const std::string& name, float value)
 void setAsString(const std::string& name, const std::string& value)
 {
     settings[name] = value;
+}
+
+bool wasPassedOnCommandLine(const std::string& name)
+{
+    return commandLineSettings.contains(name);
 }
 
 uint32_t getWorldSeed()
