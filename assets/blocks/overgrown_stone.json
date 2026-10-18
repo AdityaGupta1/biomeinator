@@ -3,5 +3,6 @@
         "top": "yuushya/moss_block",
         "side": "yuushya/overgrown_stone_side",
         "bottom": "stone"
-    }
+    },
+    "lodSideShowsBottom": true
 }

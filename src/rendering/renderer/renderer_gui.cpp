@@ -218,6 +218,13 @@ static bool drawAtmosphereTab()
         radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Ambient strength", "fogAmbientStrength", 0.f, 2.f);
     }
 
+    SettingsGuiHelpers::SectionTitle("Aerial haze");
+    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Half distance", "hazeHalfDistance", 0.f, 10000.f);
+    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Start distance", "hazeStartDistance", 0.f, 2000.f);
+    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Whiteness", "hazeWhiteness", 0.f, 1.f);
+    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Brightness", "hazeBrightness", 0.f, 4.f);
+    radianceSettingsChanged |= SettingsGuiHelpers::SliderFloat("Sky band", "hazeSkyBand", 0.f, 1.f);
+
     return radianceSettingsChanged;
 }
 
@@ -332,7 +339,7 @@ void imguiEndFrame(double deltaTime)
                                     static_cast<int>(renderState.frameNumber) - static_cast<int>(renderState.frameTimeBuffer.getMaxSize()),
                                     renderState.frameNumber,
                                     ImGuiCond_Always);
-            ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 20);
+            ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 30);
             ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
             ImPlot::PlotShaded("Frame time",
                                &renderState.frameTimeBuffer.getData()[0].frameIdx,

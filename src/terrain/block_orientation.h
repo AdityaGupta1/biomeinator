@@ -39,6 +39,24 @@ inline constexpr std::array<BlockFaceBasis, blockFaceCount> blockFaceBases = {{
     { { 0, -1, 0 }, { 1, 0, 0 }, { 0, 0, -1 } }, // -Y
 }};
 
+// Corners of each face of a unit cube, four per face in BlockFace order, wound to match quadUvOffsets
+inline constexpr glm::ivec3 cubeFaceVertPositions[4 * blockFaceCount] = {
+    glm::ivec3(1, 1, 0), glm::ivec3(1, 1, 1), glm::ivec3(1, 0, 1), glm::ivec3(1, 0, 0), // +x
+    glm::ivec3(1, 1, 1), glm::ivec3(0, 1, 1), glm::ivec3(0, 0, 1), glm::ivec3(1, 0, 1), // +z
+    glm::ivec3(0, 1, 1), glm::ivec3(0, 1, 0), glm::ivec3(0, 0, 0), glm::ivec3(0, 0, 1), // -x
+    glm::ivec3(0, 1, 0), glm::ivec3(1, 1, 0), glm::ivec3(1, 0, 0), glm::ivec3(0, 0, 0), // -z
+    glm::ivec3(1, 1, 1), glm::ivec3(1, 1, 0), glm::ivec3(0, 1, 0), glm::ivec3(0, 1, 1), // +y
+    glm::ivec3(0, 0, 1), glm::ivec3(0, 0, 0), glm::ivec3(1, 0, 0), glm::ivec3(1, 0, 1), // -y
+};
+
+// Texture UVs of a quad's four corners. Side faces run v = 0 at the top edge to 1 at the bottom.
+inline constexpr glm::uvec2 quadUvOffsets[4] = {
+    glm::uvec2(1, 0),
+    glm::uvec2(0, 0),
+    glm::uvec2(0, 1),
+    glm::uvec2(1, 1),
+};
+
 constexpr uint8_t blockFaceIndex(BlockFace face)
 {
     return static_cast<uint8_t>(face);

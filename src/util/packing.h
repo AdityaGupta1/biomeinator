@@ -32,7 +32,8 @@ inline uint32_t packSnorm2ToUint(const float x, const float y)
     return (static_cast<uint32_t>(ix) & 0xFFFF) | (static_cast<uint32_t>(iy) << 16);
 }
 
-inline uint32_t octEncode(const DirectX::XMFLOAT3& nor)
+// Octahedral projection of a direction onto [-1, 1]^2
+inline DirectX::XMFLOAT2 octProject(const DirectX::XMFLOAT3& nor)
 {
     const float invL1 = 1.f / (std::abs(nor.x) + std::abs(nor.y) + std::abs(nor.z));
     float nx = nor.x * invL1;
@@ -45,7 +46,13 @@ inline uint32_t octEncode(const DirectX::XMFLOAT3& nor)
         nx = wrappedX;
         ny = wrappedY;
     }
-    return packSnorm2ToUint(nx, ny);
+    return { nx, ny };
+}
+
+inline uint32_t octEncode(const DirectX::XMFLOAT3& nor)
+{
+    const DirectX::XMFLOAT2 projected = octProject(nor);
+    return packSnorm2ToUint(projected.x, projected.y);
 }
 
 inline uint32_t packTerrainPosComponent(const float value, const float bias, const float scale)
@@ -59,6 +66,11 @@ inline uint32_t packTerrainPosComponent(const float value, const float bias, con
 inline uint32_t packUnorm8(const float value)
 {
     return static_cast<uint32_t>(std::lround(std::clamp(value, 0.f, 1.f) * 255.f));
+}
+
+inline uint32_t packUnorm8Rgb(const float r, const float g, const float b)
+{
+    return packUnorm8(r) | (packUnorm8(g) << 8) | (packUnorm8(b) << 16);
 }
 
 // Mirrors unpackTerrainVertex in path_tracing_common.hlsli
@@ -87,6 +99,35 @@ inline PackedTerrainVertex packTerrainVertex(const Vertex& vert)
         .packedPosXY = x | (y << 16),
         .packedPosZUv = z | (packUnorm8(vert.uv.x) << 16) | (packUnorm8(vert.uv.y) << 24),
         .packedNor = vert.packedNor,
+    };
+}
+
+inline PackedLodTerrainVertex packLodTerrainVertex(const DirectX::XMFLOAT3& pos,
+                                                   const DirectX::XMFLOAT3& nor,
+                                                   const uint32_t tintSrgb8)
+{
+    const uint32_t x = packTerrainPosComponent(pos.x, 0.f, PACKED_LOD_TERRAIN_POS_XZ_SCALE);
+    const uint32_t y = packTerrainPosComponent(pos.y, PACKED_LOD_TERRAIN_POS_Y_BIAS, PACKED_LOD_TERRAIN_POS_Y_SCALE);
+    const uint32_t z = packTerrainPosComponent(pos.z, 0.f, PACKED_LOD_TERRAIN_POS_XZ_SCALE);
+    const DirectX::XMFLOAT2 projectedNor = octProject(nor);
+    const auto packSnorm8 = [](float value)
+    {
+        return static_cast<uint32_t>(std::lround(std::clamp(value, -1.f, 1.f) * 127.f)) & 0xFF;
+    };
+    return {
+        .packedPosXZ = x | (z << 16),
+        .packedPosYNor = y | (packSnorm8(projectedNor.x) << 16) | (packSnorm8(projectedNor.y) << 24),
+        .packedTint = tintSrgb8,
+    };
+}
+
+// The position unpackLodTerrainVertex in path_tracing_common.hlsli decodes
+inline DirectX::XMFLOAT3 unpackLodTerrainPos(const PackedLodTerrainVertex& packed)
+{
+    return {
+        static_cast<float>(packed.packedPosXZ & 0xFFFF) / PACKED_LOD_TERRAIN_POS_XZ_SCALE,
+        static_cast<float>(packed.packedPosYNor & 0xFFFF) / PACKED_LOD_TERRAIN_POS_Y_SCALE - PACKED_LOD_TERRAIN_POS_Y_BIAS,
+        static_cast<float>(packed.packedPosXZ >> 16) / PACKED_LOD_TERRAIN_POS_XZ_SCALE,
     };
 }
 

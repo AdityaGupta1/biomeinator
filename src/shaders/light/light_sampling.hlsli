@@ -194,14 +194,18 @@ DirectLightingSample sampleDirectLightingUniform(const float3 surfPos_WS,
 uint getAreaLightIdxFromHit(const HitInfo hitInfo)
 {
     const InstanceData instanceData = instanceDatas[hitInfo.instanceId];
+    if (instanceData.hasHeightfieldFaces())
+    {
+        return LIGHT_IDX_INVALID;
+    }
     const PerFaceData perFaceData = loadPerFaceData(instanceData, hitInfo.triangleIdx);
-    if (perFaceData.localAreaLightIdx == LIGHT_IDX_INVALID)
+    if (perFaceData.localAreaLightIdxOrHeightfieldVerts == LIGHT_IDX_INVALID)
     {
         return LIGHT_IDX_INVALID;
     }
     // A face's triangles are consecutive area lights starting at the stored one
     const uint triIdxInFace = hitInfo.triangleIdx & ((1u << instanceData.trisPerFaceLog2) - 1u);
-    return instanceData.areaLightsBufferOffset + perFaceData.localAreaLightIdx + triIdxInFace;
+    return instanceData.areaLightsBufferOffset + perFaceData.localAreaLightIdxOrHeightfieldVerts + triIdxInFace;
 }
 
 float lightPdfUniform(const HitInfo hitInfo, const float3 surfPos_WS, const float3 wi_WS)

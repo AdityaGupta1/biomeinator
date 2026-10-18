@@ -56,8 +56,12 @@ triangle (`trisPerFaceLog2 == 0`), terrain and water one per quad (`== 1`), whic
 buffer for terrain since both triangles of a quad always carried identical data. The shader
 maps `PrimitiveIndex() >> trisPerFaceLog2` to the entry. A quad's first triangle is always
 even; a custom model's lone triangle fills a whole face with a degenerate second triangle.
-`trisPerFaceLog2 == 1` also means the indices are implicit (`Instance::hasQuadFaces`), so
-`hostGeometry.idxs` stays empty for terrain and water.
+Two-triangle faces with no stored indices have implicit ones (`Instance::hasQuadFaces`), so
+`hostGeometry.idxs` stays empty for terrain, water and voxel LOD tiles. LOD heightfields
+(`setHeightfieldCornersPerRow`) can't be implicit quads, since their smooth cells share one vertex
+per sample; they keep host indices for the BLAS build only, and each face's
+`localAreaLightIdxOrHeightfieldVerts` says where its verts are instead of an area light, which
+heightfields never have (see [terrain → terrain_lod.md](../terrain/terrain_lod.md)).
 
 ## Area Lights
 

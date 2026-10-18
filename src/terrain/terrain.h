@@ -23,6 +23,7 @@ struct ChunkMemory
     uint64_t misc{ 0 };
 
     ChunkMemory& operator+=(const ChunkMemory& other);
+    uint64_t getTotal() const;
 };
 
 namespace Terrain

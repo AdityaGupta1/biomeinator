@@ -43,8 +43,6 @@ using WindowManager::hwnd;
 namespace Renderer
 {
 
-static constexpr float defaultFovYDegrees = 35;
-
 static constexpr float timeScrubSpeed = 50.f; // anim time multiplier while a bracket key is held
 
 void init()
@@ -89,7 +87,7 @@ void init()
     CpuProfiler::init(SettingsManager::isPerfMode());
     perfRunInit();
 
-    renderState.camera.init(XMConvertToRadians(defaultFovYDegrees));
+    renderState.camera.init(XMConvertToRadians(SettingsManager::getAsFloat("fovY")));
 
     AcsHelper::init();
 
@@ -435,30 +433,12 @@ static void updateFrameGenState()
     }
 }
 
-// Fog strength peaks around sunrise and sunset: full within fogFullStrengthSeconds of the sun
-// crossing the horizon, fading to zero with smoothstep by fogFadeEndSeconds away.
-static constexpr float fogPeakSigmaS = 0.004f;
-static constexpr float fogFullStrengthSeconds = 30.f;
-static constexpr float fogFadeEndSeconds = 120.f;
+static constexpr float fogBaseSigmaS = 0.0016f;
 
 // Wrapped in double: the float result stays precise no matter how large animTime has grown.
 static float computeWaveTime(const double animTime)
 {
     return static_cast<float>(std::fmod(animTime, WATER_WAVE_PERIOD_SECONDS));
-}
-
-static float computeFogSigmaS(const float animTime)
-{
-    float dayTime = std::fmod(animTime, SUN_PERIOD_SECONDS);
-    if (dayTime < 0.f)
-    {
-        dayTime += SUN_PERIOD_SECONDS;
-    }
-    const float distToSunrise = std::min(dayTime, SUN_PERIOD_SECONDS - dayTime);
-    const float distToSunset = std::abs(dayTime - 0.5f * SUN_PERIOD_SECONDS);
-    const float dist = std::min(distToSunrise, distToSunset);
-    const float ramp = 1.f - glm::smoothstep(fogFullStrengthSeconds, fogFadeEndSeconds, dist);
-    return fogPeakSigmaS * ramp * SettingsManager::getAsFloat("fogScatteringMultiplier");
 }
 
 void render()
@@ -694,12 +674,18 @@ void render()
     renderParams->antialiasingMode = static_cast<uint32_t>(antialiasingMode);
     renderParams->refractionIndirectPassthrough = SettingsManager::getAsBool("refractionIndirectPassthrough") ? 1 : 0;
     renderParams->mipBias = renderState.dlss.mipBias;
-    renderParams->fogSigmaS = computeFogSigmaS(animTimeFloat);
+    renderParams->fogSigmaS = fogBaseSigmaS * SettingsManager::getAsFloat("fogScatteringMultiplier");
     renderParams->fogScaleHeight = SettingsManager::getAsFloat("fogScaleHeight");
     renderParams->fogG = SettingsManager::getAsFloat("fogG");
     renderParams->fogMarchSteps = SettingsManager::getAsUint("fogMarchSteps");
     renderParams->fogAmbientStrength = SettingsManager::getAsFloat("fogAmbientStrength");
     renderParams->skyStrength = SettingsManager::getAsFloat("skyStrength");
+    const float hazeHalfDistance = SettingsManager::getAsFloat("hazeHalfDistance");
+    renderParams->hazeSigmaS = hazeHalfDistance > 0.f ? std::log(2.f) / hazeHalfDistance : 0.f;
+    renderParams->hazeStartDistance = SettingsManager::getAsFloat("hazeStartDistance");
+    renderParams->hazeWhiteness = SettingsManager::getAsFloat("hazeWhiteness");
+    renderParams->hazeBrightness = SettingsManager::getAsFloat("hazeBrightness");
+    renderParams->hazeSkyBand = SettingsManager::getAsFloat("hazeSkyBand");
     renderParams->cloudSettings.enableClouds = SettingsManager::getAsBool("clouds") ? 1 : 0;
     renderParams->cloudSettings.coverage = SettingsManager::getAsFloat("cloudCoverage");
     renderParams->cloudSettings.extinction = SettingsManager::getAsFloat("cloudExtinction");

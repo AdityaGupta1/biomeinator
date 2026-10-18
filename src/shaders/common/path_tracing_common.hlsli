@@ -100,6 +100,63 @@ Vertex unpackTerrainVertex(const PackedTerrainVertex packed)
     return vert;
 }
 
+// Texture tiles repeat once per block, oriented as on the matching faces of a chunk's blocks: projected
+// from above unless the face shows a block's side, else from the horizontal axis nearest the normal
+float2 lodTerrainUv(const float3 pos_OS, const float3 nor, const bool sideProjection)
+{
+    const float3 absNor = abs(nor);
+    if (!sideProjection)
+    {
+        return float2(pos_OS.z, -pos_OS.x);
+    }
+    if (absNor.x >= absNor.z)
+    {
+        return float2(nor.x > 0.f ? -pos_OS.z : pos_OS.z, -pos_OS.y);
+    }
+    return float2(nor.z > 0.f ? pos_OS.x : -pos_OS.x, -pos_OS.y);
+}
+
+// Both packed layouts share packedTerrainVerts; see PackedLodTerrainVertex
+PackedLodTerrainVertex loadPackedLodTerrainVertex(const uint idx)
+{
+    const PackedTerrainVertex words = packedTerrainVerts[idx];
+    PackedLodTerrainVertex packed;
+    packed.packedPosXZ = words.packedPosXY;
+    packed.packedPosYNor = words.packedPosZUv;
+    packed.packedTint = words.packedNor;
+    return packed;
+}
+
+Vertex unpackLodTerrainVertex(const PackedLodTerrainVertex packed)
+{
+    Vertex vert;
+    vert.pos_OS = float3(float(packed.packedPosXZ & 0xFFFF) / PACKED_LOD_TERRAIN_POS_XZ_SCALE,
+                         float(packed.packedPosYNor & 0xFFFF) / PACKED_LOD_TERRAIN_POS_Y_SCALE - PACKED_LOD_TERRAIN_POS_Y_BIAS,
+                         float(packed.packedPosXZ >> 16) / PACKED_LOD_TERRAIN_POS_XZ_SCALE);
+    const int2 norSnorm8 = int2(packed.packedPosYNor << 8, packed.packedPosYNor) >> 24;
+    vert.packedNor = packSnorm2ToUint(clamp(norSnorm8 / 127.f, -1.f, 1.f));
+    // Set per triangle by setLodTerrainUvs
+    vert.uv = float2(0.f, 0.f);
+    return vert;
+}
+
+// The side axis is chosen from the triangle's own normal: smooth vertex normals could pick different
+// axes at one triangle's corners
+void setLodTerrainUvs(const PerFaceData perFaceData, inout Vertex v0, inout Vertex v1, inout Vertex v2)
+{
+    const float3 geoNor = cross(v1.pos_OS - v0.pos_OS, v2.pos_OS - v0.pos_OS);
+    const float3 nor = dot(geoNor, octDecode(v0.packedNor)) < 0.f ? -geoNor : geoNor;
+    const bool sideProjection = perFaceData.hasFlag(FACE_FLAG_SIDE_PROJECTION);
+    v0.uv = lodTerrainUv(v0.pos_OS, nor, sideProjection);
+    v1.uv = lodTerrainUv(v1.pos_OS, nor, sideProjection);
+    v2.uv = lodTerrainUv(v2.pos_OS, nor, sideProjection);
+}
+
+float3 unpackLodTerrainTint(const PackedLodTerrainVertex packed)
+{
+    return float3(uint3(packed.packedTint, packed.packedTint >> 8, packed.packedTint >> 16) & 0xFF) / 255.f;
+}
+
 Vertex loadVert(const InstanceData instanceData, const uint vertIdx)
 {
     const uint idx = instanceData.vertsBufferOffset + vertIdx;
@@ -107,26 +164,54 @@ Vertex loadVert(const InstanceData instanceData, const uint vertIdx)
     {
         return unpackTerrainVertex(packedTerrainVerts[idx]);
     }
+    if (instanceData.vertexFormat == VERTEX_FORMAT_PACKED_LOD_TERRAIN)
+    {
+        return unpackLodTerrainVertex(loadPackedLodTerrainVertex(idx));
+    }
     return verts[idx];
+}
+
+void loadTriangleVerts(const InstanceData instanceData, const uint triIdx, const uint3 indices,
+                       out Vertex v0, out Vertex v1, out Vertex v2)
+{
+    v0 = loadVert(instanceData, indices.x);
+    v1 = loadVert(instanceData, indices.y);
+    v2 = loadVert(instanceData, indices.z);
+    if (instanceData.vertexFormat == VERTEX_FORMAT_PACKED_LOD_TERRAIN)
+    {
+        setLodTerrainUvs(loadPerFaceData(instanceData, triIdx), v0, v1, v2);
+    }
+}
+
+// Heightfields are opaque and never emissive, so only closest hits land on them. Their decode stays out of
+// getTriangleVertexIndices(), which the raygen inlines (see knowledge/terrain/terrain_lod.md).
+uint3 getClosestHitTriangleVertexIndices(const InstanceData instanceData, const uint triIdx)
+{
+    if (!instanceData.hasHeightfieldFaces())
+    {
+        return getTriangleVertexIndices(instanceData, triIdx);
+    }
+
+    const uint faceVerts = loadPerFaceData(instanceData, triIdx).localAreaLightIdxOrHeightfieldVerts;
+    return uint3(getHeightfieldFaceVertIdx(faceVerts, instanceData.heightfieldCornersPerRow, triIdx, 0),
+                 getHeightfieldFaceVertIdx(faceVerts, instanceData.heightfieldCornersPerRow, triIdx, 1),
+                 getHeightfieldFaceVertIdx(faceVerts, instanceData.heightfieldCornersPerRow, triIdx, 2));
 }
 
 void loadVertsFromInstance(const InstanceData instanceData, const uint triIdx, out Vertex v0, out Vertex v1, out Vertex v2)
 {
-    const uint3 indices = getTriangleVertexIndices(instanceData, triIdx);
-    v0 = loadVert(instanceData, indices.x);
-    v1 = loadVert(instanceData, indices.y);
-    v2 = loadVert(instanceData, indices.z);
+    loadTriangleVerts(instanceData, triIdx, getTriangleVertexIndices(instanceData, triIdx), v0, v1, v2);
 }
 
 // Ctx for surface shading at a hit; samples the biome map and the procedural color ramp once here
 // so all color reads for the hit share them (c.f. makeUntintedTexSampleCtx())
-TexSampleCtx makeTintedTexSampleCtx(const PerFaceData perFaceData, const float rayConeWidth, const float3 pos_WS)
+TexSampleCtx makeTintedTexSampleCtx(const PerFaceData perFaceData, const float rayConeWidth, const HitInfo hitInfo)
 {
     TexSampleCtx texCtx;
     texCtx.mipLevel = computeMipLevel(rayConeWidth);
     texCtx.arraySliceIdx = perFaceData.getTexArraySliceIdx();
-    texCtx.biomeTint = getBiomeTint(perFaceData.getFlags(), pos_WS.xz);
-    texCtx.proceduralColor = getProceduralColor(perFaceData.getFlags(), pos_WS);
+    texCtx.biomeTint = getBiomeTint(perFaceData.getFlags(), hitInfo.hitPos_WS.xz, hitInfo.packedVertexTint);
+    texCtx.proceduralColor = getProceduralColor(perFaceData.getFlags(), hitInfo.hitPos_WS);
     return texCtx;
 }
 
@@ -201,8 +286,11 @@ bool acceptHitCandidate(inout Payload payload,
 
     const float coneWidth = getRayConeWidthAtDistance(payload.rayCone, rayT);
     const PerFaceData perFaceData = loadPerFaceData(instanceData, primitiveIdx);
-    const float4 baseColor = getMaterialBaseColorAtHit(
-        material, instanceData, perFaceData, primitiveIdx, barycentrics, computeMipLevel(coneWidth));
+    // LOD tiles have no OMMs, so they test cutouts here against the finest mip as OMMs do: with OMMs on, a
+    // cutout texture's lower mips are opaque, which drew distant LOD plants as solid cards
+    const bool testsFinestMip = !testRefractionPassthrough && instanceData.vertexFormat == VERTEX_FORMAT_PACKED_LOD_TERRAIN;
+    const float4 baseColor = getMaterialBaseColorAtHit(material, instanceData, perFaceData, primitiveIdx, barycentrics,
+                                                       testsFinestMip ? 0.f : computeMipLevel(coneWidth));
 
     if (testRefractionPassthrough)
     {
@@ -260,10 +348,9 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     const InstanceData instanceData = instanceDatas[InstanceID()];
     const uint materialIdx = instanceData.materialIdx;
 
-    const uint3 vertexIndices = getTriangleVertexIndices(instanceData, PrimitiveIndex());
-    const Vertex v0 = loadVert(instanceData, vertexIndices.x);
-    const Vertex v1 = loadVert(instanceData, vertexIndices.y);
-    const Vertex v2 = loadVert(instanceData, vertexIndices.z);
+    const uint3 vertexIndices = getClosestHitTriangleVertexIndices(instanceData, PrimitiveIndex());
+    Vertex v0, v1, v2;
+    loadTriangleVerts(instanceData, PrimitiveIndex(), vertexIndices, v0, v1, v2);
 
     const float2 bary2 = attribs.barycentrics;
     const float3 bary = float3(1 - bary2.x - bary2.y, bary2.xy);
@@ -281,6 +368,16 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     }
 
     payload.hitInfo.uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+    payload.hitInfo.packedVertexTint = 0;
+    if (instanceData.vertexFormat == VERTEX_FORMAT_PACKED_LOD_TERRAIN)
+    {
+        const uint3 packedVertIdxs = instanceData.vertsBufferOffset + vertexIndices;
+        const float3 tint = unpackLodTerrainTint(loadPackedLodTerrainVertex(packedVertIdxs.x)) * bary.x +
+                            unpackLodTerrainTint(loadPackedLodTerrainVertex(packedVertIdxs.y)) * bary.y +
+                            unpackLodTerrainTint(loadPackedLodTerrainVertex(packedVertIdxs.z)) * bary.z;
+        const uint3 tint8 = uint3(round(saturate(tint) * 255.f));
+        payload.hitInfo.packedVertexTint = tint8.r | (tint8.g << 8) | (tint8.b << 16) | (0xFFu << 24);
+    }
     payload.hitInfo.instanceId = InstanceID();
     payload.hitInfo.triangleIdx = PrimitiveIndex();
     payload.materialIdx = materialIdx;
@@ -370,7 +467,8 @@ void ClosestHit_Primary(inout Payload payload, BuiltInTriangleIntersectionAttrib
     {
         const float2 posXZ_WS = payload.hitInfo.hitPos_WS.xz + float2(cameraParams.globalInstanceOffset.xz);
         shadingNor_WS = waveShadingNormal(posXZ_WS, renderParams.waveTime, renderParams.animTime,
-                                          bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT));
+                                          bool(payload.flags & PAYLOAD_FLAG_BACKFACE_HIT),
+                                          distance(payload.hitInfo.hitPos_WS, cameraParams.pos_WS));
     }
 
     // Glossy lobes need reflections to stay above the geometric surface. Use Cycles' bump-map

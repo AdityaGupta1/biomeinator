@@ -162,6 +162,7 @@ BlockData readBlockJson(const std::filesystem::path& jsonPath)
         data.translucent = blockJson.value("translucent", false);
         data.proceduralColor = blockJson.value("proceduralColor", false);
         data.randomJitter = blockJson.value("randomJitter", false);
+        data.lodSideShowsBottom = blockJson.value("lodSideShowsBottom", false);
         if (blockJson.contains("upperHalf"))
         {
             const std::string upperHalfId = blockJson["upperHalf"].get<std::string>();

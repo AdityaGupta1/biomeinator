@@ -64,8 +64,9 @@ destroying a region's ~1,000 chunks took about 100 ms on the main thread, and fr
 even paced. So a low-priority thread destroys removed regions (the main thread only unlinks them),
 and their chunks' blocks and both masks go to a pool in `chunk.cpp` that new chunks generate into.
 
-- The three buffers are pooled as one set, so a chunk always takes and returns all of them; pools
-  per buffer drift apart, since a chunk has two masks but one block array.
+- The two masks are pooled as a pair and the block array on its own: LOD surface-only chunks give
+  their blocks back once downsampled but keep their masks while neighbors still read them. Pooling the
+  masks separately from each other would let them drift apart.
 - The pool is uncapped. A cap frees its overflow, which brought the stalls back after long flights
   as evictions finished. It stays bounded because chunks take from it before allocating: pooled and
   resident sets together never exceed the most chunks ever resident, plus any still queued for the

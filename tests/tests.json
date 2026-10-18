@@ -673,7 +673,8 @@
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=4",
-                "--animTime=510"
+                "--animTime=510",
+                "--lodDistance=0"
             ],
             "golden": "voxel/water_absorption/golden.png",
             "threshold": 0.01
@@ -686,7 +687,8 @@
                 "--height=540",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=2048",
-                "--maxPathDepth=4"
+                "--maxPathDepth=4",
+                "--lodDistance=0"
             ],
             "golden": "voxel/water_reflection/golden.png",
             "threshold": 0.01
@@ -700,7 +702,8 @@
                 "--antialiasingMode=0",
                 "--debugView=\"diffuseAlbedo\"",
                 "--maxPathDepth=4",
-                "--noJitter"
+                "--noJitter",
+                "--lodDistance=0"
             ],
             "golden": "voxel/water_reflection/golden_diffuseAlbedo.png",
             "threshold": 0.001
@@ -713,7 +716,8 @@
                 "--height=270",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=4096",
-                "--maxPathDepth=12"
+                "--maxPathDepth=12",
+                "--lodDistance=0"
             ],
             "golden": "voxel/cave_lights/golden.png",
             "threshold": 0.01
@@ -726,25 +730,11 @@
                 "--height=270",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=1024",
-                "--maxPathDepth=6"
+                "--maxPathDepth=6",
+                "--lodDistance=0"
             ],
             "golden": "voxel/underwater/golden.png",
             "threshold": 0.005
-        },
-        {
-            "name": "fog_haze",
-            "world": "voxel/fog_haze",
-            "args": [
-                "--width=480",
-                "--height=270",
-                "--antialiasingMode=1",
-                "--maxAccumulatedFrames=2048",
-                "--maxPathDepth=6",
-                "--animTime=585",
-                "--clouds=false"
-            ],
-            "golden": "voxel/fog_haze/golden.png",
-            "threshold": 0.01
         },
         {
             "name": "fog_god_rays",
@@ -755,15 +745,16 @@
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=6",
-                "--animTime=585",
-                "--clouds=false"
+                "--animTime=20",
+                "--clouds=false",
+                "--lodDistance=0"
             ],
             "golden": "voxel/fog_god_rays/golden.png",
             "threshold": 0.01
         },
         {
             "name": "overcast",
-            "world": "voxel/fog_god_rays",
+            "world": "voxel/overcast",
             "args": [
                 "--width=480",
                 "--height=270",
@@ -771,9 +762,10 @@
                 "--maxAccumulatedFrames=2048",
                 "--maxPathDepth=6",
                 "--animTime=585",
-                "--cloudCoverage=0.5"
+                "--cloudCoverage=0.5",
+                "--lodDistance=0"
             ],
-            "golden": "voxel/fog_god_rays/golden_overcast.png",
+            "golden": "voxel/overcast/golden.png",
             "threshold": 0.01
         },
         {
@@ -791,9 +783,31 @@
                 "--cameraY=161.713",
                 "--cameraZ=-565.586",
                 "--cameraYaw=-44.141",
-                "--cameraPitch=-89"
+                "--cameraPitch=-89",
+                "--lodDistance=0"
             ],
             "golden": "voxel/grass_biome_blend/golden.png",
+            "threshold": 0.01
+        },
+        {
+            "name": "lods",
+            "args": [
+                "--width=480",
+                "--height=270",
+                "--antialiasingMode=1",
+                "--maxAccumulatedFrames=2048",
+                "--maxPathDepth=4",
+                "--voxelMode",
+                "--worldSeed=1738",
+                "--renderDistance=30",
+                "--cameraX=1796.229",
+                "--cameraY=194.548",
+                "--cameraZ=-2722.206",
+                "--cameraYaw=140.489",
+                "--cameraPitch=-1.558",
+                "--animTime=93"
+            ],
+            "golden": "voxel/lods/golden.png",
             "threshold": 0.01
         },
         {
@@ -804,7 +818,8 @@
                 "--height=270",
                 "--antialiasingMode=1",
                 "--maxAccumulatedFrames=8192",
-                "--maxPathDepth=4"
+                "--maxPathDepth=4",
+                "--lodDistance=0"
             ],
             "golden": "voxel/crystal_caves/golden.png",
             "threshold": 0.01
@@ -818,7 +833,8 @@
                 "--antialiasingMode=0",
                 "--debugView=\"diffuseAlbedo\"",
                 "--maxPathDepth=4",
-                "--noJitter"
+                "--noJitter",
+                "--lodDistance=0"
             ],
             "golden": "voxel/crystal_caves/golden_diffuseAlbedo.png",
             "threshold": 0.001
@@ -832,7 +848,8 @@
                 "--antialiasingMode=0",
                 "--debugView=\"specularAlbedo\"",
                 "--maxPathDepth=4",
-                "--noJitter"
+                "--noJitter",
+                "--lodDistance=0"
             ],
             "golden": "voxel/crystal_caves/golden_specularAlbedo.png",
             "threshold": 0.001

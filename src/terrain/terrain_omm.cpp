@@ -97,7 +97,7 @@ void bake(const std::vector<std::vector<uint8_t>>& sliceMip0Alphas, const uint32
     const uint32_t numMicroTrisPerOmm = tileSize * tileSize; // 4^level
     const uint32_t maskSizeBytes = numMicroTrisPerOmm / 8;
 
-    // Texture UVs of each quad triangle's corners; must match chunk.cpp's uvOffsets and its
+    // Texture UVs of each quad triangle's corners; must match quadUvOffsets and chunk.cpp's
     // (0,1,2),(0,2,3) index split
     static constexpr float triCornerUvs[NUM_TRIS_PER_QUAD][3][2] = {
         { { 1.f, 0.f }, { 0.f, 0.f }, { 0.f, 1.f } },

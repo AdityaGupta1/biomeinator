@@ -29,7 +29,9 @@ struct HitInfo
 
     float2 uv;
     uint packedGeoNor; // face-oriented geometric normal for surface ray offsets
-    uint pad0;
+    // Interpolated biome tint baked into the hit's vertices as sRGB rgb8, with a = 255; 0 when the
+    // vertices carry none and tinted faces read the biome map
+    uint packedVertexTint;
 };
 
 struct GbufferData
@@ -73,8 +75,24 @@ struct PackedTerrainVertex
     uint packedNor; // as Vertex::packedNor
 };
 
+// Resident form of LOD terrain tile vertices, stored in the packed terrain vertex buffer at the same
+// stride. Tiles are far wider than PackedTerrainVertex's local range. Their texture tiles repeat once
+// per block on world-aligned axes, so UVs follow from position and normal (see lodTerrainUv), and the
+// biome tint is baked in because the biome map only covers the render distance.
+#define PACKED_LOD_TERRAIN_POS_XZ_SCALE 4.f
+#define PACKED_LOD_TERRAIN_POS_Y_SCALE 64.f
+#define PACKED_LOD_TERRAIN_POS_Y_BIAS 1.f
+
+struct PackedLodTerrainVertex
+{
+    uint packedPosXZ; // x in the low half, z in the high half
+    uint packedPosYNor; // y in the low half, the octahedral normal as snorm8x2 in the high half
+    uint packedTint; // biome tint as sRGB rgb8
+};
+
 #define VERTEX_FORMAT_FULL 0
 #define VERTEX_FORMAT_PACKED_TERRAIN 1
+#define VERTEX_FORMAT_PACKED_LOD_TERRAIN 2
 
 #define TANGENT_BUFFER_OFFSET_INVALID ~0u
 
@@ -92,19 +110,83 @@ struct InstanceData
     uint tangentsBufferOffset; // separate VertexTangent array, or TANGENT_BUFFER_OFFSET_INVALID
     uint trisPerFaceLog2; // triangle index >> this = PerFaceData index; 0 for glTF, 1 for terrain quads
     uint vertexFormat; // VERTEX_FORMAT_*, selects which typed view of the verts buffer to read
+    uint heightfieldCornersPerRow; // nonzero for LOD heightfields, see getHeightfieldFaceVertIdx()
+
+    // Each face locates its own verts, see getHeightfieldFaceVertIdx()
+    bool hasHeightfieldFaces()
+    {
+        return heightfieldCornersPerRow != 0;
+    }
 
     // Quad faces store no indices, see getQuadFaceVertIdx()
     bool hasQuadFaces()
     {
-        return trisPerFaceLog2 == 1;
+        return trisPerFaceLog2 == 1 && !bool(hasIdxs) && !hasHeightfieldFaces();
     }
 };
 
-// Quad faces are four consecutive verts split into triangles (0, 1, 2) and (0, 2, 3), so a
-// triangle's vertex indices follow from its index alone
+// Which of a quad's four corners, in winding order, a triangle's corner is: quads split into
+// triangles (0, 1, 2) and (0, 2, 3)
+inline uint getQuadFaceCorner(uint triIdx, uint corner)
+{
+    return corner == 0 ? 0 : corner + (triIdx & 1);
+}
+
+// Quad faces are four consecutive verts, so a triangle's vertex indices follow from its index alone
 inline uint getQuadFaceVertIdx(uint triIdx, uint corner)
 {
-    return (triIdx >> 1) * 4 + (corner == 0 ? 0 : corner + (triIdx & 1));
+    return (triIdx >> 1) * 4 + getQuadFaceCorner(triIdx, corner);
+}
+
+// LOD heightfield faces are never emissive, so PerFaceData::localAreaLightIdxOrHeightfieldVerts holds
+// where their verts are instead: the first one in the low bits and one of these patterns above them.
+// Smooth cells share the grid of corner verts, so their verts are not consecutive.
+#define HEIGHTFIELD_FACE_VERT_BASE_BITS 30
+// A cell of the corner grid from its (0, 0) corner, split along (1, 1)-(0, 0)
+#define HEIGHTFIELD_FACE_GRID 0
+// A cell of the corner grid from its (0, 0) corner, split along (1, 0)-(0, 1)
+#define HEIGHTFIELD_FACE_GRID_FLIPPED 1
+// Four verts of its own, as quad faces
+#define HEIGHTFIELD_FACE_QUAD 2
+// Six verts of its own, three per triangle
+#define HEIGHTFIELD_FACE_TRIANGLES 3
+
+inline uint packHeightfieldFaceVerts(uint pattern, uint vertBase)
+{
+    return (pattern << HEIGHTFIELD_FACE_VERT_BASE_BITS) | vertBase;
+}
+
+inline uint getHeightfieldFaceVertBase(uint faceVerts)
+{
+    return faceVerts & ((1u << HEIGHTFIELD_FACE_VERT_BASE_BITS) - 1u);
+}
+
+inline uint getHeightfieldFacePattern(uint faceVerts)
+{
+    return faceVerts >> HEIGHTFIELD_FACE_VERT_BASE_BITS;
+}
+
+inline uint getHeightfieldFaceVertIdx(uint faceVerts, uint cornersPerRow, uint triIdx, uint corner)
+{
+    const uint vertBase = getHeightfieldFaceVertBase(faceVerts);
+    const uint pattern = getHeightfieldFacePattern(faceVerts);
+    if (pattern == HEIGHTFIELD_FACE_TRIANGLES)
+    {
+        return vertBase + (triIdx & 1) * 3 + corner;
+    }
+
+    const uint quadCorner = getQuadFaceCorner(triIdx, corner);
+    if (pattern == HEIGHTFIELD_FACE_QUAD)
+    {
+        return vertBase + quadCorner;
+    }
+
+    // A grid cell's corners in winding order are (1, 1), (1, 0), (0, 0), (0, 1), starting one later
+    // when flipped
+    const uint gridCorner = (quadCorner + (pattern == HEIGHTFIELD_FACE_GRID_FLIPPED ? 1u : 0u)) & 3u;
+    const uint x = gridCorner < 2 ? 1u : 0u;
+    const uint z = (gridCorner == 0 || gridCorner == 3) ? 1u : 0u;
+    return vertBase + x + z * cornersPerRow;
 }
 
 #define MATERIAL_IDX_INVALID ~0u
@@ -316,6 +398,9 @@ static_assert(sizeof(PackedTerrainVertex) == 12, "PackedTerrainVertex must be 12
 #define FACE_FLAG_PROCEDURAL_COLOR (1 << 5)
 // The terrain texture array slice has a normal map.
 #define FACE_FLAG_NORMAL_MAP (1 << 6)
+// LOD terrain faces showing a block's side: their texture projects horizontally whatever the triangle's
+// slope, so a side texture keeps its top edge up (see lodTerrainUv)
+#define FACE_FLAG_SIDE_PROJECTION (1 << 7)
 
 #define FACE_FLAGS_BITS 16
 #define FACE_FLAGS_MASK ((1u << FACE_FLAGS_BITS) - 1u)
@@ -332,7 +417,9 @@ public:
 #endif
 
     uint packedFlagsAndSlice; // bits 0-15 FACE_FLAG_*, bits 16-31 texture array slice
-    uint localAreaLightIdx; // of the face's first triangle, or LIGHT_IDX_INVALID
+    // The local area light index of the face's first triangle, or LIGHT_IDX_INVALID. LOD heightfield
+    // faces, never emissive, hold their verts instead (see getHeightfieldFaceVertIdx()).
+    uint localAreaLightIdxOrHeightfieldVerts;
 
     uint getFlags()
     {

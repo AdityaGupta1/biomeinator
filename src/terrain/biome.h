@@ -109,6 +109,9 @@ struct BiomeData
     glm::vec3 grassTint{ 1.f, 1.f, 1.f }; // sRGB
     std::vector<StructureGen> structureGens{};
     Decorator decorator{};
+    // Distant heightfield tiles mesh its cliffs as flat-topped columns with vertical walls rather than
+    // slopes, for landforms built from walls: a slope turned them into spikes. Cones and ramps keep slopes.
+    bool lodCliffColumns{ false };
 };
 
 struct BiomeWeight

@@ -5,6 +5,7 @@
 
 #include "debug.h"
 #include "math.h"
+#include "rng.h"
 
 #include <charconv>
 #include <string_view>
@@ -43,5 +44,13 @@ inline glm::ivec2 floorDiv(const glm::ivec2& a, const glm::ivec2& d)
         MathUtil::floorDiv(a.y, d.y),
     };
 }
+
+struct IVec2Hash
+{
+    size_t operator()(const glm::ivec2& v) const noexcept
+    {
+        return hash(v.x ^ hash(v.y));
+    }
+};
 
 }
